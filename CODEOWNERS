@@ -1,4 +1,4 @@
-# Lanes are defined in AGENTS.md.
+# Lanes are defined in wiki/codebase.md.
 
 # Riley: availability, matching, venues, mobility
 /apps/server/src/modules/calendar/     @rileyh6
@@ -18,6 +18,7 @@
 /apps/server/prisma/                   @TheRealOP
 /apps/mobile/src/features/auth/        @TheRealOP
 /apps/mobile/src/features/friends/     @TheRealOP
+/apps/mobile/src/features/voting/      @TheRealOP
 
 # Andy: shell, onboarding, event card, demo
 /apps/mobile/src/app/                  @andydo4
