@@ -8,8 +8,9 @@ How an agent session goes from issue to merged PR. The principles live in
 Your human has already made a git worktree for you on a branch named
 `<name>/<issue#>-<slug>`. Work only in that folder.
 
-1. **Get the issue.** Your human pasted it, or run
-   `gh issue view <n> --repo ThatsORA/web`. No issue number? Stop and ask.
+1. **Get the issue.** The number is in your branch name
+   (`riley/6-vibe-slot` → #6). Run `gh issue view <n> --repo ThatsORA/web`,
+   or use the text your human pasted. No issue number? Stop and ask.
    Don't invent work.
 2. **Sync:** `git pull --rebase origin main`.
 3. **Read** the `wiki/plan.md` sections the issue links to, the lanes and
