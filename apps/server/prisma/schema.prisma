@@ -43,6 +43,12 @@ enum VenueStatus {
   reported_closed
 }
 
+enum EmailCodePurpose {
+  verify
+  reset
+  change_email
+}
+
 enum FriendshipStatus {
   pending
   accepted
@@ -70,6 +76,9 @@ model User {
   homeLng      Float?   @map("home_lng")
   travelMode   String   @default("DRIVE") @map("travel_mode")
   createdAt    DateTime @default(now()) @map("created_at")
+  // null = unverified (sign-up writes it explicitly). Accounts made outside sign-up (seed, legacy)
+  // lack the field and scripts/backfill.ts marks them verified.
+  emailVerifiedAt DateTime? @map("email_verified_at")
 
   busyBlocks               BusyBlock[]
   friendshipsLow           Friendship[]              @relation("FriendshipLow")
@@ -82,8 +91,26 @@ model User {
   expensesPaid             Expense[]
   expenseSplits            ExpenseSplit[]
   googleCalendarConnection GoogleCalendarConnection?
+  emailCodes               EmailCode[]
 
   @@map("users")
+}
+
+/// One live code per (user, purpose); issuing a new one deletes the old.
+model EmailCode {
+  id        String           @id @default(uuid()) @map("_id")
+  userId    String           @map("user_id")
+  purpose   EmailCodePurpose
+  codeHash  String           @map("code_hash") // HMAC-SHA256 keyed with JWT_SECRET; never the code itself
+  newEmail  String?          @map("new_email") // change_email only
+  expiresAt DateTime         @map("expires_at")
+  attempts  Int              @default(0)
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("email_codes")
 }
 
 model GoogleCalendarConnection {

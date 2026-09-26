@@ -3,11 +3,16 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-// In-memory friendships table plus three users (A < B < C, so A is always the "low" side).
+// In-memory friendships table plus users (A < B < U, so A is always the "low" side). U hasn't verified their email.
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
-const C = "33333333-3333-4333-8333-333333333333";
-const users = [{ id: A, username: "andy" }, { id: B, username: "riley" }, { id: C, username: "ojas" }];
+const U = "33333333-3333-4333-8333-333333333333";
+const verified = new Date();
+const users = [
+  { id: A, username: "andy", emailVerifiedAt: verified as Date | null },
+  { id: B, username: "riley", emailVerifiedAt: verified as Date | null },
+  { id: U, username: "uma", emailVerifiedAt: null as Date | null },
+];
 type Row = Record<string, unknown>;
 type Where = Record<string, unknown>;
 const mocks = vi.hoisted(() => ({ rows: [] as Row[], trigger: vi.fn(), emit: vi.fn() }));
@@ -18,13 +23,25 @@ const matches = (row: Row, where: Where): boolean =>
     : row[k] === v,
   );
 const one = (where: Where) => mocks.rows.find((r) => matches(r, where)) ?? null;
-const withUsers = (r: Row) => ({ ...r, userLow: users.find((u) => u.id === r.userLowId), userHigh: users.find((u) => u.id === r.userHighId) });
+const pub = (id: unknown) => {
+  const u = users.find((x) => x.id === id);
+  return u && { id: u.id, username: u.username };
+};
+const withUsers = (r: Row) => ({ ...r, userLow: pub(r.userLowId), userHigh: pub(r.userHighId) });
+type UserWhere = { username?: string | { startsWith: string }; id?: string | { not: string } | { in: string[] }; emailVerifiedAt?: { not: null } };
+const userMatches = (u: (typeof users)[number], w: UserWhere) =>
+  (w.username === undefined || (typeof w.username === "string" ? u.username === w.username : u.username.startsWith(w.username.startsWith))) &&
+  (w.id === undefined || (typeof w.id === "string" ? u.id === w.id : "not" in w.id ? u.id !== w.id.not : w.id.in.includes(u.id))) &&
+  (w.emailVerifiedAt === undefined || u.emailVerifiedAt !== null);
+const pick = (u: (typeof users)[number]) => ({ id: u.id, username: u.username });
 vi.mock("../../lib/prisma", () => ({
   prisma: {
     user: {
-      findUnique: async ({ where }: { where: { username: string } }) => users.find((u) => u.username === where.username) ?? null,
-      findMany: async ({ where }: { where: { username: { startsWith: string }; id: { not: string } } }) =>
-        users.filter((u) => u.username.startsWith(where.username.startsWith) && u.id !== where.id.not),
+      findFirst: async ({ where }: { where: UserWhere }) => {
+        const u = users.find((x) => userMatches(x, where));
+        return u ? pick(u) : null;
+      },
+      findMany: async ({ where }: { where: UserWhere }) => users.filter((u) => userMatches(u, where)).map(pick),
     },
     friendship: {
       findUnique: async ({ where }: { where: Where }) => one(where),
@@ -67,6 +84,7 @@ beforeEach(() => {
   mocks.rows.length = 0;
   mocks.trigger.mockReset().mockResolvedValue(undefined);
   mocks.emit.mockReset();
+  users[2]!.emailVerifiedAt = null;
 });
 const as = (userId: string, path: string, init: { method?: string; body?: unknown } = {}) =>
   fetch(base + path, {
@@ -183,5 +201,23 @@ describe("search", () => {
     const res = await as(A, "/users/search?q=R");
     expect(await res.json()).toEqual({ users: [{ id: B, username: "riley" }] });
     expect(await (await as(A, "/users/search?q=")).json()).toEqual({ users: [] });
+  });
+});
+
+describe("unverified accounts (EMAIL_VERIFICATION_REQUIRED)", () => {
+  it("can't be found, requested or marked close", async () => {
+    expect(await (await as(A, "/users/search?q=u")).json()).toEqual({ users: [] });
+    expect((await as(A, "/friends/requests", { method: "POST", body: { username: "uma" } })).status).toBe(404);
+    expect((await addClose(A, "uma")).status).toBe(404);
+  });
+
+  it("can send requests, but they stay hidden and unacceptable until they verify", async () => {
+    await request(U, "andy");
+    expect((await requests(A)).incoming).toEqual([]);
+    const id = mocks.rows[0]!.id as string;
+    expect((await as(A, `/friends/requests/${id}/accept`, { method: "POST" })).status).toBe(404);
+    users[2]!.emailVerifiedAt = new Date();
+    expect((await requests(A)).incoming).toMatchObject([{ user: { id: U, username: "uma" } }]);
+    expect((await as(A, `/friends/requests/${id}/accept`, { method: "POST" })).status).toBe(204);
   });
 });

@@ -2,6 +2,7 @@
 import { Prisma, type User } from "@prisma/client";
 import type { Me } from "@web/contract";
 import type { z } from "zod";
+import { env } from "../../env";
 
 type MeT = z.infer<typeof Me>;
 
@@ -26,5 +27,12 @@ export function toMe(user: User): MeT {
     home_lat: user.homeLat,
     home_lng: user.homeLng,
     travel_mode: user.travelMode as MeT["travel_mode"],
+    email_verified: user.emailVerifiedAt !== null,
   };
 }
+
+// While verification is required, unverified accounts can't be found or befriended, so they can
+// never join a mutual pair and never reach the matcher.
+/** Prisma `where` for users others may find. */
+export const findableWhere = () => (env.EMAIL_VERIFICATION_REQUIRED ? { emailVerifiedAt: { not: null } } : {});
+export const isFindable = (user: { emailVerifiedAt: Date | null }) => !env.EMAIL_VERIFICATION_REQUIRED || user.emailVerifiedAt !== null;

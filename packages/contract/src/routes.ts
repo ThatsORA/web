@@ -5,6 +5,8 @@ export const routes = {
   signup: "/auth/signup",
   login: "/auth/login",
   me: "/me",
+  verifyEmailSend: "/auth/verify-email/send", // 204, or 429 + Retry-After during the 60 s cooldown
+  verifyEmail: "/auth/verify-email", // { code } → Me
   busyBlocks: "/busy-blocks",
   userSearch: "/users/search", // ?q=
   closeFriends: "/friends/close",

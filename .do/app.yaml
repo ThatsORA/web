@@ -44,3 +44,6 @@ services:
       - key: DEMO_MODE
         value: "false"
         scope: RUN_TIME
+      - key: EMAIL_VERIFICATION_REQUIRED
+        value: "false" # true once EMAIL_API_KEY (Resend) is set as a secret
+        scope: RUN_TIME
