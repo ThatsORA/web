@@ -28,6 +28,7 @@ export function checkPassword(password: string, { username, email }: { username:
   const normalizedUsername = username.trim().toLowerCase();
   if (normalizedUsername && lower.includes(normalizedUsername)) return { ok: false, reason: passwordReasons.username };
   const localPart = email.trim().split("@")[0]!.toLowerCase();
-  if (localPart && lower.includes(localPart)) return { ok: false, reason: passwordReasons.email };
+  // Skip 1–2 character local parts ("a@x.com"): they'd block almost every password. 3 matches the username minimum.
+  if (localPart.length >= 3 && lower.includes(localPart)) return { ok: false, reason: passwordReasons.email };
   return { ok: true };
 }

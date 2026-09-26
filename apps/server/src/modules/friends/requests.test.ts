@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAccept, onDelete, onSend, requestView, type RequestRow } from "./requests";
+import { canAccept, friendshipState, onDelete, onSend, requestView, type RequestRow } from "./requests";
 
 const A = "a";
 const B = "b";
@@ -35,5 +35,16 @@ describe("friend requests", () => {
     expect(requestView(declined, A)).toBe("outgoing");
     expect(requestView(pending(A), B)).toBe("incoming");
     expect(requestView(accepted, A)).toBeNull();
+  });
+});
+
+describe("friendshipState (public profile)", () => {
+  it("labels the pair from my side, never announcing a decline", () => {
+    expect(friendshipState(null, A)).toBe("none");
+    expect(friendshipState(accepted, A)).toBe("friends");
+    expect(friendshipState(pending(A), A)).toBe("requested");
+    expect(friendshipState(pending(B), A)).toBe("incoming");
+    expect(friendshipState(pending(A, new Date()), A)).toBe("requested"); // they declined me: still "requested"
+    expect(friendshipState(pending(B, new Date()), A)).toBe("none"); // I declined them
   });
 });

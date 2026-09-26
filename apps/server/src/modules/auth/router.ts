@@ -1,11 +1,25 @@
 // Owner: Ojas — signup/login/profile. Plan: "API Contract v2".
 import { Router } from "express";
-import { ApiError, AuthResponse, LoginRequest, Me, PatchMeRequest, SignupRequest, WeakPasswordResponse, VerifyEmailRequest, routes } from "@web/contract";
+import {
+  ApiError,
+  AuthResponse,
+  ChangeEmailRequest,
+  ConfirmEmailChangeRequest,
+  DeletePushTokenRequest,
+  LoginRequest,
+  Me,
+  PatchMeRequest,
+  SavePushTokenRequest,
+  SignupRequest,
+  VerifyEmailRequest,
+  WeakPasswordResponse,
+  routes,
+} from "@web/contract";
 import { requireAuth, signToken, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
-import { sendCodeEmail } from "./email";
+import { sendCodeEmail, sendEmail } from "./email";
 import { consumeCode, issueCode } from "./emailCode";
-import { isUniqueViolation, roundCoord, toMe } from "./helpers";
+import { isUniqueViolation, roundCoord, toMe, usernameRetryAt } from "./helpers";
 import { hashPassword, verifyPassword } from "./passwordHash";
 import { loginLimiter } from "./loginLimiter";
 
@@ -88,15 +102,99 @@ authRouter.get(routes.me, requireAuth, async (req, res) => {
 authRouter.patch(routes.me, requireAuth, async (req, res) => {
   const parsed = PatchMeRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
-  const { timezone, home_lat, home_lng, travel_mode } = parsed.data;
-  const user = await prisma.user.update({
-    where: { id: (req as AuthedRequest).userId },
-    data: {
-      timezone,
-      travelMode: travel_mode,
-      homeLat: home_lat === undefined ? undefined : roundCoord(home_lat),
-      homeLng: home_lng === undefined ? undefined : roundCoord(home_lng),
-    },
+  const { timezone, home_lat, home_lng, travel_mode, display_name, bio, username } = parsed.data;
+  const userId = (req as AuthedRequest).userId;
+  let usernameChangedAt: Date | undefined;
+  if (username !== undefined) {
+    const current = await prisma.user.findUnique({ where: { id: userId } });
+    if (!current) return res.status(404).json({ error: "not_found" });
+    if (username !== current.username) {
+      const retryAt = usernameRetryAt(current.usernameChangedAt, new Date());
+      if (retryAt) return res.status(409).json({ error: "username_cooldown", retry_at: retryAt.toISOString() });
+      usernameChangedAt = new Date();
+    }
+  }
+  try {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        timezone,
+        travelMode: travel_mode,
+        homeLat: home_lat === undefined ? undefined : roundCoord(home_lat),
+        homeLng: home_lng === undefined ? undefined : roundCoord(home_lng),
+        displayName: display_name,
+        bio: bio === "" ? null : bio,
+        ...(usernameChangedAt ? { username, usernameChangedAt } : {}),
+      },
+    });
+    return res.json(Me.parse(toMe(user)));
+  } catch (err) {
+    if (isUniqueViolation(err)) return res.status(409).json({ error: "username_taken" });
+    throw err;
+  }
+});
+
+// Email change: prove the password, then prove the new address with a code sent to it.
+authRouter.post(routes.meEmail, requireAuth, async (req, res) => {
+  const parsed = ChangeEmailRequest.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
+  const user = await prisma.user.findUnique({ where: { id: (req as AuthedRequest).userId } });
+  if (!user) return res.status(404).json({ error: "not_found" });
+  if (!(await verifyPassword(parsed.data.password, user.passwordHash))) return res.status(401).json({ error: "invalid_credentials" });
+  const newEmail = parsed.data.new_email;
+  if (newEmail === user.email) return res.status(400).json({ error: "same_email" });
+  if (await prisma.user.findUnique({ where: { email: newEmail } })) return res.status(409).json({ error: "email_taken" });
+  const issued = await issueCode(user.id, "change_email", newEmail);
+  if ("retryAfterMs" in issued) {
+    return res.status(429).set("Retry-After", String(Math.ceil(issued.retryAfterMs / 1000))).json({ error: "cooldown" });
+  }
+  await sendCodeEmail(newEmail, issued.code);
+  return res.status(204).end();
+});
+
+authRouter.post(routes.meEmailConfirm, requireAuth, async (req, res) => {
+  const parsed = ConfirmEmailChangeRequest.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
+  const userId = (req as AuthedRequest).userId;
+  const { result, newEmail } = await consumeCode(userId, "change_email", parsed.data.code);
+  if (result === "wrong") return res.status(400).json({ error: "wrong_code" });
+  if (result !== "ok" || !newEmail) return res.status(400).json({ error: "code_expired" });
+  const before = await prisma.user.findUnique({ where: { id: userId } });
+  if (!before) return res.status(404).json({ error: "not_found" });
+  try {
+    const user = await prisma.user.update({ where: { id: userId }, data: { email: newEmail, emailVerifiedAt: new Date() } });
+    void sendEmail(
+      before.email,
+      "Your Web email was changed",
+      `Your Web account now uses ${newEmail}. If this wasn't you, change your password right away.`,
+    ).catch((e: unknown) => console.error("old-email notice", e));
+    return res.json(Me.parse(toMe(user)));
+  } catch (err) {
+    if (isUniqueViolation(err)) return res.status(409).json({ error: "email_taken" });
+    throw err;
+  }
+});
+
+authRouter.put(["/me/push-token", routes.pushToken], requireAuth, async (req, res) => {
+  const parsed = SavePushTokenRequest.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
+  const userId = (req as AuthedRequest).userId;
+  const { token, platform } = parsed.data;
+  await prisma.pushToken.upsert({
+    where: { token },
+    create: { userId, token, platform },
+    update: { userId, platform },
   });
-  return res.json(Me.parse(toMe(user)));
+  return res.status(204).send();
+});
+
+authRouter.delete(["/me/push-token", routes.pushToken], requireAuth, async (req, res) => {
+  const parsed = DeletePushTokenRequest.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
+  const userId = (req as AuthedRequest).userId;
+  const { token } = parsed.data;
+  await prisma.pushToken.deleteMany({
+    where: { userId, token },
+  });
+  return res.status(204).send();
 });

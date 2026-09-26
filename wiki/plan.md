@@ -83,7 +83,7 @@ anonymous voting over Socket.io, Ghost Pass, resolution, and
 - Server-side Google or Apple calendar OAuth
 - Gemini closure-risk ordering of backups
 - Fallback group chat
-- Squad management and consent UI (explicit groups are seeded only)
+- Squad management and consent UI (explicit groups are seeded only). Built after the demo in #76.
 - Custom expense splits
 - Push notifications (in-app sockets only)
 
@@ -187,6 +187,7 @@ users
   travel_mode text default 'DRIVE'
   created_at
   email_verified_at null     -- null = unverified; sign-up writes null, seed/legacy accounts are backfilled as verified
+  display_name null (1–40), bio null (≤ 160), username_changed_at null   -- #96; username changes once per 30 days
 
 email_codes                -- one live code per (user, purpose); 6 digits, stored as HMAC-SHA256, never plain
   id, user_id fk, purpose ('verify'|'reset'|'change_email'), code_hash, new_email null,
@@ -214,8 +215,10 @@ friendships                -- exactly one row per pair
   interaction_score real default 0.5     -- 0..1, seeded for demo
   last_hangout_at timestamptz null
 
-explicit_groups (id, name, created_by)            -- seeded only in v2
+explicit_groups (id, name, created_by)            -- Squads (#76); seeded groups predate them
 group_members   (group_id, user_id, role)  pk(group_id, user_id)
+  status ('invited'|'active') default 'active', invited_by_id null, invited_at null,
+  accepted_at null           -- said yes; still 'invited' until the 24 h objection window passes
 
 user_favorites
   id, user_id, category text, venue_name text null, google_place_id text null
@@ -223,6 +226,7 @@ user_favorites
 events
   id uuid, group_key text          -- sorted member ids joined, for cooldown/dedupe
   source_group_id uuid null        -- set if formed from an explicit group
+  created_by_id text null
   status enum(voting, confirmed, chatted, expired, completed)
   starts_at, ends_at, vibe_tag enum(quick_coffee, casual_hangout, dinner, night_out)
   timezone text                    -- timezone of member closest to venue centroid
@@ -267,9 +271,19 @@ Every route except signup and login requires `Authorization: Bearer <JWT>`.
 | POST | /auth/login | Ojas | Return JWT |
 | POST | /auth/verify-email/send | Ojas | Email a new 6-digit code. 204, or 429 + `Retry-After` within 60 s, or 409 if already verified |
 | POST | /auth/verify-email | Ojas | `{ code }` → `Me`. `400 wrong_code` burns an attempt; `400 code_expired` means send a new one |
-| GET / PATCH | /me | Ojas | Profile: timezone, home_lat/lng, travel_mode, `email_verified` (read-only) |
+| GET / PATCH | /me | Ojas | Profile: timezone, home_lat/lng, travel_mode, `display_name`, `bio`, `username` (once per 30 days; 409 `username_taken` / `username_cooldown`), `email_verified` (read-only) |
+| POST | /me/email | Ojas | `{ new_email, password }` → emails a code to the new address (409 if taken) |
+| POST | /me/email/confirm | Ojas | `{ code }` → switches the email, marks it verified, tells the old address → `Me` |
+| GET | /users/:id | Ojas | Public profile: `{ id, username, display_name, bio, friendship: none\|requested\|incoming\|friends, squads }` (shared active squads). Never email or close-friend status |
 | PUT | /busy-blocks | Riley | Replace the caller's blocks inside `[horizon_start, horizon_end]` in one transaction |
 | GET | /users/search?q= | Ojas | Username search. Never reveals whether they added you |
+| GET | /squads | Ojas | Squads I'm in or invited to: `{ id, name, my_status, members: [{ id, username, status, joins_at }] }` |
+| POST | /squads | Ojas | `{ name, invitee_ids }`. Creator is active; invitees (1–5, my accepted friends) are invited |
+| POST | /squads/:id/invite | Ojas | `{ invitee_ids }`. Active members only; at most 6 people counting invites |
+| DELETE | /squads/:id/invites/:userId | Ojas | An active member objects to a pending invite (removes it) |
+| POST | /squads/:id/respond | Ojas | `{ accept }` from the invitee. Decline removes the invite |
+| POST | /squads/:id/leave | Ojas | The last active member out deletes the squad |
+| PATCH | /squads/:id | Ojas | `{ name }`, active members only |
 | POST | /friends/requests | Ojas | `{ username }` → `{ status: "requested" \| "friends" }`. If they already requested me, this accepts. Max 50 pending outgoing |
 | GET | /friends/requests | Ojas | `{ incoming, outgoing }` pending requests. A declined request stays in the requester's outgoing list |
 | POST | /friends/requests/:id/accept | Ojas | Recipient accepts |
@@ -678,6 +692,8 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-26 | **Hosting: DigitalOcean App Platform** instead of Railway. Same shape as Railway: GitHub auto-deploy and a long-running process for Socket.io. |
 | 2026-09-26 | **Two-layer social graph (#93, after the demo).** Adding someone sends a visible friend request; close friends stay a silent flag that can only be set on an accepted friend. Declines are soft (the requester still sees "pending") so they're never announced. `GET /friends/close` no longer returns a `mutual` flag. |
 | 2026-09-26 | **Email verification (#91, after the demo).** Sign-up emails a 6-digit code (Resend). While `EMAIL_VERIFICATION_REQUIRED` is true, unverified accounts can't be found, requested or accepted as friends, so they never reach the matcher. It's `false` on the demo deploy. |
+| 2026-09-26 | **Squad consent (#76, after the demo).** Joining needs the invitee's yes. In a squad that already has 3+ active members, any active member can also object (remove the invite) within 24 h of it being sent; an accepted invite turns active once that window passes (a 60 s sweep). Smaller squads skip the window. Invitees must be the inviter's accepted friends; at most 6 people counting invites. The matcher should use active members only (#77). |
+| 2026-09-26 | **Profiles (#96, after the demo).** Every user in an API payload is a `PublicUser` `{ id, username, display_name }` where `display_name` falls back to the username. Avatar upload is deferred until a DigitalOcean Spaces bucket exists. |
 | 2026-09-26 | **Demo location: around FIU's Modesto A. Maidique Campus (Miami).** It's the hackathon venue, so the presenter's live device location is on campus. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)

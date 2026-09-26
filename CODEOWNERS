@@ -19,6 +19,7 @@
 /apps/mobile/src/features/auth/        @TheRealOP
 /apps/mobile/src/features/friends/     @TheRealOP
 /apps/mobile/src/features/voting/      @TheRealOP
+/apps/mobile/src/features/squads/      @TheRealOP
 
 # Andy: shell, onboarding, event card, demo
 /apps/mobile/src/app/                  @andydo4

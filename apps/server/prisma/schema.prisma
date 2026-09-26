@@ -43,6 +43,11 @@ enum VenueStatus {
   reported_closed
 }
 
+enum GroupMemberStatus {
+  invited
+  active
+}
+
 enum EmailCodePurpose {
   verify
   reset
@@ -79,6 +84,9 @@ model User {
   // null = unverified (sign-up writes it explicitly). Accounts made outside sign-up (seed, legacy)
   // lack the field and scripts/backfill.ts marks them verified.
   emailVerifiedAt DateTime? @map("email_verified_at")
+  displayName       String?   @map("display_name") // 1–40 chars; others see display_name ?? username
+  bio               String? // ≤ 160 chars
+  usernameChangedAt DateTime? @map("username_changed_at") // once per 30 days
 
   busyBlocks               BusyBlock[]
   friendshipsLow           Friendship[]              @relation("FriendshipLow")
@@ -90,8 +98,10 @@ model User {
   votes                    Vote[]
   expensesPaid             Expense[]
   expenseSplits            ExpenseSplit[]
+  eventsCreated            Event[]                   @relation("UserCreatedEvents")
   googleCalendarConnection GoogleCalendarConnection?
   emailCodes               EmailCode[]
+  pushTokens               PushToken[]
 
   @@map("users")
 }
@@ -111,6 +121,19 @@ model EmailCode {
 
   @@index([userId, purpose])
   @@map("email_codes")
+}
+
+model PushToken {
+  id        String   @id @default(uuid()) @map("_id")
+  userId    String   @map("user_id")
+  token     String   @unique
+  platform  String   // 'ios' | 'android' | 'web'
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
 }
 
 model GoogleCalendarConnection {
@@ -168,6 +191,7 @@ model Friendship {
   @@map("friendships")
 }
 
+/// A Squad (#76): a named group joined by consent. Seeded groups predate squads and are all active.
 model ExplicitGroup {
   id        String @id @default(uuid()) @map("_id")
   name      String
@@ -185,6 +209,10 @@ model GroupMember {
   groupId String @map("group_id")
   userId  String @map("user_id")
   role    String @default("member")
+  status      GroupMemberStatus @default(active) // seed rows are active; invites set invited
+  invitedById String?           @map("invited_by_id")
+  invitedAt   DateTime?         @map("invited_at")
+  acceptedAt  DateTime?         @map("accepted_at") // said yes; stays invited until the 24 h objection window passes
 
   group ExplicitGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -210,6 +238,7 @@ model Event {
   id            String      @id @default(uuid()) @map("_id")
   groupKey      String      @map("group_key") // sorted member ids joined
   sourceGroupId String?     @map("source_group_id")
+  createdById   String?     @map("created_by_id")
   status        EventStatus @default(voting)
   startsAt      DateTime    @map("starts_at")
   endsAt        DateTime    @map("ends_at")
@@ -228,6 +257,7 @@ model Event {
   matchReason   String?     @map("match_reason") // Null for the deterministic fallback.
 
   sourceGroup  ExplicitGroup?     @relation(fields: [sourceGroupId], references: [id], onDelete: SetNull)
+  creator      User?              @relation("UserCreatedEvents", fields: [createdById], references: [id], onDelete: SetNull)
   participants EventParticipant[]
   options      EventOption[]
   votes        Vote[]
