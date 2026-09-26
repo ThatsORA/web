@@ -24,7 +24,7 @@ friendsRouter.get(routes.userSearch, async (req, res) => {
   res.json({ users });
 });
 
-// My additions only. `mutual` is fine to show: both sides already chose each other.
+// My additions only. Never reveal whether someone added you (invariant: privacy).
 friendsRouter.get(routes.closeFriends, async (req, res) => {
   const me = (req as AuthedRequest).userId;
   const rows = await prisma.friendship.findMany({
@@ -33,7 +33,7 @@ friendsRouter.get(routes.closeFriends, async (req, res) => {
   });
   const friends = rows.map((r) => {
     const other = r.userLowId === me ? r.userHigh : r.userLow;
-    return { id: other.id, username: other.username, mutual: isMutual(r) };
+    return { id: other.id, username: other.username };
   });
   res.json({ friends });
 });

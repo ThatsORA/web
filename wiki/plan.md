@@ -258,7 +258,7 @@ Every route except signup and login requires `Authorization: Bearer <JWT>`.
 | GET / PATCH | /me | Ojas | Profile: timezone, home_lat/lng, travel_mode |
 | PUT | /busy-blocks | Riley | Replace the caller's blocks inside `[horizon_start, horizon_end]` in one transaction |
 | GET | /users/search?q= | Ojas | Username search. Never reveals whether they added you |
-| GET | /friends/close | Ojas | My additions, with a mutual flag on each |
+| GET | /friends/close | Ojas | My additions (no mutual signal; invariant: privacy) |
 | POST | /friends/close | Ojas | `{ username }` sets my direction. If it becomes mutual, triggers the matcher for affected groups |
 | DELETE | /friends/close/:userId | Ojas | Clear my direction silently |
 | PUT | /favorites | Andy | `{ categories: string[] }` |
