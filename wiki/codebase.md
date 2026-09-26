@@ -48,7 +48,7 @@ fit, open an issue for the owner.
 | Lane | Owner | Paths |
 | --- | --- | --- |
 | Availability, matching, venues, mobility | Riley | `apps/server/src/modules/{calendar,matching,venues}/`, `apps/server/scripts/seed.ts`, `apps/mobile/src/features/calendar/` |
-| Identity, social graph, decision, AI | Ojas | `apps/server/src/modules/{auth,friends,groups,intelligence,voting,expenses}/`, `apps/server/src/realtime/`, `apps/server/prisma/`, `apps/mobile/src/features/{auth,friends}/` |
+| Identity, social graph, decision, AI | Ojas | `apps/server/src/modules/{auth,friends,groups,intelligence,voting,expenses}/`, `apps/server/src/realtime/`, `apps/server/prisma/`, `apps/mobile/src/features/{auth,friends,voting}/` |
 | Shell, onboarding, event card, demo | Andy | `apps/mobile/src/app/`, `apps/mobile/src/ui/`, `apps/mobile/src/lib/`, `apps/mobile/src/features/{favorites,event-card}/`, `apps/server/src/modules/{events,favorites}/`, `apps/server/scripts/demo-reset.ts` |
 | Shared contract | All three | `packages/contract/` |
 | Shared server wiring | All three (small edits only) | `apps/server/src/{app,index,env}.ts`, `apps/server/src/lib/{prisma,demoMode,notImplemented}.ts`, `.env.example` |
