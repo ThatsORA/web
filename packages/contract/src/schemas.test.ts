@@ -1,11 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { EventCardPayload, ExpoPushToken, optionFromRow, type OptionRowLike } from "./schemas";
+import { EventCardPayload, ExpoPushToken, LoginRequest, SignupRequest, optionFromRow, type OptionRowLike } from "./schemas";
 
 describe("EventCardPayload match reason", () => {
   it("accepts null or a reason up to 90 characters", () => {
     expect(EventCardPayload.shape.match_reason.safeParse(null).success).toBe(true);
     expect(EventCardPayload.shape.match_reason.safeParse("A shared restaurant favorite fits Thursday dinner.").success).toBe(true);
     expect(EventCardPayload.shape.match_reason.safeParse("x".repeat(91)).success).toBe(false);
+  });
+});
+
+describe("auth identifiers", () => {
+  it("LoginRequest trims and lowercases the identifier and rejects a blank one", () => {
+    expect(LoginRequest.parse({ identifier: "  Ojas@Example.COM ", password: "x" }).identifier).toBe("ojas@example.com");
+    expect(LoginRequest.parse({ identifier: " OJAS ", password: "x" }).identifier).toBe("ojas");
+    expect(LoginRequest.safeParse({ identifier: "   ", password: "x" }).success).toBe(false);
+  });
+  it("SignupRequest stores the email lowercased", () => {
+    const body = { email: " Andy@X.com ", username: "andy", password: "longenough", timezone: "America/New_York" };
+    expect(SignupRequest.parse(body).email).toBe("andy@x.com");
   });
 });
 

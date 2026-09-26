@@ -27,7 +27,7 @@ export const Bio = z.string().trim().max(160);
 export const PublicUser = z.object({ id: Id, username: z.string(), display_name: z.string() });
 
 export const SignupRequest = z.object({
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().email(),
   username: Username,
   password: z.string(),
   timezone: IanaTimezone,
@@ -36,11 +36,13 @@ export const SignupRequest = z.object({
   if (!result.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["password"], message: result.reason, params: { error: "weak_password" } });
 });
 export const WeakPasswordResponse = z.object({ error: z.literal("weak_password"), reason: z.string() });
-export const PasswordResetRequest = z.object({ email: z.string().email() });
-export const PasswordResetConfirmRequest = z.object({ email: z.string().email(), code: z.string().regex(/^\d{6}$/), new_password: z.string() });
+// Emails are stored lowercased (see SignupRequest), so reset lookups normalize the same way.
+export const PasswordResetRequest = z.object({ email: z.string().trim().toLowerCase().email() });
+export const PasswordResetConfirmRequest = z.object({ email: z.string().trim().toLowerCase().email(), code: z.string().regex(/^\d{6}$/), new_password: z.string() });
 export const PasswordResetAccepted = z.object({ accepted: z.literal(true) });
 export const PasswordResetSuccess = z.object({ reset: z.literal(true) });
-export const LoginRequest = z.object({ email: z.string().email(), password: z.string() });
+// Usernames can't contain "@" (see Username), so the server reads an identifier with "@" as an email, otherwise a username.
+export const LoginRequest = z.object({ identifier: z.string().trim().toLowerCase().min(1), password: z.string() });
 export const AuthResponse = z.object({ token: z.string(), user_id: Id });
 
 export const Me = z.object({

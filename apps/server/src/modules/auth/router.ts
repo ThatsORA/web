@@ -57,17 +57,17 @@ authRouter.post(routes.signup, async (req, res) => {
 authRouter.post(routes.login, async (req, res) => {
   const parsed = LoginRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
-  const { email } = parsed.data;
+  const { identifier } = parsed.data; // already trimmed + lowercased by the contract
   const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
-  const retryAfter = loginLimiter.retryAfter(email, ip);
+  const retryAfter = loginLimiter.retryAfter(identifier, ip);
   if (retryAfter) return res.status(429).set("Retry-After", String(retryAfter)).json(ApiError.parse({ error: "too_many_attempts" }));
-  const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+  const user = await prisma.user.findUnique({ where: identifier.includes("@") ? { email: identifier } : { username: identifier } });
   const ok = await verifyPassword(parsed.data.password, user?.passwordHash ?? await DUMMY_HASH);
   if (!user || !ok) {
-    loginLimiter.failed(email, ip);
+    loginLimiter.failed(identifier, ip);
     return res.status(401).json({ error: "invalid_credentials" });
   }
-  loginLimiter.succeeded(email, ip);
+  loginLimiter.succeeded(identifier, ip);
   return res.json(AuthResponse.parse({ token: signToken(user.id), user_id: user.id }));
 });
 

@@ -40,6 +40,6 @@ describe("checkPassword", () => {
     const result = SignupRequest.safeParse({ ...identity, password: "short", timezone: "UTC" });
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error.issues[0]).toMatchObject({ path: ["password"], message: passwordReasons.length });
-    expect(LoginRequest.safeParse({ email: identity.email, password: "short" }).success).toBe(true);
+    expect(LoginRequest.safeParse({ identifier: identity.email, password: "short" }).success).toBe(true);
   });
 });
