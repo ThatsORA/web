@@ -76,6 +76,7 @@ model User {
   votes                    Vote[]
   expensesPaid             Expense[]
   expenseSplits            ExpenseSplit[]
+  eventsCreated            Event[]                   @relation("UserCreatedEvents")
   googleCalendarConnection GoogleCalendarConnection?
 
   @@map("users")
@@ -171,6 +172,7 @@ model Event {
   id            String      @id @default(uuid()) @map("_id")
   groupKey      String      @map("group_key") // sorted member ids joined
   sourceGroupId String?     @map("source_group_id")
+  createdById   String?     @map("created_by_id")
   status        EventStatus @default(voting)
   startsAt      DateTime    @map("starts_at")
   endsAt        DateTime    @map("ends_at")
@@ -189,6 +191,7 @@ model Event {
   matchReason   String?     @map("match_reason") // Null for the deterministic fallback.
 
   sourceGroup  ExplicitGroup?     @relation(fields: [sourceGroupId], references: [id], onDelete: SetNull)
+  creator      User?              @relation("UserCreatedEvents", fields: [createdById], references: [id], onDelete: SetNull)
   participants EventParticipant[]
   options      EventOption[]
   votes        Vote[]
