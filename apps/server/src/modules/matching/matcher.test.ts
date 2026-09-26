@@ -32,7 +32,14 @@ vi.mock("../voting/lifecycle", () => ({ openVoting: mocks.openVoting }));
 
 import { env } from "../../env";
 import type { MatchingEvent } from "./candidates";
-import { openEventsByParticipant, runPipeline, timezoneClosestToVenueCentroid, triggerMatcher, unusedVenueSnapshots } from "./matcher";
+import {
+  createUserHangout,
+  openEventsByParticipant,
+  runPipeline,
+  timezoneClosestToVenueCentroid,
+  triggerMatcher,
+  unusedVenueSnapshots,
+} from "./matcher";
 
 const NOW = new Date("2026-09-26T12:00:00Z");
 const IDS = [
@@ -299,3 +306,22 @@ describe("matcher mutex", () => {
     expect(mocks.openVoting).toHaveBeenCalledOnce();
   });
 });
+
+describe("createUserHangout", () => {
+  it("creates an event with createdById set to callerId", async () => {
+    const callerId = IDS[0]!;
+    const inviteeIds = [IDS[1]!, IDS[2]!];
+    const eventId = await createUserHangout(callerId, inviteeIds);
+
+    expect(eventId).toBe("event-1");
+    expect(mocks.transaction).toHaveBeenCalledOnce();
+    const createCall = mocks.eventCreate.mock.calls[0]![0];
+    expect(createCall.data).toMatchObject({
+      groupKey: IDS.join(","),
+      createdById: callerId,
+      status: "voting",
+    });
+    expect(mocks.openVoting).toHaveBeenCalledWith("event-1");
+  });
+});
+

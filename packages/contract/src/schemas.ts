@@ -13,12 +13,10 @@ export const EventStatus = z.enum(["voting", "confirmed", "chatted", "expired", 
 export const VoteStatus = z.enum(["invited", "voted", "ghost_passed", "confirmed"]);
 export const VenueStatus = z.enum(["open", "reported_closed"]);
 export const TravelMode = z.enum(["DRIVE", "TRANSIT", "WALK", "BICYCLE"]); // decided 2026-09-26
-export const PushPlatform = z.enum(["ios", "android"]);
 
 export type VibeTag = z.infer<typeof VibeTag>;
 export type EventStatus = z.infer<typeof EventStatus>;
 export type VoteStatus = z.infer<typeof VoteStatus>;
-export type PushPlatform = z.infer<typeof PushPlatform>;
 
 // ---------- auth / profile (Ojas) ----------
 export const SignupRequest = z.object({
@@ -47,33 +45,23 @@ export const PatchMeRequest = z
     travel_mode: TravelMode,
   })
   .partial();
+
+// Expo's documented token forms; anything else can't be delivered, so reject it at the door.
 export const ExpoPushToken = z
   .string()
   .max(512)
   .regex(/^(?:ExponentPushToken|ExpoPushToken)\[[^\[\]\s]+\]$/);
-export type ExpoPushToken = z.infer<typeof ExpoPushToken>;
-export const PutPushTokenRequest = z.object({ token: ExpoPushToken, platform: PushPlatform });
-export const DeletePushTokenRequest = z.object({ token: ExpoPushToken });
 
-export const PushNotificationData = z.object({ event_id: Id });
-export const PushMessage = z.object({
-  title: z.string(),
-  body: z.string(),
-  data: PushNotificationData,
+export const SavePushTokenRequest = z.object({
+  token: ExpoPushToken,
+  platform: z.enum(["ios", "android", "web"]).default("ios"),
 });
-export type PushMessage = z.infer<typeof PushMessage>;
-export const ExpoPushRequest = PushMessage.extend({ to: ExpoPushToken });
-export const ExpoPushTicket = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("ok"), id: z.string() }),
-  z.object({
-    status: z.literal("error"),
-    message: z.string().optional(),
-    details: z.object({ error: z.string() }).passthrough().optional(),
-  }),
-]);
-export const ExpoPushResponse = z.object({
-  data: z.union([ExpoPushTicket, z.array(ExpoPushTicket)]),
+export type SavePushTokenRequest = z.infer<typeof SavePushTokenRequest>;
+
+export const DeletePushTokenRequest = z.object({
+  token: ExpoPushToken,
 });
+export type DeletePushTokenRequest = z.infer<typeof DeletePushTokenRequest>;
 
 // ---------- busy blocks (Riley) ----------
 export const BusyBlock = z.object({ starts_at: Instant, ends_at: Instant });
@@ -95,9 +83,19 @@ export type GoogleCalendarStartRequest = z.infer<typeof GoogleCalendarStartReque
 // ---------- friends (Ojas) ----------
 export const UserSearchResult = z.object({ id: Id, username: z.string() }); // never reveals "added you"
 export const UserSearchResponse = z.object({ users: z.array(UserSearchResult) });
+// Close friends: my silent choices only. Never says whether they chose me back.
 export const CloseFriend = z.object({ id: Id, username: z.string() });
 export const CloseFriendsResponse = z.object({ friends: z.array(CloseFriend) });
-export const AddCloseFriendRequest = z.object({ username: z.string() });
+export const AddCloseFriendRequest = z.object({ username: z.string() }); // 409 unless we're accepted friends
+
+// Friends: the visible request/accept layer. `close` is MY flag only.
+export const Friend = z.object({ id: Id, username: z.string(), close: z.boolean() });
+export const FriendsResponse = z.object({ friends: z.array(Friend) });
+export const SendFriendRequest = z.object({ username: z.string() });
+/** "friends" when they had already requested me, so this accepted it. */
+export const SendFriendRequestResponse = z.object({ status: z.enum(["requested", "friends"]) });
+export const FriendRequest = z.object({ id: Id, user: UserSearchResult, requested_at: Instant });
+export const FriendRequestsResponse = z.object({ incoming: z.array(FriendRequest), outgoing: z.array(FriendRequest) });
 
 export type UserSearchResult = z.infer<typeof UserSearchResult>;
 export type UserSearchResponse = z.infer<typeof UserSearchResponse>;
@@ -230,6 +228,28 @@ export const CreateExpenseRequest = z.object({
   splits: z.array(z.object({ user_id: Id, amount_cents: z.number().int().nonnegative() })).optional(),
 });
 export const PatchExpenseSplitRequest = z.object({ settled: z.boolean() });
+
+// ---------- chat (Ojas) ----------
+export const ChatMessage = z.object({
+  id: Id,
+  event_id: Id,
+  user_id: Id,
+  username: z.string(),
+  body: z.string().min(1).max(1000),
+  created_at: Instant,
+});
+export type ChatMessage = z.infer<typeof ChatMessage>;
+
+export const ChatMessagesResponse = z.object({
+  messages: z.array(ChatMessage),
+  next_cursor: Instant.nullable(),
+});
+export type ChatMessagesResponse = z.infer<typeof ChatMessagesResponse>;
+
+export const SendChatMessageRequest = z.object({
+  body: z.string().min(1).max(1000),
+});
+export type SendChatMessageRequest = z.infer<typeof SendChatMessageRequest>;
 
 // ---------- errors ----------
 export const ApiError = z.object({ error: z.string(), message: z.string().optional() });

@@ -78,6 +78,7 @@ function Header({ card, eyebrow, badge, onBrand }: { card: EventCardPayload; eye
             {timeLabel(card)}
           </Txt>
           <Txt variant="small">{card.participants.map((p) => p.username).join(" · ")}</Txt>
+          {card.match_reason ? <Txt variant="small">{card.match_reason}</Txt> : null}
         </>
       )}
     </View>
@@ -236,6 +237,11 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
         <Txt variant="small" color="onPrimary" numeric>
           {timeLabel(card)}
         </Txt>
+        {card.match_reason ? (
+          <Txt variant="small" color="onPrimary">
+            {card.match_reason}
+          </Txt>
+        ) : null}
         {swapped ? (
           <Txt variant="small" color="onPrimary" numeric>
             {swapLabel(venue)}

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { View, ActivityIndicator, Alert, Switch } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, ActivityIndicator, Alert } from "react-native";
 import * as Location from "expo-location";
-import { Txt, Button, Card, useTheme } from "../../ui";
+import { Txt, Button, useTheme } from "../../ui";
 import { Me, routes, TravelMode } from "@web/contract";
 import type { z } from "zod";
 import { api } from "../../lib/api";
@@ -17,21 +17,25 @@ export function AvailabilitySettings() {
   const [updatingLocation, setUpdatingLocation] = useState(false);
   const [updatingMode, setUpdatingMode] = useState<string | null>(null);
 
-  const fetchMe = useCallback(async () => {
-    try {
-      setLoadingMe(true);
-      const user = await api(routes.me, Me);
-      setMe(user);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingMe(false);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchMe();
-  }, [fetchMe]);
+    let cancelled = false;
+    api(routes.me, Me)
+      .then((user) => {
+        if (!cancelled) {
+          setMe(user);
+          setLoadingMe(false);
+        }
+      })
+      .catch((e) => {
+        console.error(e);
+        if (!cancelled) {
+          setLoadingMe(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleUpdateLocation = async () => {
     setUpdatingLocation(true);

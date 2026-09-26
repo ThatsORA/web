@@ -35,7 +35,7 @@ const option = (id: string, rank: number) => ({
     // caller is alice, invite bob
     mocks.findMany.mockResolvedValueOnce([{ userLowId: alice, userHighId: bob, lowAddedHigh: true, highAddedLow: false }]);
     matcherMocks.createUserHangout.mockResolvedValueOnce(eventId);
-    mocks.findUnique.mockResolvedValueOnce(event()).mockResolvedValueOnce({ id: alice, username: "alice" });
+    mocks.findUnique.mockResolvedValueOnce(event());
 
     const response = await fetch(`${base}/events`, {
       method: "POST",
@@ -45,6 +45,12 @@ const option = (id: string, rank: number) => ({
     
     expect(response.status).toBe(201);
     expect(matcherMocks.createUserHangout).toHaveBeenCalledWith(alice, [bob], undefined, undefined, undefined);
+    expect(mocks.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: eventId },
+      include: expect.not.objectContaining({ creator: expect.anything() }),
+    }));
+    const body = await response.json();
+    expect(body.created_by).toEqual({ id: alice, username: "alice" });
   });
 
   it("POST /events rejects self invite", async () => {
@@ -97,7 +103,7 @@ const option = (id: string, rank: number) => ({
 const event = () => ({
   id: eventId, status: "voting", startsAt: instant, endsAt: new Date("2026-10-01T20:30:00Z"),
   timezone: "America/New_York", vibeTag: "dinner", voteClosesAt: new Date("2026-10-01T17:00:00Z"),
-  venuePlaceId: null, venueStatus: "open", creator: { id: alice, username: "alice" },
+  venuePlaceId: null, venueStatus: "open",
   participants: [
     { userId: alice, voteStatus: "voted", user: { id: alice, username: "alice" } },
     { userId: bob, voteStatus: "voted", user: { id: bob, username: "bob" } },
@@ -134,7 +140,6 @@ describe("events router", () => {
       where: expect.objectContaining({ participants: { some: { userId: alice } } }),
       include: {
         participants: { include: { user: { select: { id: true, username: true } } } },
-        creator: { select: { id: true, username: true } },
         options: true,
         votes: { select: { userId: true, optionId: true } },
       },

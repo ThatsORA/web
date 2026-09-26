@@ -43,6 +43,11 @@ enum VenueStatus {
   reported_closed
 }
 
+enum FriendshipStatus {
+  pending
+  accepted
+}
+
 enum BusySource {
   device_calendar
   google_calendar
@@ -53,11 +58,6 @@ enum GoogleCalendarConnectionStatus {
   active
   revoked
   error
-}
-
-enum PushPlatform {
-  ios
-  android
 }
 
 model User {
@@ -81,18 +81,20 @@ model User {
   votes                    Vote[]
   expensesPaid             Expense[]
   expenseSplits            ExpenseSplit[]
+  eventsCreated            Event[]                   @relation("UserCreatedEvents")
   googleCalendarConnection GoogleCalendarConnection?
+  chatMessages             ChatMessage[]
   pushTokens               PushToken[]
 
   @@map("users")
 }
 
 model PushToken {
-  id        String       @id @default(uuid()) @map("_id")
-  userId    String       @map("user_id")
-  token     String       @unique
-  platform  PushPlatform
-  createdAt DateTime     @default(now()) @map("created_at")
+  id        String   @id @default(uuid()) @map("_id")
+  userId    String   @map("user_id")
+  token     String   @unique
+  platform  String   // 'ios' | 'android' | 'web'
+  createdAt DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -130,15 +132,22 @@ model BusyBlock {
 }
 
 /// Exactly one document per pair; code must sort so userLowId < userHighId.
+/// Two layers: `status` is the visible friend request; the two flags are the silent
+/// close-friend choices, only ever true when status = accepted.
 /// mutual = lowAddedHigh AND highAddedLow — compute in queries.
 model Friendship {
-  id               String    @id @default(uuid()) @map("_id")
-  userLowId        String    @map("user_low_id")
-  userHighId       String    @map("user_high_id")
-  lowAddedHigh     Boolean   @default(false) @map("low_added_high")
-  highAddedLow     Boolean   @default(false) @map("high_added_low")
-  interactionScore Float     @default(0.5) @map("interaction_score")
-  lastHangoutAt    DateTime? @map("last_hangout_at")
+  id               String           @id @default(uuid()) @map("_id")
+  userLowId        String           @map("user_low_id")
+  userHighId       String           @map("user_high_id")
+  status           FriendshipStatus @default(accepted) // seed/legacy rows are friends; requests set pending
+  requestedById    String?          @map("requested_by_id") // null on seed/legacy rows
+  requestedAt      DateTime         @default(now()) @map("requested_at")
+  acceptedAt       DateTime?        @map("accepted_at")
+  declinedAt       DateTime?        @map("declined_at") // soft decline: hidden from the recipient, still pending to the requester
+  lowAddedHigh     Boolean          @default(false) @map("low_added_high")
+  highAddedLow     Boolean          @default(false) @map("high_added_low")
+  interactionScore Float            @default(0.5) @map("interaction_score")
+  lastHangoutAt    DateTime?        @map("last_hangout_at")
 
   userLow  User @relation("FriendshipLow", fields: [userLowId], references: [id], onDelete: Cascade)
   userHigh User @relation("FriendshipHigh", fields: [userHighId], references: [id], onDelete: Cascade)
@@ -190,6 +199,7 @@ model Event {
   id            String      @id @default(uuid()) @map("_id")
   groupKey      String      @map("group_key") // sorted member ids joined
   sourceGroupId String?     @map("source_group_id")
+  createdById   String?     @map("created_by_id")
   status        EventStatus @default(voting)
   startsAt      DateTime    @map("starts_at")
   endsAt        DateTime    @map("ends_at")
@@ -208,10 +218,12 @@ model Event {
   matchReason   String?     @map("match_reason") // Null for the deterministic fallback.
 
   sourceGroup  ExplicitGroup?     @relation(fields: [sourceGroupId], references: [id], onDelete: SetNull)
+  creator      User?              @relation("UserCreatedEvents", fields: [createdById], references: [id], onDelete: SetNull)
   participants EventParticipant[]
   options      EventOption[]
   votes        Vote[]
   expenses     Expense[]
+  chatMessages ChatMessage[]
 
   @@index([groupKey, status])
   @@index([status, voteClosesAt])
@@ -300,4 +312,18 @@ model ExpenseSplit {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("expense_splits")
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid()) @map("_id")
+  eventId   String   @map("event_id")
+  userId    String   @map("user_id")
+  body      String   @map("body")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, createdAt])
+  @@map("chat_messages")
 }

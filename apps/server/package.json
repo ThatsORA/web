@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start": "prisma db push --skip-generate && tsx src/index.ts",
+    "start": "prisma db push --skip-generate && tsx scripts/backfill.ts && tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:smoke": "tsx scripts/db-smoke.ts",
+    "db:backfill": "tsx scripts/backfill.ts",
     "db:seed": "tsx scripts/seed.ts",
     "demo:reset": "tsx scripts/demo-reset.ts"
   },

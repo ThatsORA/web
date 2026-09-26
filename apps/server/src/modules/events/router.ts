@@ -46,24 +46,20 @@ eventsRouter.post(routes.events, requireAuth, express.json(), async (req, res) =
     return res.status(422).json({ error: "no_common_time" });
   }
 
-  const [event, caller] = await Promise.all([
-    prisma.event.findUnique({
-      where: { id: eventId },
-      include: {
-        participants: { include: { user: { select: { id: true, username: true } } } },
-        options: true,
-        votes: { select: { userId: true, optionId: true } }
-      }
-    }),
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, username: true }
-    })
-  ]);
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    include: {
+      participants: { include: { user: { select: { id: true, username: true } } } },
+      options: true,
+      votes: { select: { userId: true, optionId: true } },
+    },
+  });
 
   if (!event) return res.status(500).json({ error: "creation_failed" });
 
-  res.status(201).json(EventCardPayload.parse(assembleEventCard({ ...event, created_by: caller }, userId)));
+  // Event has no creator relation yet (#154); the caller is the creator, so take them from the participants.
+  const createdBy = event.participants.find((p) => p.userId === userId)?.user ?? null;
+  res.status(201).json(EventCardPayload.parse(assembleEventCard({ ...event, created_by: createdBy }, userId)));
 });
 
 
@@ -78,7 +74,7 @@ eventsRouter.get(routes.events, requireAuth, async (req, res) => {
     orderBy: { startsAt: "desc" },
     include: {
       participants: { include: { user: { select: { id: true, username: true } } } },
-      options: true, creator: { select: { id: true, username: true } },
+      options: true,
       votes: { select: { userId: true, optionId: true } },
     },
   });
@@ -93,7 +89,7 @@ eventsRouter.get(routes.event(":id"), requireAuth, async (req, res) => {
   const userId = (req as AuthedRequest).userId;
   const event = await prisma.event.findFirst({
     where: { id: id.data, participants: { some: { userId } } },
-    include: { participants: { include: { user: { select: { id: true, username: true } } } }, options: true, creator: { select: { id: true, username: true } }, votes: { select: { userId: true, optionId: true } } },
+    include: { participants: { include: { user: { select: { id: true, username: true } } } }, options: true, votes: { select: { userId: true, optionId: true } } },
   });
   if (!event) return res.status(404).json({ error: "not_found" });
   res.json(EventCardPayload.parse(assembleEventCard(event, userId)));

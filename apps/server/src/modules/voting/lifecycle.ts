@@ -4,8 +4,7 @@
 import { EventOption, optionFromRow } from "@web/contract";
 import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
-import { emitToUsers } from "../../realtime";
-import { pushEventConfirmed, pushEventCreated } from "../../realtime/push";
+import { emitToUsers, pushEventCreated, pushEventResolved } from "../../realtime";
 import { progress, resolveEvent, voteClosesAt } from "./resolution";
 
 export async function openVoting(eventId: string): Promise<void> {
@@ -17,9 +16,16 @@ export async function openVoting(eventId: string): Promise<void> {
     where: { id: eventId },
     data: { voteClosesAt: voteClosesAt(event.createdAt, event.startsAt, env.VOTE_TIMEOUT_SEC) },
   });
-  const userIds = event.participants.map((p) => p.userId);
-  emitToUsers(userIds, "event:created", { event_id: eventId });
-  void pushEventCreated(userIds, event).catch((error: unknown) => console.error("push event:created", eventId, error));
+  emitToUsers(event.participants.map((p) => p.userId), "event:created", { event_id: eventId });
+  void pushEventCreated(
+    event.participants.map((p) => p.userId),
+    eventId,
+    {
+      startsAt: event.startsAt,
+      vibeTag: event.vibeTag,
+      timezone: event.timezone,
+    },
+  ).catch((e: unknown) => console.error("pushEventCreated error", e));
 }
 
 /** After a vote or ghost pass: broadcast responded/total, and close early once everyone has responded. */
@@ -71,10 +77,13 @@ export async function closeVoting(eventId: string): Promise<void> {
     return count > 0;
   });
   if (claimed) {
-    const userIds = event.participants.map((p) => p.userId);
-    emitToUsers(userIds, "event:resolved", { event_id: eventId, status: r.status });
+    emitToUsers(event.participants.map((p) => p.userId), "event:resolved", { event_id: eventId, status: r.status });
     if (r.status === "confirmed") {
-      void pushEventConfirmed(userIds, eventId).catch((error: unknown) => console.error("push event:resolved", eventId, error));
+      void pushEventResolved(
+        event.participants.map((p) => p.userId),
+        eventId,
+        r.status,
+      ).catch((e: unknown) => console.error("pushEventResolved error", e));
     }
   }
 }

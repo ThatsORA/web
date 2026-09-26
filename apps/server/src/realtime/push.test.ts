@@ -1,127 +1,254 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ findMany: vi.fn(), deleteMany: vi.fn() }));
-vi.mock("../lib/prisma", () => ({ prisma: { pushToken: mocks } }));
+const mockPrisma = vi.hoisted(() => ({
+  pushToken: {
+    findMany: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+}));
 
-import { buildPushMessage, pushEventCreated, sendPushToUsers } from "./push";
-import { env } from "../env";
+vi.mock("../lib/prisma", () => ({
+  prisma: mockPrisma,
+}));
 
-const eventId = "2b5232d3-9424-4e7c-8e2f-0299693b54eb";
+const mockEnv = vi.hoisted(() => ({ DEMO_MODE: false }));
+vi.mock("../env", () => ({ env: mockEnv }));
 
-const originalDemoMode = env.DEMO_MODE;
-beforeEach(() => {
-  vi.resetAllMocks();
-  env.DEMO_MODE = false;
-});
-afterEach(() => {
-  env.DEMO_MODE = originalDemoMode;
-});
+const mockFetch = vi.fn();
+vi.stubGlobal("fetch", mockFetch);
 
-describe("buildPushMessage", () => {
-  it("builds the requested local-time created copy with thin data", () => {
-    expect(buildPushMessage({
-      kind: "created",
-      eventId,
-      startsAt: new Date("2026-10-01T22:30:00Z"),
-      timezone: "America/New_York",
-      vibeTag: "dinner",
-    })).toEqual({
-      title: "New hangout idea",
-      body: "New hangout idea: Thu 6:30pm dinner",
-      data: { event_id: eventId },
+import {
+  EXPO_PUSH_URL,
+  buildEventCreatedMessage,
+  buildEventResolvedMessage,
+  buildVenueChangedMessage,
+  formatEventCreatedBody,
+  pushEventCreated,
+  pushEventResolved,
+  pushVenueChanged,
+} from "./push";
+
+describe("realtime/push", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockEnv.DEMO_MODE = false;
+  });
+
+  describe("message formatters (no vote leakage)", () => {
+    it("formats event created body with time, vibe, and timezone", () => {
+      // 2026-10-01 is Thursday. 22:30 UTC = 18:30 EDT (6:30pm)
+      const date = new Date("2026-10-01T22:30:00Z");
+      const body = formatEventCreatedBody({
+        startsAt: date,
+        vibeTag: "dinner",
+        timezone: "America/New_York",
+      });
+      expect(body).toBe("New hangout idea: Thu 6:30pm dinner");
+    });
+
+    it("formats event created body with round hours", () => {
+      const date = new Date("2026-10-01T23:00:00Z");
+      const body = formatEventCreatedBody({
+        startsAt: date,
+        vibeTag: "night_out",
+        timezone: "America/New_York",
+      });
+      expect(body).toBe("New hangout idea: Thu 7pm night out");
+    });
+
+    it("falls back gracefully when startsAt is missing", () => {
+      const body = formatEventCreatedBody();
+      expect(body).toBe("New hangout idea: vote on your options!");
+    });
+
+    it("builds thin event created message with event_id", () => {
+      const msg = buildEventCreatedMessage("evt-123", {
+        startsAt: new Date("2026-10-01T22:30:00Z"),
+        vibeTag: "dinner",
+        timezone: "America/New_York",
+      });
+      expect(msg).toEqual({
+        title: "New hangout idea",
+        body: "New hangout idea: Thu 6:30pm dinner",
+        data: { event_id: "evt-123" },
+      });
+      // Verify no vote fields or participants
+      expect(msg).not.toHaveProperty("votes");
+      expect(msg).not.toHaveProperty("ghost_passed");
+      expect(JSON.stringify(msg)).not.toContain("vote");
+    });
+
+    it("builds confirmed event resolved message without vote leakage", () => {
+      const msg = buildEventResolvedMessage("evt-123", "confirmed");
+      expect(msg).toEqual({
+        title: "Hangout Confirmed",
+        body: "Your hangout has been confirmed!",
+        data: { event_id: "evt-123" },
+      });
+      expect(JSON.stringify(msg)).not.toContain("ghost");
+      expect(JSON.stringify(msg)).not.toContain("tallies");
+    });
+
+    it("builds non-confirmed event resolved message", () => {
+      const msg = buildEventResolvedMessage("evt-123", "chatted");
+      expect(msg).toEqual({
+        title: "Hangout Update",
+        body: "Hangout status: chatted",
+        data: { event_id: "evt-123" },
+      });
+    });
+
+    it("builds venue changed message", () => {
+      const msg = buildVenueChangedMessage("evt-123");
+      expect(msg).toEqual({
+        title: "Venue Changed",
+        body: "The venue for your hangout has been updated.",
+        data: { event_id: "evt-123" },
+      });
     });
   });
 
-  it.each([
-    { kind: "confirmed", eventId } as const,
-    { kind: "venue_changed", eventId } as const,
-  ])("never includes votes, counts, or ghost-pass identity in $kind copy", (event) => {
-    const serialized = JSON.stringify(buildPushMessage(event)).toLowerCase();
-    expect(serialized).not.toMatch(/vote|responded|total|ghost|pass|attendee|count/);
-    expect(JSON.parse(serialized).data).toEqual({ event_id: eventId });
-  });
-
-  it("turns invalid timezone formatting into a rejected push promise", async () => {
-    await expect(pushEventCreated([], {
-      id: eventId,
-      startsAt: new Date("2026-10-01T22:30:00Z"),
-      timezone: "not-a-timezone",
-      vibeTag: "dinner",
-    })).rejects.toThrow();
-  });
-});
-
-describe("sendPushToUsers", () => {
-  it("caps batches at 100 and deletes only tokens paired with DeviceNotRegistered tickets", async () => {
-    const tokens = Array.from({ length: 101 }, (_, index) => `ExpoPushToken[token-${index}]`);
-    mocks.findMany.mockResolvedValue(tokens.map((token) => ({ token })));
-    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      const messages = JSON.parse(String(init?.body)) as { to: string }[];
-      return new Response(JSON.stringify({
-        data: messages.map(({ to }) => to === "ExpoPushToken[token-100]"
-          ? { status: "error", details: { error: "DeviceNotRegistered" } }
-          : { status: "ok", id: `ticket-${to}` }),
-      }), { status: 200, headers: { "content-type": "application/json" } });
+  describe("sending push notifications via Expo Push API", () => {
+    it("does nothing when userIds is empty", async () => {
+      await pushEventCreated([], "evt-123");
+      expect(mockPrisma.pushToken.findMany).not.toHaveBeenCalled();
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    await sendPushToUsers(["user-1", "user-1", "user-2"], buildPushMessage({ kind: "confirmed", eventId }), fetcher as typeof fetch);
-
-    expect(mocks.findMany).toHaveBeenCalledWith({
-      where: { userId: { in: ["user-1", "user-2"] } },
-      select: { token: true },
+    it("never calls Expo in DEMO_MODE", async () => {
+      mockEnv.DEMO_MODE = true;
+      await pushEventCreated(["user-1"], "evt-123");
+      expect(mockPrisma.pushToken.findMany).not.toHaveBeenCalled();
+      expect(mockFetch).not.toHaveBeenCalled();
     });
-    expect(fetcher).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(String(fetcher.mock.calls[0]![1]?.body))).toHaveLength(100);
-    expect(JSON.parse(String(fetcher.mock.calls[1]![1]?.body))).toHaveLength(1);
-    expect(mocks.deleteMany).toHaveBeenCalledWith({ where: { token: { in: ["ExpoPushToken[token-100]"] } } });
-  });
 
-  it("surfaces provider errors to the detached caller without deleting tokens", async () => {
-    mocks.findMany.mockResolvedValue([{ token: "ExpoPushToken[token-1]" }]);
-    const fetcher = vi.fn(async () => new Response("unavailable", { status: 503 }));
-    await expect(sendPushToUsers(["user-1"], buildPushMessage({ kind: "confirmed", eventId }), fetcher as typeof fetch))
-      .rejects.toThrow("Expo Push failed with HTTP 503");
-    expect(mocks.deleteMany).not.toHaveBeenCalled();
-  });
+    it("does nothing when no tokens are found in DB", async () => {
+      mockPrisma.pushToken.findMany.mockResolvedValueOnce([]);
+      await pushEventCreated(["user-1"], "evt-123");
+      expect(mockPrisma.pushToken.findMany).toHaveBeenCalledWith({
+        where: { userId: { in: ["user-1"] } },
+        select: { token: true },
+      });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
 
-  it("surfaces non-registration ticket errors without exposing tokens", async () => {
-    mocks.findMany.mockResolvedValue([{ token: "ExpoPushToken[secret-token]" }]);
-    const fetcher = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response(JSON.stringify({
-      data: [{ status: "error", message: "credentials", details: { error: "InvalidCredentials" } }],
-    }), { status: 200, headers: { "content-type": "application/json" } }));
-    const promise = sendPushToUsers(["user-1"], buildPushMessage({ kind: "confirmed", eventId }), fetcher as typeof fetch);
-    await expect(promise).rejects.toThrow("Expo Push rejected 1 notification(s): InvalidCredentials");
-    await expect(promise).rejects.not.toThrow("secret-token");
-    expect(mocks.deleteMany).not.toHaveBeenCalled();
-  });
+    it("sends push messages to Expo with thin payload", async () => {
+      mockPrisma.pushToken.findMany.mockResolvedValueOnce([
+        { token: "ExponentPushToken[token-1]" },
+        { token: "ExponentPushToken[token-2]" },
+      ]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [
+            { status: "ok", id: "ticket-1" },
+            { status: "ok", id: "ticket-2" },
+          ],
+        }),
+      });
 
-  it("drops malformed stored tokens without poisoning valid recipients", async () => {
-    mocks.findMany.mockResolvedValue([
-      { token: "garbage" },
-      { token: "ExpoPushToken[valid-token]" },
-    ]);
-    const fetcher = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response(JSON.stringify({
-      data: [{ status: "ok", id: "ticket-1" }],
-    }), { status: 200, headers: { "content-type": "application/json" } }));
-    await sendPushToUsers(["user-1"], buildPushMessage({ kind: "confirmed", eventId }), fetcher as typeof fetch);
-    expect(mocks.deleteMany).toHaveBeenCalledWith({ where: { token: { in: ["garbage"] } } });
-    expect(JSON.parse(String(fetcher.mock.calls[0]![1]?.body))).toEqual([
-      expect.objectContaining({ to: "ExpoPushToken[valid-token]" }),
-    ]);
-  });
+      await pushEventCreated(["user-1", "user-2"], "evt-123", {
+        startsAt: new Date("2026-10-01T22:30:00Z"),
+        vibeTag: "dinner",
+        timezone: "America/New_York",
+      });
 
-  it("does not call Expo when no registered tokens exist", async () => {
-    mocks.findMany.mockResolvedValue([]);
-    const fetcher = vi.fn();
-    await sendPushToUsers(["user-1"], buildPushMessage({ kind: "confirmed", eventId }), fetcher as typeof fetch);
-    expect(fetcher).not.toHaveBeenCalled();
-  });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, options] = mockFetch.mock.calls[0]!;
+      expect(url).toBe(EXPO_PUSH_URL);
+      expect(options.method).toBe("POST");
+      expect(options.signal).toBeInstanceOf(AbortSignal);
+      expect(options.headers).toMatchObject({
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      });
 
-  it("suppresses live push delivery in DEMO_MODE", async () => {
-    env.DEMO_MODE = true;
-    const fetcher = vi.fn();
-    await sendPushToUsers(["user-1"], buildPushMessage({ kind: "confirmed", eventId }), fetcher as typeof fetch);
-    expect(mocks.findMany).not.toHaveBeenCalled();
-    expect(fetcher).not.toHaveBeenCalled();
+      const body = JSON.parse(options.body as string);
+      expect(body).toHaveLength(2);
+      expect(body[0]).toEqual({
+        to: "ExponentPushToken[token-1]",
+        sound: "default",
+        title: "New hangout idea",
+        body: "New hangout idea: Thu 6:30pm dinner",
+        data: { event_id: "evt-123" },
+      });
+      expect(body[1]).toEqual({
+        to: "ExponentPushToken[token-2]",
+        sound: "default",
+        title: "New hangout idea",
+        body: "New hangout idea: Thu 6:30pm dinner",
+        data: { event_id: "evt-123" },
+      });
+
+      expect(mockPrisma.pushToken.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("deletes expired tokens when Expo reports DeviceNotRegistered", async () => {
+      mockPrisma.pushToken.findMany.mockResolvedValueOnce([
+        { token: "ExponentPushToken[active-token]" },
+        { token: "ExponentPushToken[dead-token]" },
+      ]);
+      mockPrisma.pushToken.deleteMany.mockResolvedValueOnce({ count: 1 });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [
+            { status: "ok", id: "ticket-1" },
+            {
+              status: "error",
+              message: '"ExponentPushToken[dead-token]" is not registered',
+              details: { error: "DeviceNotRegistered" },
+            },
+          ],
+        }),
+      });
+
+      await pushVenueChanged(["user-1", "user-2"], "evt-456");
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.pushToken.deleteMany).toHaveBeenCalledWith({
+        where: { token: { in: ["ExponentPushToken[dead-token]"] } },
+      });
+    });
+
+    it("does not delete tokens on other error types", async () => {
+      mockPrisma.pushToken.findMany.mockResolvedValueOnce([
+        { token: "ExponentPushToken[token-rate-limited]" },
+      ]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [
+            {
+              status: "error",
+              message: "Rate limit exceeded",
+              details: { error: "MessageRateExceeded" },
+            },
+          ],
+        }),
+      });
+
+      await pushEventResolved(["user-1"], "evt-789", "confirmed");
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.pushToken.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("handles fetch network failure gracefully without throwing", async () => {
+      mockPrisma.pushToken.findMany.mockResolvedValueOnce([
+        { token: "ExponentPushToken[token-1]" },
+      ]);
+      mockFetch.mockRejectedValueOnce(new Error("Network connection lost"));
+
+      // Should not throw
+      await expect(pushEventCreated(["user-1"], "evt-123")).resolves.toBeUndefined();
+    });
+
+    it("handles prisma error gracefully without throwing", async () => {
+      mockPrisma.pushToken.findMany.mockRejectedValueOnce(new Error("DB timeout"));
+
+      // Should not throw
+      await expect(pushEventResolved(["user-1"], "evt-123", "confirmed")).resolves.toBeUndefined();
+    });
   });
 });

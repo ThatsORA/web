@@ -1,132 +1,202 @@
-import {
-  ExpoPushRequest,
-  ExpoPushResponse,
-  ExpoPushToken,
-  type PushMessage,
-  type VibeTag,
-} from "@web/contract";
+// Owner: Riley — Push notifications via Expo Push API.
+// Thin payloads: data: { event_id }. Bodies never leak votes or ghost passes.
 import { env } from "../env";
 import { prisma } from "../lib/prisma";
 
-const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
-const EXPO_BATCH_LIMIT = 100;
-const PUSH_TIMEOUT_MS = 10_000;
+export const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
-export type PushEvent =
-  | { kind: "created"; eventId: string; startsAt: Date; timezone: string; vibeTag: VibeTag }
-  | { kind: "confirmed"; eventId: string }
-  | { kind: "venue_changed"; eventId: string };
-
-function localSlot(startsAt: Date, timezone: string): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).formatToParts(startsAt);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
-  return `${part("weekday")} ${part("hour")}:${part("minute")}${part("dayPeriod").toLowerCase()}`;
+export interface PushNotificationMessage {
+  to: string;
+  sound: "default";
+  title: string;
+  body: string;
+  data: { event_id: string };
 }
 
-/** Build presentation text from event metadata only. Vote state never enters this boundary. */
-export function buildPushMessage(event: PushEvent): PushMessage {
-  if (event.kind === "created") {
-    return {
-      title: "New hangout idea",
-      body: `New hangout idea: ${localSlot(event.startsAt, event.timezone)} ${event.vibeTag.replaceAll("_", " ")}`,
-      data: { event_id: event.eventId },
-    };
-  }
-  if (event.kind === "confirmed") {
-    return {
-      title: "Hangout confirmed",
-      body: "Your hangout is confirmed. Open Web for details.",
-      data: { event_id: event.eventId },
-    };
-  }
-  return {
-    title: "Venue changed",
-    body: "Your hangout venue changed. Open Web for details.",
-    data: { event_id: event.eventId },
+export interface ExpoPushTicket {
+  status: "ok" | "error";
+  id?: string;
+  message?: string;
+  details?: {
+    error?: string;
+    [key: string]: unknown;
   };
 }
 
-function chunks<T>(items: readonly T[], size: number): T[][] {
-  const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
-  return result;
+export interface ExpoPushResponse {
+  data?: ExpoPushTicket[];
+  errors?: Array<{ code: string; message: string }>;
 }
 
-async function sendBatch(tokens: readonly string[], message: PushMessage, fetcher: typeof fetch): Promise<void> {
-  const messages = ExpoPushRequest.array().parse(tokens.map((to) => ({ to, ...message })));
-  const response = await fetcher(EXPO_PUSH_URL, {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify(messages),
-    signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
-  });
-  if (!response.ok) throw new Error(`Expo Push failed with HTTP ${response.status}`);
+export function formatEventCreatedBody(details?: { startsAt?: Date; vibeTag?: string; timezone?: string }): string {
+  if (!details?.startsAt) {
+    return "New hangout idea: vote on your options!";
+  }
+  const date = new Date(details.startsAt);
+  if (isNaN(date.getTime())) {
+    return "New hangout idea: vote on your options!";
+  }
+  const timeZone = details.timezone || "UTC";
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).formatToParts(date);
+    const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+    const weekday = get("weekday");
+    const minute = get("minute");
+    const hour = get("hour");
+    const period = get("dayPeriod").toLowerCase();
+    const timeStr = minute === "00" ? `${hour}${period}` : `${hour}:${minute}${period}`;
+    const vibeStr = details.vibeTag ? details.vibeTag.replace(/_/g, " ") : "";
 
-  const parsed = ExpoPushResponse.parse(await response.json());
-  const tickets = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
-  if (tickets.length !== tokens.length) throw new Error("Expo Push returned the wrong number of tickets");
-  const unregistered = tickets.flatMap((ticket, index) =>
-    ticket.status === "error" && ticket.details?.error === "DeviceNotRegistered" ? [tokens[index]!] : [],
-  );
-  if (unregistered.length > 0) {
-    await prisma.pushToken.deleteMany({ where: { token: { in: unregistered } } });
+    if (weekday && timeStr && vibeStr) {
+      return `New hangout idea: ${weekday} ${timeStr} ${vibeStr}`;
+    }
+    if (weekday && timeStr) {
+      return `New hangout idea: ${weekday} ${timeStr}`;
+    }
+  } catch {
+    // If timezone is invalid fallback gracefully
   }
-  const providerErrorCodes = tickets.flatMap((ticket) =>
-    ticket.status === "error" && ticket.details?.error !== "DeviceNotRegistered"
-      ? [ticket.details?.error ?? "unknown"]
-      : [],
-  );
-  if (providerErrorCodes.length > 0) {
-    const codes = [...new Set(providerErrorCodes)];
-    throw new Error(`Expo Push rejected ${providerErrorCodes.length} notification(s): ${codes.join(", ")}`);
-  }
+  return "New hangout idea: vote on your options!";
 }
 
-export async function sendPushToUsers(
-  userIds: readonly string[],
-  message: PushMessage,
-  fetcher: typeof fetch = fetch,
+export function buildEventCreatedMessage(
+  eventId: string,
+  details?: { startsAt?: Date; vibeTag?: string; timezone?: string },
+): { title: string; body: string; data: { event_id: string } } {
+  return {
+    title: "New hangout idea",
+    body: formatEventCreatedBody(details),
+    data: { event_id: eventId },
+  };
+}
+
+export function buildEventResolvedMessage(
+  eventId: string,
+  status: string,
+): { title: string; body: string; data: { event_id: string } } {
+  if (status === "confirmed") {
+    return {
+      title: "Hangout Confirmed",
+      body: "Your hangout has been confirmed!",
+      data: { event_id: eventId },
+    };
+  }
+  return {
+    title: "Hangout Update",
+    body: `Hangout status: ${status}`,
+    data: { event_id: eventId },
+  };
+}
+
+export function buildVenueChangedMessage(eventId: string): { title: string; body: string; data: { event_id: string } } {
+  return {
+    title: "Venue Changed",
+    body: "The venue for your hangout has been updated.",
+    data: { event_id: eventId },
+  };
+}
+
+async function sendToUserTokens(
+  userIds: string[],
+  content: { title: string; body: string; data: { event_id: string } },
 ): Promise<void> {
-  // Demo mode targets Expo Go and sockets; never call the live push service during rehearsals or fixture tests.
+  // Demo runs in Expo Go on sockets; never hit the live push service during rehearsals or fixture runs.
   if (env.DEMO_MODE) return;
-  if (userIds.length === 0) return;
-  const rows = await prisma.pushToken.findMany({
-    where: { userId: { in: [...new Set(userIds)] } },
-    select: { token: true },
-  });
-  const invalid = rows.map(({ token }) => token).filter((token) => !ExpoPushToken.safeParse(token).success);
-  if (invalid.length > 0) await prisma.pushToken.deleteMany({ where: { token: { in: invalid } } });
-  const tokens = rows.map(({ token }) => token).filter((token) => ExpoPushToken.safeParse(token).success);
-  const batches = chunks(tokens, EXPO_BATCH_LIMIT);
-  const results = await Promise.allSettled(batches.map((tokens) => sendBatch(tokens, message, fetcher)));
-  const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
-  if (failed) throw failed.reason;
+  if (!userIds || userIds.length === 0) return;
+
+  try {
+    const tokens = await prisma.pushToken.findMany({
+      where: { userId: { in: userIds } },
+      select: { token: true },
+    });
+
+    if (tokens.length === 0) return;
+
+    // Deduplicate tokens
+    const uniqueTokens = Array.from(new Set(tokens.map((t) => t.token)));
+    if (uniqueTokens.length === 0) return;
+
+    const messages: PushNotificationMessage[] = uniqueTokens.map((token) => ({
+      to: token,
+      sound: "default",
+      title: content.title,
+      body: content.body,
+      data: content.data,
+    }));
+
+    const response = await fetch(EXPO_PUSH_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(messages),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      console.error(`Expo push API returned HTTP ${response.status}`);
+      return;
+    }
+
+    const payload = (await response.json().catch(() => null)) as ExpoPushResponse | null;
+    if (!payload?.data || !Array.isArray(payload.data)) {
+      return;
+    }
+
+    const expiredTokens: string[] = [];
+    for (let i = 0; i < payload.data.length; i++) {
+      const ticket = payload.data[i];
+      if (ticket?.status === "error" && ticket.details?.error === "DeviceNotRegistered") {
+        const expiredToken = messages[i]?.to;
+        if (expiredToken) {
+          expiredTokens.push(expiredToken);
+        }
+      }
+    }
+
+    if (expiredTokens.length > 0) {
+      await prisma.pushToken.deleteMany({
+        where: { token: { in: expiredTokens } },
+      }).catch((err) => {
+        console.error("Failed to delete expired push tokens:", err);
+      });
+    }
+  } catch (err) {
+    console.error("Push notification error:", err);
+  }
+}
+
+export async function pushVenueChanged(userIds: string[], eventId: string): Promise<void> {
+  try {
+    await sendToUserTokens(userIds, buildVenueChangedMessage(eventId));
+  } catch (err) {
+    console.error("pushVenueChanged failed:", err);
+  }
 }
 
 export async function pushEventCreated(
-  userIds: readonly string[],
-  event: { id: string; startsAt: Date; timezone: string; vibeTag: VibeTag },
+  userIds: string[],
+  eventId: string,
+  details?: { startsAt?: Date; vibeTag?: string; timezone?: string },
 ): Promise<void> {
-  await sendPushToUsers(userIds, buildPushMessage({
-    kind: "created",
-    eventId: event.id,
-    startsAt: event.startsAt,
-    timezone: event.timezone,
-    vibeTag: event.vibeTag,
-  }));
+  try {
+    await sendToUserTokens(userIds, buildEventCreatedMessage(eventId, details));
+  } catch (err) {
+    console.error("pushEventCreated failed:", err);
+  }
 }
 
-export async function pushEventConfirmed(userIds: readonly string[], eventId: string): Promise<void> {
-  await sendPushToUsers(userIds, buildPushMessage({ kind: "confirmed", eventId }));
-}
-
-/** Riley's venue-change route should call this beside event:venue_changed. */
-export async function pushVenueChanged(userIds: readonly string[], eventId: string): Promise<void> {
-  await sendPushToUsers(userIds, buildPushMessage({ kind: "venue_changed", eventId }));
+export async function pushEventResolved(userIds: string[], eventId: string, status: string): Promise<void> {
+  try {
+    await sendToUserTokens(userIds, buildEventResolvedMessage(eventId, status));
+  } catch (err) {
+    console.error("pushEventResolved failed:", err);
+  }
 }

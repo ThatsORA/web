@@ -18,7 +18,7 @@ describe("onAnyEventUpdate", () => {
     const seen: string[] = [];
     onAnyEventUpdate(socket, (id) => seen.push(id));
     Object.values(SocketEvents).forEach((name, i) => emit(name, { event_id: `e${i}` }));
-    expect(seen).toEqual(["e0", "e1", "e2", "e3"]);
+    expect(seen).toEqual(Object.values(SocketEvents).map((_, i) => `e${i}`));
   });
 
   it("stops after unsubscribe", () => {

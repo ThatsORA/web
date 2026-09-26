@@ -4,7 +4,7 @@ import { SymbolView } from "expo-symbols";
 import { Pressable, RefreshControl } from "react-native";
 import { EmptyFeedCard, EventCard, FindingCard, useEvents } from "../../features/event-card";
 import { useFeedEmptyState } from "../../lib/matcherTrigger";
-import { FRIENDS_HREF, SETTINGS_HREF } from "../../lib/routes";
+import { FRIENDS_HREF, NEW_HANGOUT_HREF, SETTINGS_HREF } from "../../lib/routes";
 import { Button, Callout, Screen, Txt, useTheme } from "../../ui";
 
 export default function Home() {
@@ -42,6 +42,7 @@ export default function Home() {
         </Pressable>
       }
     >
+      <Button label="+ New hangout" onPress={() => router.push(NEW_HANGOUT_HREF)} />
       {error ? (
         <>
           <Callout tone="danger" title="Couldn't load hangouts">

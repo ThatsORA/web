@@ -3,37 +3,34 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   findMany: vi.fn(),
   findUnique: vi.fn(),
+  findUniqueOrThrow: vi.fn(),
   update: vi.fn(),
   updateMany: vi.fn(),
-  participantUpdateMany: vi.fn(),
-  transaction: vi.fn(),
+  $transaction: vi.fn(),
   emitToUsers: vi.fn(),
   pushEventCreated: vi.fn(),
-  pushEventConfirmed: vi.fn(),
+  pushEventResolved: vi.fn(),
 }));
 vi.mock("../../lib/prisma", () => ({
   prisma: {
-    event: { findMany: mocks.findMany, findUnique: mocks.findUnique, findUniqueOrThrow: mocks.findUnique, update: mocks.update, updateMany: mocks.updateMany },
-    eventParticipant: { updateMany: mocks.participantUpdateMany },
-    $transaction: mocks.transaction,
+    event: {
+      findMany: mocks.findMany,
+      findUnique: mocks.findUnique,
+      findUniqueOrThrow: mocks.findUniqueOrThrow,
+      update: mocks.update,
+      updateMany: mocks.updateMany,
+    },
+    $transaction: mocks.$transaction,
   },
 }));
-vi.mock("../../realtime", () => ({ emitToUsers: mocks.emitToUsers }));
-vi.mock("../../realtime/push", () => ({
+vi.mock("../../realtime", () => ({
+  emitToUsers: mocks.emitToUsers,
   pushEventCreated: mocks.pushEventCreated,
-  pushEventConfirmed: mocks.pushEventConfirmed,
+  pushEventResolved: mocks.pushEventResolved,
 }));
 import { closeVoting, openVoting, sweepVoting } from "./lifecycle";
 
-beforeEach(() => {
-  vi.resetAllMocks();
-  mocks.pushEventCreated.mockResolvedValue(undefined);
-  mocks.pushEventConfirmed.mockResolvedValue(undefined);
-  mocks.transaction.mockImplementation((callback) => callback({
-    event: { updateMany: mocks.updateMany },
-    eventParticipant: { updateMany: mocks.participantUpdateMany },
-  }));
-});
+beforeEach(() => vi.resetAllMocks());
 afterEach(() => vi.restoreAllMocks());
 
 describe("sweepVoting", () => {
@@ -68,67 +65,93 @@ describe("sweepVoting", () => {
   });
 });
 
-describe("push lifecycle", () => {
-  const baseEvent = {
-    id: "2b5232d3-9424-4e7c-8e2f-0299693b54eb",
-    status: "voting",
-    createdAt: new Date("2026-09-26T12:00:00Z"),
-    startsAt: new Date("2026-10-01T22:30:00Z"),
-    timezone: "America/New_York",
-    vibeTag: "dinner",
-    backupVenues: [],
-    participants: [
-      { userId: "user-1", voteStatus: "voted" },
-      { userId: "user-2", voteStatus: "voted" },
-    ],
-    options: [
+describe("openVoting", () => {
+  it("emits event:created and pushes pushEventCreated with event details", async () => {
+    const startsAt = new Date("2026-10-01T22:30:00Z");
+    const createdAt = new Date("2026-09-26T12:00:00Z");
+    mocks.findUniqueOrThrow.mockResolvedValueOnce({
+      id: "evt-1",
+      createdAt,
+      startsAt,
+      vibeTag: "dinner",
+      timezone: "America/New_York",
+      participants: [{ userId: "u1" }, { userId: "u2" }],
+    });
+    mocks.update.mockResolvedValueOnce({});
+    mocks.pushEventCreated.mockResolvedValueOnce(undefined);
+
+    await openVoting("evt-1");
+
+    expect(mocks.emitToUsers).toHaveBeenCalledWith(["u1", "u2"], "event:created", { event_id: "evt-1" });
+    expect(mocks.pushEventCreated).toHaveBeenCalledWith(
+      ["u1", "u2"],
+      "evt-1",
       {
-        id: "21de1e6b-dd91-4c3b-9d8d-09967699e354", rank: 1, placeId: "place-1", name: "Dinner", lat: 0, lng: 0,
-        primaryType: "restaurant", priceLevel: 2, rating: 4.5, userRatingCount: 50,
-        travelMinutes: {}, maxTravelMin: 10, routeScore: 11, factsLine: "", aiBlurb: null,
+        startsAt,
+        vibeTag: "dinner",
+        timezone: "America/New_York",
       },
-    ],
-    votes: [
-      { userId: "user-1", optionId: "21de1e6b-dd91-4c3b-9d8d-09967699e354" },
-      { userId: "user-2", optionId: "21de1e6b-dd91-4c3b-9d8d-09967699e354" },
-    ],
-  } as const;
-
-  it("keeps openVoting successful when detached push delivery rejects", async () => {
-    const error = new Error("provider unavailable");
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    mocks.findUnique.mockResolvedValue(baseEvent);
-    mocks.pushEventCreated.mockRejectedValue(error);
-
-    await expect(openVoting(baseEvent.id)).resolves.toBeUndefined();
-    await vi.waitFor(() => expect(log).toHaveBeenCalledWith("push event:created", baseEvent.id, error));
-    expect(mocks.emitToUsers).toHaveBeenCalledWith(["user-1", "user-2"], "event:created", { event_id: baseEvent.id });
-  });
-
-  it("pushes event:resolved only for a claimed confirmed resolution", async () => {
-    mocks.findUnique.mockResolvedValue(baseEvent);
-    mocks.updateMany.mockResolvedValue({ count: 1 });
-
-    await closeVoting(baseEvent.id);
-
-    expect(mocks.emitToUsers).toHaveBeenCalledWith(
-      ["user-1", "user-2"], "event:resolved", { event_id: baseEvent.id, status: "confirmed" },
     );
-    expect(mocks.pushEventConfirmed).toHaveBeenCalledWith(["user-1", "user-2"], baseEvent.id);
-  });
-
-  it.each([
-    { status: "chatted", participants: baseEvent.participants, votes: [baseEvent.votes[0]] },
-    { status: "expired", participants: [{ ...baseEvent.participants[0], voteStatus: "voted" }, { ...baseEvent.participants[1], voteStatus: "ghost_passed" }], votes: [baseEvent.votes[0]] },
-  ] as const)("does not push a $status resolution", async ({ status, participants, votes }) => {
-    mocks.findUnique.mockResolvedValue({ ...baseEvent, participants, votes });
-    mocks.updateMany.mockResolvedValue({ count: 1 });
-
-    await closeVoting(baseEvent.id);
-
-    expect(mocks.emitToUsers).toHaveBeenCalledWith(
-      ["user-1", "user-2"], "event:resolved", { event_id: baseEvent.id, status },
-    );
-    expect(mocks.pushEventConfirmed).not.toHaveBeenCalled();
   });
 });
+
+describe("closeVoting", () => {
+  it("pushes pushEventResolved when status is confirmed", async () => {
+    const u1 = "77777777-7777-4777-8777-777777777777";
+    const u2 = "11111111-1111-4111-8111-111111111111";
+    const opt1 = "88888888-8888-4888-8888-888888888888";
+    const evt1 = "99999999-9999-4999-8999-999999999999";
+    mocks.findUnique.mockResolvedValueOnce({
+      id: evt1,
+      status: "voting",
+      participants: [
+        { userId: u1, voteStatus: "voted" },
+        { userId: u2, voteStatus: "voted" },
+      ],
+      options: [
+        {
+          id: opt1,
+          rank: 1,
+          placeId: "p1",
+          name: "Sergio's",
+          lat: 25.7,
+          lng: -80.3,
+          primaryType: "restaurant",
+          priceLevel: 2,
+          rating: 4.5,
+          userRatingCount: 100,
+          travelMinutes: { [u1]: 10, [u2]: 15 },
+          maxTravelMin: 15,
+          routeScore: 10,
+          factsLine: "facts",
+          aiBlurb: null,
+        },
+      ],
+      votes: [
+        { userId: u1, optionId: opt1 },
+        { userId: u2, optionId: opt1 },
+      ],
+      backupVenues: [],
+    });
+    mocks.$transaction.mockImplementation(async (cb: (tx: any) => Promise<any>) =>
+      cb({
+        event: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
+        eventParticipant: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
+      }),
+    );
+    mocks.pushEventResolved.mockResolvedValueOnce(undefined);
+
+    await closeVoting(evt1);
+
+    expect(mocks.emitToUsers).toHaveBeenCalledWith([u1, u2], "event:resolved", {
+      event_id: evt1,
+      status: "confirmed",
+    });
+    expect(mocks.pushEventResolved).toHaveBeenCalledWith([u1, u2], evt1, "confirmed");
+  });
+});
+
