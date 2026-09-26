@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { FIXTURES } from "./fixtures";
-import { mapsUrl, progressLabel, shareMessage, slotLabel, swapLabel } from "./format";
+import { mapsUrl, progressLabel, shareMessage, slotLabel, swapLabel, timeLabel } from "./format";
 
 const card = FIXTURES[0]!.card;
 
 describe("slotLabel", () => {
   it("renders the demo slot in the event's timezone", () => {
     expect(slotLabel(card)).toBe("Thu · 6:30–8:30pm · Dinner");
+  });
+
+  it("timeLabel is the headline without the vibe", () => {
+    expect(timeLabel(card)).toBe("Thu · 6:30–8:30pm");
   });
 
   it("uses the event timezone, not UTC", () => {
