@@ -4,6 +4,7 @@ import type { ComponentType } from "react";
 export { FriendSearch, type FriendSearchProps } from "./FriendSearch";
 export { FriendsScreen } from "./FriendsScreen";
 export { FriendsStep } from "./FriendsStep";
+export { PersonLink } from "./PersonLink";
 export { RequestsInbox, type RequestsInboxProps } from "./RequestsInbox";
 export {
   acceptFriendRequest,

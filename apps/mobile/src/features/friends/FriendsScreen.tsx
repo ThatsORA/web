@@ -5,6 +5,7 @@ import { View } from "react-native";
 import { useFriendEvents } from "../event-card";
 import { Button, Callout, Card, Chip, Screen, Txt, useTheme } from "../../ui";
 import { FriendSearch } from "./FriendSearch";
+import { PersonLink } from "./PersonLink";
 import { RequestsInbox } from "./RequestsInbox";
 import {
   getFriendRequests,
@@ -161,7 +162,7 @@ export function FriendsScreen() {
                   borderBottomColor: t.colors.border,
                 }}
               >
-                <Txt variant="body">@{f.username}</Txt>
+                <PersonLink id={f.id} username={f.username} />
                 <View style={{ flexDirection: "row", alignItems: "center", gap: t.spacing.xs }}>
                   <Chip
                     label={f.close ? "★ Close" : "☆ Close"}
