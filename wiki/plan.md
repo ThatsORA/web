@@ -3,8 +3,8 @@
 36-hour hackathon build. Team: Andy, Ojas, Riley. Two AI agents per person
 across three vendors (Claude, Antigravity, ChatGPT), all writing code in
 parallel against one repo that starts empty (capstone concept only). This
-doc is the source of truth: AGENTS.md is regenerated from it, and wherever
-they disagree, this doc wins.
+doc is the source of truth: AGENTS.md and the other wiki pages follow it,
+and wherever they disagree, this doc wins.
 
 ## Concept
 
@@ -554,7 +554,7 @@ fallback chat.
 | DEMO_MODE | false | true only if the network fails (replays `fixtures/`) |
 | INTERNAL_SECRET | — | set |
 
-## Workflow & Agent Rules (copy into AGENTS.md)
+## Workflow & Agent Rules (details in `wiki/workflow.md`)
 
 - **Branches and worktrees:** every agent session starts from a GitHub
   Issue with acceptance criteria, and gets one branch named
