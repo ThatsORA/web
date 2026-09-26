@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import { API_PREFIX } from "@web/contract";
 import { authRouter } from "./modules/auth/router";
+import { pushTokenRouter } from "./modules/auth/pushTokenRouter";
 import { friendsRouter } from "./modules/friends/router";
 import { calendarRouter } from "./modules/calendar/router";
 import { matchingRouter } from "./modules/matching/router";
@@ -22,6 +23,7 @@ export function createApp() {
 
   const api = express.Router();
   api.use(authRouter); // must stay first: signup/login are public
+  api.use(pushTokenRouter);
   api.use(calendarRouter);
   api.use(favoritesRouter);
   api.use(eventsRouter);

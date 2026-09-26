@@ -13,10 +13,12 @@ export const EventStatus = z.enum(["voting", "confirmed", "chatted", "expired", 
 export const VoteStatus = z.enum(["invited", "voted", "ghost_passed", "confirmed"]);
 export const VenueStatus = z.enum(["open", "reported_closed"]);
 export const TravelMode = z.enum(["DRIVE", "TRANSIT", "WALK", "BICYCLE"]); // decided 2026-09-26
+export const PushPlatform = z.enum(["ios", "android"]);
 
 export type VibeTag = z.infer<typeof VibeTag>;
 export type EventStatus = z.infer<typeof EventStatus>;
 export type VoteStatus = z.infer<typeof VoteStatus>;
+export type PushPlatform = z.infer<typeof PushPlatform>;
 
 // ---------- auth / profile (Ojas) ----------
 export const SignupRequest = z.object({
@@ -45,6 +47,33 @@ export const PatchMeRequest = z
     travel_mode: TravelMode,
   })
   .partial();
+export const ExpoPushToken = z
+  .string()
+  .max(512)
+  .regex(/^(?:ExponentPushToken|ExpoPushToken)\[[^\[\]\s]+\]$/);
+export type ExpoPushToken = z.infer<typeof ExpoPushToken>;
+export const PutPushTokenRequest = z.object({ token: ExpoPushToken, platform: PushPlatform });
+export const DeletePushTokenRequest = z.object({ token: ExpoPushToken });
+
+export const PushNotificationData = z.object({ event_id: Id });
+export const PushMessage = z.object({
+  title: z.string(),
+  body: z.string(),
+  data: PushNotificationData,
+});
+export type PushMessage = z.infer<typeof PushMessage>;
+export const ExpoPushRequest = PushMessage.extend({ to: ExpoPushToken });
+export const ExpoPushTicket = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ok"), id: z.string() }),
+  z.object({
+    status: z.literal("error"),
+    message: z.string().optional(),
+    details: z.object({ error: z.string() }).passthrough().optional(),
+  }),
+]);
+export const ExpoPushResponse = z.object({
+  data: z.union([ExpoPushTicket, z.array(ExpoPushTicket)]),
+});
 
 // ---------- busy blocks (Riley) ----------
 export const BusyBlock = z.object({ starts_at: Instant, ends_at: Instant });

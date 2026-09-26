@@ -5,6 +5,7 @@ export const routes = {
   signup: "/auth/signup",
   login: "/auth/login",
   me: "/me",
+  pushToken: "/me/push-token",
   busyBlocks: "/busy-blocks",
   userSearch: "/users/search", // ?q=
   closeFriends: "/friends/close",

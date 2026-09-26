@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { EventCardPayload, optionFromRow, type OptionRowLike } from "./schemas";
+import {
+  EventCardPayload,
+  ExpoPushRequest,
+  ExpoPushResponse,
+  ExpoPushToken,
+  PutPushTokenRequest,
+  optionFromRow,
+  type OptionRowLike,
+} from "./schemas";
 
 describe("EventCardPayload match reason", () => {
   it("accepts null or a reason up to 90 characters", () => {
@@ -49,5 +57,57 @@ describe("optionFromRow", () => {
       facts_line: "★4.5 · $$ · max 15 min travel",
       ai_blurb: "Great coffee spot",
     });
+  });
+});
+
+describe("push notification boundaries", () => {
+  const eventId = "2b5232d3-9424-4e7c-8e2f-0299693b54eb";
+
+  it.each([
+    "ExpoPushToken[current-token_123]",
+    "ExponentPushToken[legacy-token-123]",
+  ])("accepts the documented Expo token form %s", (token) => {
+    expect(ExpoPushToken.parse(token)).toBe(token);
+  });
+
+  it.each([
+    "not-an-expo-token",
+    "ExpoPushToken[]",
+    "ExpoPushToken[token with spaces]",
+    "OtherPushToken[token]",
+  ])("rejects malformed token %s", (token) => {
+    expect(ExpoPushToken.safeParse(token).success).toBe(false);
+  });
+
+  it("validates registration platform", () => {
+    expect(PutPushTokenRequest.parse({ token: "ExpoPushToken[token]", platform: "ios" }))
+      .toEqual({ token: "ExpoPushToken[token]", platform: "ios" });
+    expect(PutPushTokenRequest.safeParse({ token: "ExpoPushToken[token]", platform: "web" }).success)
+      .toBe(false);
+  });
+
+  it("strips fields outside the thin event_id payload", () => {
+    expect(ExpoPushRequest.parse({
+      to: "ExpoPushToken[token]",
+      title: "Hangout confirmed",
+      body: "Open Web for details.",
+      data: { event_id: eventId, responded: 2, total: 3, ghost_user_id: "secret" },
+    })).toEqual({
+      to: "ExpoPushToken[token]",
+      title: "Hangout confirmed",
+      body: "Open Web for details.",
+      data: { event_id: eventId },
+    });
+  });
+
+  it("parses success and provider-error ticket arrays", () => {
+    const value = {
+      data: [
+        { status: "ok", id: "ticket-1" },
+        { status: "error", message: "gone", details: { error: "DeviceNotRegistered" } },
+      ],
+    };
+    expect(ExpoPushResponse.parse(value)).toEqual(value);
+    expect(ExpoPushResponse.safeParse({ data: [{ status: "maybe" }] }).success).toBe(false);
   });
 });
