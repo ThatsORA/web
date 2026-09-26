@@ -1,7 +1,7 @@
 // Owner: Andy — event feed; renders the event card in every state.
 import { Link, router } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { Pressable } from "react-native";
+import { Pressable, RefreshControl } from "react-native";
 import { EmptyFeedCard, EventCard, FindingCard, useEvents } from "../../features/event-card";
 import { useFeedEmptyState } from "../../lib/matcherTrigger";
 import { FRIENDS_HREF, SETTINGS_HREF } from "../../lib/routes";
@@ -9,12 +9,21 @@ import { Button, Callout, Screen, Txt, useTheme } from "../../ui";
 
 export default function Home() {
   const t = useTheme();
-  const { cards, swapped, busy, notice, loaded, error, reload, actionsFor } = useEvents();
+  const { cards, swapped, busy, notice, loaded, error, refreshing, reload, actionsFor } = useEvents();
   const feedState = useFeedEmptyState(cards.length);
 
   return (
     <Screen
       title="Hangouts"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void reload()}
+          tintColor={t.colors.primary}
+          colors={[t.colors.primary]}
+          progressBackgroundColor={t.colors.surface}
+        />
+      }
       headerRight={
         <Pressable
           accessibilityRole="button"

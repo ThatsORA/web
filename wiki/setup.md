@@ -100,7 +100,16 @@ time:
    **Never commit it.**
 6. Remind them to DM the string to Riley and Andy.
 
-## 6. Hand off
+## 6. GCP OAuth Setup
+
+The human does this in the browser (Google Cloud Console). Walk them through it:
+1. Create an OAuth client (Web application type).
+2. Add the deployed callback URL (e.g. `https://your-domain.com/calendar/google/callback`).
+3. Set the Consent screen to Testing mode and add the team as test users.
+   **Note:** refresh tokens expire after 7 days in Testing mode.
+4. Copy the Client ID and Client Secret, and write them into `apps/server/.env` as `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`.
+
+## 7. Hand off
 
 Stop here. Tell the human, using their actual path:
 

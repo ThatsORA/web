@@ -111,3 +111,48 @@ describe("route ranking", () => {
     ]);
   });
 });
+
+import { vi } from "vitest";
+import { routeCandidates } from "./liveVenues";
+
+vi.mock("../../env", () => ({
+  env: {
+    DEMO_MODE: false,
+    GOOGLE_MAPS_API_KEY: "test",
+  },
+}));
+
+describe("routeCandidates mode grouping", () => {
+  it("groups matrix requests by travel mode", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ([]),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const candidates: VenueCandidate[] = [
+      { place_id: "venue1", name: "Venue 1", lat: 10, lng: 10, primary_type: "restaurant", price_level: 2, rating: 4, user_rating_count: 100 },
+    ];
+
+    const members = [
+      { id: "1", timezone: "America/New_York", homeLat: 1, homeLng: 1, favorites: [], travelMode: "DRIVE" },
+      { id: "2", timezone: "America/New_York", homeLat: 2, homeLng: 2, favorites: [], travelMode: "WALK" },
+    ];
+
+    await routeCandidates(slot, members as any, candidates);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const call1 = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(call1.travelMode).toBe("DRIVE");
+    expect(call1.routingPreference).toBe("TRAFFIC_AWARE");
+    expect(call1.origins).toHaveLength(1);
+
+    const call2 = JSON.parse(fetchMock.mock.calls[1]![1]!.body as string);
+    expect(call2.travelMode).toBe("WALK");
+    expect(call2.routingPreference).toBeUndefined();
+    expect(call2.origins).toHaveLength(1);
+
+    vi.unstubAllGlobals();
+  });
+});

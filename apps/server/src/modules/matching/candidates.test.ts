@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { candidateGroups, groupKey, onCooldown, rankCandidates, selectCandidates, type MatchingFriendship, type MatchingEvent, type GroupSlot } from "./candidates";
+import { candidateGroups, groupKey, onCooldown, rankCandidates, selectCandidates, selectRankedCandidates, type MatchingFriendship, type MatchingEvent, type GroupSlot } from "./candidates";
 const now = new Date("2026-09-26T12:00:00Z");
 const hour = 3_600_000;
 const at = (hours: number) => new Date(now.getTime() + hours * hour);
@@ -22,6 +22,14 @@ function event(ids: string[], status: MatchingEvent["status"] = "voting", start 
   return { groupKey: groupKey(ids), status, startsAt: at(start), endsAt: at(end), resolvedAt: at(-1), participants: ids.map(userId => ({ userId })) };
 }
 describe("candidate groups", () => {
+  it("ignores pending pairs even if both close-friend flags are set, but accepts 'accepted' pairs", () => {
+    const ids = ["a", "b", "c"];
+    const pendingPair = { ...edge("a", "b"), status: "pending" };
+    const acceptedPair = { ...edge("b", "c"), status: "accepted" };
+    expect(candidateGroups(users(ids), [pendingPair])).toEqual([]);
+    expect(candidateGroups(users(ids), [acceptedPair]).map(g => g.groupKey)).toEqual(["b,c"]);
+  });
+
   it("forms every mutual pair plus a maximal triangle, but never a one-way pair", () => {
     const ids = ["a", "b", "c"];
     expect(candidateGroups(users(ids), clique(ids)).map(g => g.groupKey)).toEqual(["a,b", "a,b,c", "a,c", "b,c"]);
@@ -61,6 +69,16 @@ describe("candidate groups", () => {
     expect(six).toHaveLength(7);
     expect(six.every(g => g.memberIds.length >= 5)).toBe(true);
   });
+  it("excludes invited/pending members from explicit groups and skips groups with < 2 active members", () => {
+    const ids = ["a", "b", "c", "d"];
+    const squad2 = { id: "squad2", members: [{ userId: "a" }, { userId: "b" }, { userId: "c" }, { userId: "d", status: "invited" }] };
+    const result2 = candidateGroups(users(ids), [], [squad2]);
+    expect(result2.find(g => g.groupKey === "a,b,c")?.sourceGroupId).toBe("squad2");
+    expect(result2.find(g => g.groupKey === "a,b,c,d")).toBeUndefined();
+    
+    const squad3 = { id: "squad3", members: [{ userId: "a", status: "active" }, { userId: "b", status: "invited" }] };
+    expect(candidateGroups(users(["a", "b"]), [], [squad3])).toEqual([]);
+  });
 });
 describe("ranking and cooldown", () => {
   it("computes the numeric example: .4*.6 + .35*.5 + .25*.5 = .54", () => {
@@ -92,6 +110,17 @@ describe("ranking and cooldown", () => {
     const ranked = rankCandidates([pair, group], [...clique(group.group.memberIds), edge("d", "e")], now);
     expect(ranked.map(c => c.group.groupKey)).toEqual(["a,b,c", "d,e"]);
     expect(ranked[1]!.score).toBeCloseTo(ranked[0]!.score * 0.85);
+  });
+  it("adds +0.05 closeness bonus to squad-sourced groups to win ties against identical ad-hoc cliques", () => {
+    const squadGroup = candidate(["a", "b", "c"], 24);
+    squadGroup.group.sourceGroupId = "squad1";
+    const adhocGroup = candidate(["a", "b", "c"], 24);
+    const pairs = clique(["a", "b", "c"]);
+    
+    const rankedSquad = rankCandidates([squadGroup], pairs, now)[0]!;
+    const rankedAdhoc = rankCandidates([adhocGroup], pairs, now)[0]!;
+    expect(rankedSquad.closeness).toBeCloseTo(rankedAdhoc.closeness + 0.05);
+    expect(rankedSquad.score).toBeGreaterThan(rankedAdhoc.score);
   });
   it.each(["expired", "chatted"] as const)("uses %s resolution for cooldown with an exact boundary and demo disable", status => {
     const e = event(["a", "b", "c"], status);
@@ -131,6 +160,14 @@ describe("greedy selection", () => {
     expect(selectCandidates(inputs, [], [], now).map(c => c.slot.start)).toEqual([at(24), at(26)]);
     expect(inputs[0]).toBe(duplicate);
     expect(selectCandidates([a], [], [event(a.group.memberIds, "expired")], now, 48)).toEqual([]);
+  });
+  it("applies greedy skip rules in the supplied re-ranked order", () => {
+    const first = candidate(["a", "b", "c"]);
+    const overlap = candidate(["c", "d", "e"]);
+    const ranked = rankCandidates([first, overlap], [], now);
+
+    expect(selectRankedCandidates([...ranked].reverse(), [], now).map(item => item.group.groupKey))
+      .toEqual(["c,d,e"]);
   });
   it("suppresses a pair while either member has an overlapping open group event", () => {
     const pair = candidate(["a", "b"]);
