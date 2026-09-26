@@ -187,6 +187,7 @@ export async function runPipeline(now = new Date()): Promise<void> {
         homeLat: user.homeLat,
         homeLng: user.homeLng,
         favorites: user.favorites,
+        travelMode: user.travelMode,
       }));
     const rankedVenues = await fetchCandidates(candidate.slot, venueMembers);
     if (rankedVenues.length < 3) continue;

@@ -30,7 +30,7 @@ touches before you write code.
   new Cloud projects, so don't write code against them.
 - Every Places/Routes request sends an `X-Goog-FieldMask` header. Places
   Nearby Search fields use the `places.` prefix.
-- Travel mode is `DRIVE` with `routingPreference: TRAFFIC_AWARE`.
+- Travel mode supports `DRIVE`, `TRANSIT`, `WALK`, and `BICYCLE`, with `routingPreference: TRAFFIC_AWARE` sent only for `DRIVE`.
 
 **AI boundary**
 - Gemini is called in two places:

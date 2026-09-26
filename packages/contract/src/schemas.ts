@@ -12,7 +12,7 @@ export const VibeTag = z.enum(["quick_coffee", "casual_hangout", "dinner", "nigh
 export const EventStatus = z.enum(["voting", "confirmed", "chatted", "expired", "completed"]);
 export const VoteStatus = z.enum(["invited", "voted", "ghost_passed", "confirmed"]);
 export const VenueStatus = z.enum(["open", "reported_closed"]);
-export const TravelMode = z.enum(["DRIVE"]); // decided 2026-09-26
+export const TravelMode = z.enum(["DRIVE", "TRANSIT", "WALK", "BICYCLE"]); // decided 2026-09-26
 
 export type VibeTag = z.infer<typeof VibeTag>;
 export type EventStatus = z.infer<typeof EventStatus>;

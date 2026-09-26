@@ -5,6 +5,5 @@ export { CalendarForegroundSync } from "./CalendarForegroundSync";
 export { GoogleCalendarConnect } from "./GoogleCalendarConnect";
 export { busyBlockPayload, createCalendarSync } from "./sync";
 
-/** Mount point for Riley's availability settings. Undefined if not yet provided. */
-export const AvailabilitySettings: ComponentType | undefined = undefined;
+export { AvailabilitySettings } from "./AvailabilitySettings";
 
