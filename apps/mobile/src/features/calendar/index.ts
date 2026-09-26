@@ -1,2 +1,3 @@
-// Owner: Riley — expo-calendar → busy blocks {starts_at, ends_at} only; never titles/notes/attendees (plan §1)
-export {};
+export { CalendarStep } from "./CalendarStep";
+export { CalendarForegroundSync } from "./CalendarForegroundSync";
+export { busyBlockPayload, createCalendarSync } from "./sync";
