@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { classifySlot, formatSlot, freeWindows, getLocalParts } from "../src/modules/matching/timeMath";
+import { classifySlot, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot } from "../src/modules/matching/timeMath";
 import { buildDemoSeedSchedule, DEMO_TIMEZONE, DEMO_USERS } from "./demoSeed";
+
+function formatSlot(slot: ClassifiedSlot | null): string {
+  if (!slot) return "discarded";
+  return `${slot.vibe_tag} ${formatTimeHHMM(slot.start, DEMO_TIMEZONE)}–${formatTimeHHMM(slot.end, DEMO_TIMEZONE)}`;
+}
 
 describe("demo seed schedule", () => {
   it("uses the FIU demo identities and geography", () => {
@@ -39,7 +44,7 @@ describe("demo seed schedule", () => {
     expect(windows).toHaveLength(1);
     expect(getLocalParts(windows[0]!.start, DEMO_TIMEZONE)).toMatchObject({ hour: 18, minute: 30 });
     expect(getLocalParts(windows[0]!.end, DEMO_TIMEZONE)).toMatchObject({ hour: 20, minute: 45 });
-    expect(formatSlot(classifySlot(windows[0]!, DEMO_TIMEZONE), DEMO_TIMEZONE)).toBe("dinner 18:30–20:30");
+    expect(formatSlot(classifySlot(windows[0]!, DEMO_TIMEZONE))).toBe("dinner 18:30–20:30");
   });
 
   it("keeps local Thursday times correct across daylight-saving offsets", () => {

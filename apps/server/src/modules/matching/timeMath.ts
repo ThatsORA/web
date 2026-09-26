@@ -8,45 +8,36 @@ export interface Interval {
   end: Date;
 }
 
-export type TimeWindowInput =
-  | { start: Date | string | number; end: Date | string | number }
-  | { starts_at: Date | string | number; ends_at: Date | string | number };
+type TimeValue = Date | string | number;
+
+export interface TimeWindowInput {
+  start: TimeValue;
+  end: TimeValue;
+}
 
 export interface TimeWindow {
   start: Date;
   end: Date;
-  starts_at: Date;
-  ends_at: Date;
 }
 
 export interface MemberAvailability {
   id?: string;
   timezone?: string;
-  busyBlocks?: Array<{ starts_at?: Date | string | number; ends_at?: Date | string | number; start?: Date | string | number; end?: Date | string | number }>;
-  busy_blocks?: Array<{ starts_at?: Date | string | number; ends_at?: Date | string | number; start?: Date | string | number; end?: Date | string | number }>;
-  openEvents?: Array<{ starts_at?: Date | string | number; ends_at?: Date | string | number; start?: Date | string | number; end?: Date | string | number }>;
-  open_events?: Array<{ starts_at?: Date | string | number; ends_at?: Date | string | number; start?: Date | string | number; end?: Date | string | number }>;
+  busyBlocks?: TimeWindowInput[];
+  openEvents?: TimeWindowInput[];
 }
 
 export interface FreeWindowsConfig {
   busyPaddingMin?: number;
-  BUSY_PADDING_MIN?: number;
   minLeadHours?: number;
-  MIN_LEAD_HOURS?: number;
   horizonDays?: number;
-  MATCH_HORIZON_DAYS?: number;
   timezone?: string;
-  tz?: string;
-  openEvents?: Array<{ starts_at?: Date | string | number; ends_at?: Date | string | number; start?: Date | string | number; end?: Date | string | number; participantIds?: string[] }>;
 }
 
 export interface ClassifiedSlot {
   vibe_tag: VibeTag;
-  vibe: VibeTag; // alias
   start: Date;
   end: Date;
-  starts_at: Date; // alias
-  ends_at: Date; // alias
   durationMinutes: number;
 }
 
@@ -174,15 +165,6 @@ export function formatTimeHHMM(date: Date, tz: string): string {
 }
 
 /**
- * Format a ClassifiedSlot (or null) to standard human-readable format.
- * E.g. "casual_hangout 18:00–19:15" or "discarded".
- */
-export function formatSlot(slot: ClassifiedSlot | null, tz: string = "America/New_York"): string {
-  if (!slot) return "discarded";
-  return `${slot.vibe_tag} ${formatTimeHHMM(slot.start, tz)}–${formatTimeHHMM(slot.end, tz)}`;
-}
-
-/**
  * Merges overlapping or abutting time intervals into disjoint intervals.
  */
 export function mergeIntervals(intervals: Interval[]): Interval[] {
@@ -236,8 +218,6 @@ export function subtractIntervals(sourceWindows: Interval[], busyIntervals: Inte
           free.push({
             start: new Date(curMs),
             end: new Date(chunkEndMs),
-            starts_at: new Date(curMs),
-            ends_at: new Date(chunkEndMs),
           });
         }
       }
@@ -251,8 +231,6 @@ export function subtractIntervals(sourceWindows: Interval[], busyIntervals: Inte
       free.push({
         start: new Date(curMs),
         end: new Date(winEndMs),
-        starts_at: new Date(curMs),
-        ends_at: new Date(winEndMs),
       });
     }
   }
@@ -279,8 +257,6 @@ export function intersectWindows(listA: TimeWindow[], listB: TimeWindow[]): Time
       result.push({
         start: new Date(startMs),
         end: new Date(endMs),
-        starts_at: new Date(startMs),
-        ends_at: new Date(endMs),
       });
     }
 
@@ -345,20 +321,9 @@ export function wakingHoursForRange(rangeStart: Date, rangeEnd: Date, tz: string
   return intervals;
 }
 
-/**
- * Normalizes an interval input (start/end or starts_at/ends_at) to Date objects.
- */
-function toDateInterval(item: {
-  starts_at?: Date | string | number;
-  ends_at?: Date | string | number;
-  start?: Date | string | number;
-  end?: Date | string | number;
-}): Interval | null {
-  const rawStart = item.start ?? item.starts_at;
-  const rawEnd = item.end ?? item.ends_at;
-  if (rawStart == null || rawEnd == null) return null;
-  const start = new Date(rawStart);
-  const end = new Date(rawEnd);
+function toDateInterval(item: TimeWindowInput): Interval | null {
+  const start = new Date(item.start);
+  const end = new Date(item.end);
   if (isNaN(start.getTime()) || isNaN(end.getTime()) || start.getTime() >= end.getTime()) {
     return null;
   }
@@ -383,10 +348,10 @@ export function freeWindows(
   }
 
   const nowDate = new Date(now);
-  const busyPaddingMin = cfg?.busyPaddingMin ?? cfg?.BUSY_PADDING_MIN ?? 15;
-  const minLeadHours = cfg?.minLeadHours ?? cfg?.MIN_LEAD_HOURS ?? 2;
-  const horizonDays = cfg?.horizonDays ?? cfg?.MATCH_HORIZON_DAYS ?? 7;
-  const defaultTz = cfg?.timezone ?? cfg?.tz ?? members[0]?.timezone ?? "America/New_York";
+  const busyPaddingMin = cfg?.busyPaddingMin ?? 15;
+  const minLeadHours = cfg?.minLeadHours ?? 2;
+  const horizonDays = cfg?.horizonDays ?? 7;
+  const defaultTz = cfg?.timezone ?? members[0]?.timezone ?? "America/New_York";
 
   const rangeStart = new Date(nowDate.getTime() + minLeadHours * 60 * 60 * 1000);
   const rangeEnd = new Date(nowDate.getTime() + horizonDays * 24 * 60 * 60 * 1000);
@@ -405,8 +370,7 @@ export function freeWindows(
     const busyIntervals: Interval[] = [];
 
     // 1. Busy blocks padded by BUSY_PADDING_MIN
-    const rawBlocks = member.busyBlocks ?? member.busy_blocks ?? [];
-    for (const b of rawBlocks) {
+    for (const b of member.busyBlocks ?? []) {
       const iv = toDateInterval(b);
       if (iv) {
         busyIntervals.push({
@@ -417,23 +381,10 @@ export function freeWindows(
     }
 
     // 2. Open-event slots (unpadded)
-    const rawEvents = member.openEvents ?? member.open_events ?? [];
-    for (const e of rawEvents) {
+    for (const e of member.openEvents ?? []) {
       const iv = toDateInterval(e);
       if (iv) {
         busyIntervals.push(iv);
-      }
-    }
-
-    // Also check openEvents from cfg if passed at top level
-    if (cfg?.openEvents) {
-      for (const e of cfg.openEvents) {
-        if (!e.participantIds || (member.id && e.participantIds.includes(member.id))) {
-          const iv = toDateInterval(e);
-          if (iv) {
-            busyIntervals.push(iv);
-          }
-        }
       }
     }
 
@@ -466,12 +417,8 @@ export function freeWindows(
  * - Returns the slot [s, s + len] or null if discarded.
  */
 export function classifySlot(window: TimeWindowInput, tz: string = "America/New_York"): ClassifiedSlot | null {
-  const rawStart = "start" in window ? window.start : window.starts_at;
-  const rawEnd = "end" in window ? window.end : window.ends_at;
-
-  if (rawStart == null || rawEnd == null) return null;
-  const start = new Date(rawStart);
-  const end = new Date(rawEnd);
+  const start = new Date(window.start);
+  const end = new Date(window.end);
 
   if (isNaN(start.getTime()) || isNaN(end.getTime()) || start.getTime() >= end.getTime()) {
     return null;
@@ -502,11 +449,8 @@ export function classifySlot(window: TimeWindowInput, tz: string = "America/New_
       const slotEnd = new Date(sMs + lenMinutes * 60 * 1000);
       feasible[tag] = {
         vibe_tag: tag,
-        vibe: tag,
         start: s,
         end: slotEnd,
-        starts_at: s,
-        ends_at: slotEnd,
         durationMinutes: lenMinutes,
       };
     }

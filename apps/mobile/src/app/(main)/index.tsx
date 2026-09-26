@@ -1,10 +1,13 @@
 // Owner: Andy — event feed; renders the event card in every state.
-import { Link } from "expo-router";
-import { EventCard, FindingCard, useEvents } from "../../features/event-card";
+import { Link, router } from "expo-router";
+import { EmptyFeedCard, EventCard, FindingCard, useEvents } from "../../features/event-card";
+import { useFeedEmptyState } from "../../lib/matcherTrigger";
+import { FRIENDS_HREF } from "../../lib/routes";
 import { Button, Callout, Screen, Txt } from "../../ui";
 
 export default function Home() {
   const { cards, swapped, busy, notice, loaded, error, reload, actionsFor } = useEvents();
+  const feedState = useFeedEmptyState(cards.length);
 
   return (
     <Screen title="Hangouts">
@@ -16,7 +19,8 @@ export default function Home() {
           <Button label="Try again" variant="secondary" onPress={() => void reload()} />
         </>
       ) : null}
-      {loaded && cards.length === 0 ? <FindingCard /> : null}
+      {loaded && feedState === "finding" ? <FindingCard /> : null}
+      {loaded && feedState === "empty" ? <EmptyFeedCard onAddFriends={() => router.push(FRIENDS_HREF)} /> : null}
       {cards.map((card) => (
         <EventCard
           key={card.id}

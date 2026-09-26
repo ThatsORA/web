@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   eventCreate: vi.fn(),
   transaction: vi.fn(),
   curateVenues: vi.fn(),
+  fetchCandidates: vi.fn(),
   openVoting: vi.fn(),
 }));
 
@@ -26,10 +27,12 @@ vi.mock("../intelligence/curateVenues", async (importOriginal) => ({
   ...await importOriginal<typeof import("../intelligence/curateVenues")>(),
   curateVenues: mocks.curateVenues,
 }));
+vi.mock("../venues/liveVenues", () => ({ fetchCandidates: mocks.fetchCandidates }));
 vi.mock("../voting/lifecycle", () => ({ openVoting: mocks.openVoting }));
 
 import { env } from "../../env";
-import { runPipeline, stubRankedVenues, triggerMatcher, unusedVenueSnapshots } from "./matcher";
+import type { MatchingEvent } from "./candidates";
+import { openEventsByParticipant, runPipeline, triggerMatcher, unusedVenueSnapshots } from "./matcher";
 
 const NOW = new Date("2026-09-26T12:00:00Z");
 const IDS = [
@@ -70,6 +73,13 @@ const friendships = IDS.flatMap((userLowId, index) =>
     lastHangoutAt: new Date(NOW.getTime() - 10 * 24 * 60 * 60 * 1_000),
   })),
 );
+const rankedVenues: RankedVenue[] = [
+  { place_id: "place-campus-bistro", name: "Campus Bistro", lat: 25.756, lng: -80.376, primary_type: "restaurant", price_level: 2, rating: 4.5, user_rating_count: 180, travel_minutes: { [IDS[0]!]: 8, [IDS[1]!]: 11, [IDS[2]!]: 14 }, max_travel_min: 14, route_score: 17.3 },
+  { place_id: "place-sweetwater-kitchen", name: "Sweetwater Kitchen", lat: 25.763, lng: -80.373, primary_type: "restaurant", price_level: 2, rating: 4.6, user_rating_count: 240, travel_minutes: { [IDS[0]!]: 10, [IDS[1]!]: 12, [IDS[2]!]: 15 }, max_travel_min: 15, route_score: 18.7 },
+  { place_id: "place-fiu-grill", name: "FIU Grill", lat: 25.754, lng: -80.38, primary_type: "restaurant", price_level: 2, rating: 4.4, user_rating_count: 130, travel_minutes: { [IDS[0]!]: 9, [IDS[1]!]: 13, [IDS[2]!]: 16 }, max_travel_min: 16, route_score: 19.8 },
+  { place_id: "place-sweetwater-bistro", name: "Sweetwater Bistro", lat: 25.768, lng: -80.367, primary_type: "restaurant", price_level: 2, rating: 4.3, user_rating_count: 115, travel_minutes: { [IDS[0]!]: 12, [IDS[1]!]: 16, [IDS[2]!]: 18 }, max_travel_min: 18, route_score: 22.6 },
+  { place_id: "place-campus-table", name: "Campus Table", lat: 25.749, lng: -80.385, primary_type: "restaurant", price_level: 2, rating: 4.2, user_rating_count: 95, travel_minutes: { [IDS[0]!]: 14, [IDS[1]!]: 17, [IDS[2]!]: 20 }, max_travel_min: 20, route_score: 25.1 },
+];
 
 function resetData() {
   mocks.userFindMany.mockResolvedValue(users);
@@ -81,6 +91,7 @@ function resetData() {
   mocks.transaction.mockImplementation((callback) => callback({
     event: { findFirst: mocks.eventFindFirst, create: mocks.eventCreate },
   }));
+  mocks.fetchCandidates.mockResolvedValue(rankedVenues);
   mocks.curateVenues.mockImplementation(async (venues: RankedVenue[]) => venues.slice(0, 3).map((venue, index: number) => ({
     ...venue,
     rank: index + 1,
@@ -95,27 +106,14 @@ beforeEach(() => {
   resetData();
 });
 
-describe("stub venues", () => {
-  it("builds five deterministic RankedVenue values for every member", () => {
-    const venues = stubRankedVenues(IDS);
-    expect(venues).toHaveLength(5);
-    for (const venue of venues) {
-      expect(Object.keys(venue.travel_minutes)).toEqual(IDS);
-      expect(venue.max_travel_min).toBe(Math.max(...Object.values(venue.travel_minutes)));
-      expect(venue.route_score).toBe(
-        venue.max_travel_min + 0.1 * Object.values(venue.travel_minutes).reduce((sum, value) => sum + value, 0),
-      );
-    }
-  });
-
+describe("venue snapshots", () => {
   it("snapshots unselected venues in route order with their top-five ranks", () => {
-    const venues = stubRankedVenues(IDS);
-    const options = [venues[3]!, venues[0]!, venues[4]!];
-    const snapshots = unusedVenueSnapshots(venues, options);
+    const options = [rankedVenues[3]!, rankedVenues[0]!, rankedVenues[4]!];
+    const snapshots = unusedVenueSnapshots(rankedVenues, options);
 
     expect(snapshots.map((venue) => ({ place_id: venue.place_id, rank: venue.rank }))).toEqual([
-      { place_id: "stub-sweetwater-kitchen", rank: 2 },
-      { place_id: "stub-fiu-grill", rank: 3 },
+      { place_id: "place-sweetwater-kitchen", rank: 2 },
+      { place_id: "place-fiu-grill", rank: 3 },
     ]);
     expect(snapshots.every((venue) => venue.ai_blurb === null && venue.id === undefined)).toBe(true);
     expect(snapshots.map((venue) => venue.facts_line)).toEqual([
@@ -125,16 +123,61 @@ describe("stub venues", () => {
   });
 });
 
+describe("open event index", () => {
+  it("matches the old per-user scan for 50 users and 200 events", () => {
+    const userIds = Array.from({ length: 50 }, (_, index) => `user-${index}`);
+    const events: MatchingEvent[] = Array.from({ length: 200 }, (_, index) => ({
+      groupKey: `group-${index}`,
+      status: index % 2 ? "voting" : "confirmed",
+      startsAt: new Date(NOW.getTime() + index * 60_000),
+      endsAt: new Date(NOW.getTime() + (index + 60) * 60_000),
+      resolvedAt: null,
+      participants: [index, index + 7, index + 13].map((value) => ({ userId: userIds[value % userIds.length]! })),
+    }));
+
+    const indexed = openEventsByParticipant(events);
+    for (const userId of userIds) {
+      const oldScan = events.filter((event) => event.participants.some((participant) => participant.userId === userId));
+      expect(indexed.get(userId) ?? []).toEqual(oldScan);
+    }
+  });
+});
+
 describe("matcher pipeline", () => {
   it("loads DB state and atomically writes the one Thursday dinner event", async () => {
     await runPipeline(NOW);
 
-    expect(mocks.userFindMany).toHaveBeenCalledWith({ include: { busyBlocks: true, favorites: true } });
+    expect(mocks.userFindMany).toHaveBeenNthCalledWith(1, {
+      where: { id: { in: IDS } },
+      select: { id: true, timezone: true },
+    });
+    expect(mocks.userFindMany).toHaveBeenNthCalledWith(2, {
+      where: { id: { in: IDS } },
+      include: { busyBlocks: true, favorites: true },
+    });
     expect(mocks.friendshipFindMany).toHaveBeenCalledOnce();
     expect(mocks.explicitGroupFindMany).toHaveBeenCalledWith({ include: { members: true } });
-    expect(mocks.eventFindMany).toHaveBeenCalledWith({ include: { participants: true } });
+    expect(mocks.eventFindMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        status: { in: ["voting", "confirmed"] },
+        participants: { some: { userId: { in: IDS } } },
+      },
+      include: { participants: true },
+    });
+    expect(mocks.eventFindMany).toHaveBeenNthCalledWith(2, {
+      where: {
+        groupKey: { in: [IDS.join(",")] },
+        status: { in: ["expired", "chatted"] },
+        resolvedAt: { gte: new Date(NOW.getTime() - env.COOLDOWN_HOURS * 60 * 60 * 1_000) },
+      },
+      include: { participants: true },
+    });
+    expect(mocks.fetchCandidates).toHaveBeenCalledWith(
+      expect.objectContaining({ vibe_tag: "dinner" }),
+      users.map(({ id, timezone, homeLat, homeLng, favorites }) => ({ id, timezone, homeLat, homeLng, favorites })),
+    );
     expect(mocks.curateVenues).toHaveBeenCalledWith(
-      expect.arrayContaining([expect.objectContaining({ place_id: "stub-fiu-campus-bistro" })]),
+      rankedVenues,
       {
         vibe_tag: "dinner",
         slot_local: "Thu 18:30–20:30",
@@ -161,13 +204,13 @@ describe("matcher pipeline", () => {
     });
     expect(create.data.backupVenues).toEqual([
       expect.objectContaining({
-        place_id: "stub-sweetwater-bistro",
+        place_id: "place-sweetwater-bistro",
         rank: 4,
         ai_blurb: null,
         facts_line: "★4.3 · $$ · max 18 min travel",
       }),
       expect.objectContaining({
-        place_id: "stub-campus-table",
+        place_id: "place-campus-table",
         rank: 5,
         ai_blurb: null,
         facts_line: "★4.2 · $$ · max 20 min travel",
@@ -191,7 +234,7 @@ describe("matcher pipeline", () => {
   });
 
   it("skips a group that already has an open event before curation", async () => {
-    mocks.eventFindMany.mockResolvedValue([{
+    mocks.eventFindMany.mockResolvedValueOnce([{
       id: "existing",
       groupKey: IDS.join(","),
       status: "voting",
@@ -199,7 +242,7 @@ describe("matcher pipeline", () => {
       endsAt: new Date("2026-10-02T00:30:00Z"),
       resolvedAt: null,
       participants: IDS.map((userId) => ({ userId })),
-    }]);
+    }]).mockResolvedValueOnce([]);
     await runPipeline(NOW);
     expect(mocks.curateVenues).not.toHaveBeenCalled();
     expect(mocks.transaction).not.toHaveBeenCalled();
@@ -230,10 +273,11 @@ describe("matcher mutex", () => {
     const first = triggerMatcher();
     const second = triggerMatcher();
     expect(second).toBe(first);
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
     release!(users);
     await first;
 
-    expect(mocks.userFindMany).toHaveBeenCalledTimes(2);
+    expect(mocks.userFindMany).toHaveBeenCalledTimes(4);
     expect(mocks.eventCreate).toHaveBeenCalledOnce();
     expect(mocks.openVoting).toHaveBeenCalledOnce();
   });

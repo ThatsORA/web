@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextStep, ONBOARDING_STEPS, stepEyebrow, stepProgress } from "./onboarding";
+import { nextStep, ONBOARDING_STEPS, resumeAfterLogin, stepEyebrow, stepProgress } from "./onboarding";
 
 describe("stepEyebrow", () => {
   it("labels each step for the screen eyebrow", () => {
@@ -29,5 +29,23 @@ describe("stepProgress", () => {
     expect(stepProgress("signup")).toEqual({ current: 1, total: 5 });
     expect(stepProgress("friends")).toEqual({ current: 5, total: 5 });
     expect(stepProgress("friends").total).toBe(ONBOARDING_STEPS.length - 1);
+  });
+});
+
+describe("resumeAfterLogin", () => {
+  it("sends a user with no home location to the location step", () => {
+    expect(resumeAfterLogin({ home_lat: null }, 0)).toBe("location");
+  });
+
+  it("asks for location first even when close friends already exist", () => {
+    expect(resumeAfterLogin({ home_lat: null }, 2)).toBe("location");
+  });
+
+  it("sends a user with a home but no close friends to the friends step", () => {
+    expect(resumeAfterLogin({ home_lat: 28.602 }, 0)).toBe("friends");
+  });
+
+  it("finishes (enter main) when home and at least one close friend are set", () => {
+    expect(resumeAfterLogin({ home_lat: 28.602 }, 1)).toBe("done");
   });
 });
