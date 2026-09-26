@@ -4,7 +4,7 @@ import type { EventStatus } from "@web/contract";
 import type { ClassifiedSlot } from "./timeMath";
 import { env } from "../../env";
 
-export type MatchingFriendship = Pick<Friendship, "userLowId" | "userHighId" | "lowAddedHigh" | "highAddedLow" | "interactionScore" | "lastHangoutAt">;
+export type MatchingFriendship = Pick<Friendship, "userLowId" | "userHighId" | "lowAddedHigh" | "highAddedLow" | "interactionScore" | "lastHangoutAt"> & { status?: string };
 export type MatchingGroup = Pick<ExplicitGroup, "id"> & { members: Pick<GroupMember, "userId">[] };
 export type MatchingEvent = Pick<Event, "groupKey" | "startsAt" | "endsAt" | "resolvedAt"> & {
   status: EventStatus;
@@ -41,6 +41,7 @@ export function candidateGroups(
   const neighbors = new Map(users.map(user => [user.id, new Set<string>()]));
   for (const edge of friendships) {
     if (!edge.lowAddedHigh || !edge.highAddedLow || edge.userLowId === edge.userHighId) continue;
+    if (edge.status !== undefined && edge.status !== "accepted") continue;
     if (!neighbors.has(edge.userLowId) || !neighbors.has(edge.userHighId)) continue;
     neighbors.get(edge.userLowId)!.add(edge.userHighId);
     neighbors.get(edge.userHighId)!.add(edge.userLowId);
@@ -67,6 +68,7 @@ export function candidateGroups(
   }
   for (const edge of friendships) {
     if (!edge.lowAddedHigh || !edge.highAddedLow || edge.userLowId === edge.userHighId) continue;
+    if (edge.status !== undefined && edge.status !== "accepted") continue;
     const memberIds = [edge.userLowId, edge.userHighId].sort(lexical);
     if (memberIds.some(id => !zones.has(id))) continue;
     const key = groupKey(memberIds);

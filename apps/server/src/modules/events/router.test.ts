@@ -69,6 +69,18 @@ const option = (id: string, rank: number) => ({
     expect(await response.json()).toEqual({ error: "invalid_invitees" });
   });
 
+  it("POST /events rejects invitees with pending friendship status", async () => {
+    mocks.findMany.mockResolvedValueOnce([{ userLowId: alice, userHighId: bob, lowAddedHigh: true, highAddedLow: true, status: "pending" }]);
+
+    const response = await fetch(`${base}/events`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${signToken(alice)}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ invitee_ids: [bob] }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_invitees" });
+  });
+
   it("POST /events returns 422 if no common time", async () => {
     mocks.findMany.mockResolvedValueOnce([{ userLowId: alice, userHighId: bob, lowAddedHigh: true, highAddedLow: false }]);
     matcherMocks.createUserHangout.mockResolvedValueOnce(null);

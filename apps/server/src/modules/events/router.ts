@@ -34,6 +34,7 @@ eventsRouter.post(routes.events, requireAuth, express.json(), async (req, res) =
     const [low, high] = userId < invitee ? [userId, invitee] : [invitee, userId];
     const friendship = friendships.find(f => f.userLowId === low && f.userHighId === high);
     if (!friendship) return false;
+    if ('status' in friendship && (friendship as any).status !== "accepted") return false;
     return userId === low ? friendship.lowAddedHigh : friendship.highAddedLow;
   });
 

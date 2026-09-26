@@ -22,6 +22,14 @@ function event(ids: string[], status: MatchingEvent["status"] = "voting", start 
   return { groupKey: groupKey(ids), status, startsAt: at(start), endsAt: at(end), resolvedAt: at(-1), participants: ids.map(userId => ({ userId })) };
 }
 describe("candidate groups", () => {
+  it("ignores pending pairs even if both close-friend flags are set, but accepts 'accepted' pairs", () => {
+    const ids = ["a", "b", "c"];
+    const pendingPair = { ...edge("a", "b"), status: "pending" };
+    const acceptedPair = { ...edge("b", "c"), status: "accepted" };
+    expect(candidateGroups(users(ids), [pendingPair])).toEqual([]);
+    expect(candidateGroups(users(ids), [acceptedPair]).map(g => g.groupKey)).toEqual(["b,c"]);
+  });
+
   it("forms every mutual pair plus a maximal triangle, but never a one-way pair", () => {
     const ids = ["a", "b", "c"];
     expect(candidateGroups(users(ids), clique(ids)).map(g => g.groupKey)).toEqual(["a,b", "a,b,c", "a,c", "b,c"]);
