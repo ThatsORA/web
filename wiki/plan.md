@@ -97,7 +97,7 @@ anonymous voting over Socket.io, Ghost Pass, resolution, and
 | 4 | The slices weren't really vertical: Andy owned every screen, several screens had no owner, Riley was overloaded, and Venue Intelligence was split across two owners. | Andy owns the shell, navigation, components, onboarding flow and event card. Riley and Ojas each build their own feature screens. Venue Intelligence moves entirely to Ojas, and the seam is a typed `RankedVenue[]`. Auth and profile go to Ojas. |
 | 5 | Smart Match Ranking used an LLM on purely numeric (and at a hackathon, seeded) inputs, and its effect was invisible in the demo. | Cut. Replaced by a deterministic weighted score. |
 | 6 | The vibe table had gaps and overlaps, and it classified raw windows instead of hangout slots. | One template-based step now classifies the window *and* carves the slot. Priority order resolves overlaps, and unit test cases are listed below. |
-| 7 | Group formation, consensus, timeout and anonymity weren't defined. | Groups are explicit groups plus maximal mutual cliques, with 3–6 members. Resolution uses plurality with a deterministic tie-break. Tallies stay hidden until close, and ghost passes count as "responded". |
+| 7 | Group formation, consensus, timeout and anonymity weren't defined. | Groups are explicit groups, mutual close-friend pairs and maximal mutual cliques, with 2–6 members. Resolution uses plurality with a deterministic tie-break. Tallies stay hidden until close, and ghost passes count as "responded". |
 | 8 | Gemini closure-risk ordering of backups used an LLM on a structured field. | Business status is filtered in code. Backups are the losing vote options, then the unused top-5 venues. The "It's closed" button stays. |
 | 9 | The contract existed only as markdown, and migrations and the lockfile would collide across six agents. | `packages/contract` holds zod schemas that both apps import, and CI runs typecheck and tests on every PR. There is one schema steward and a CODEOWNERS lane map. Scaffolding is budgeted at 2.5 hours. |
 | 10 | The demo depended on the venue wifi and live APIs, and push notifications need a dev build. | The backend is deployed by hour 6, with a hotspot as backup. `DEMO_MODE` replays recorded API responses, a reset script restores state, a recording is the last resort, and notifications use in-app sockets. |
@@ -301,16 +301,18 @@ payloads are deliberately thin: on any event, the client refetches
 
 ### 2. Candidate groups (Riley)
 
-A candidate group has 3–6 members and comes from one of three sources:
+A candidate group has 2–6 members and comes from one of four sources:
 - **Explicit groups:** every member of each explicit group.
+- **Mutual pairs:** each mutual close-friend edge. One-sided adds never
+  become suggestions.
 - **Mutual cliques:** each maximal clique in the mutual close-friend
   graph (Bron–Kerbosch, trivial at demo scale).
 - **Quorum subsets:** for any group with 4 or more members, each subset
   with one member dropped.
 
 Groups are deduplicated by `group_key`. Members must share a timezone; v1
-skips groups that span timezones. Pairs are not auto-matched in v1,
-because anonymous voting is meaningless with two people.
+skips groups that span timezones. At equal base score, pairs get a 0.85
+size factor so groups of 3 or more rank first.
 
 **Cooldown:** a `group_key` isn't re-proposed within `COOLDOWN_HOURS`
 after an event for it ends as `expired` or `chatted`.
@@ -373,9 +375,10 @@ Each vibe has a template, and templates are evaluated in local time:
 Each (group, slot) candidate gets a score:
 
 ```
-score = 0.40 · closeness   (mean interaction_score over member pairs, 0..1)
-      + 0.35 · staleness   (min(days since last hangout, 14) / 14; never = 1)
-      + 0.25 · soonness    (1 − hours_until_start / 168)
+base_score = 0.40 · closeness   (mean interaction_score over member pairs, 0..1)
+           + 0.35 · staleness   (min(days since last hangout, 14) / 14; never = 1)
+           + 0.25 · soonness    (1 − hours_until_start / 168)
+score = base_score × 0.85 for pairs; base_score for groups of 3 or more
 ```
 
 Ties go to the earlier start, then to `group_key` in lexical order.

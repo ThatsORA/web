@@ -166,7 +166,12 @@ describe("matcher pipeline", () => {
     });
     expect(mocks.eventFindMany).toHaveBeenNthCalledWith(2, {
       where: {
-        groupKey: { in: [IDS.join(",")] },
+        groupKey: { in: [
+          `${IDS[0]},${IDS[1]}`,
+          IDS.join(","),
+          `${IDS[0]},${IDS[2]}`,
+          `${IDS[1]},${IDS[2]}`,
+        ] },
         status: { in: ["expired", "chatted"] },
         resolvedAt: { gte: new Date(NOW.getTime() - env.COOLDOWN_HOURS * 60 * 60 * 1_000) },
       },
