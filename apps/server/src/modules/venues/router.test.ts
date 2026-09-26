@@ -9,12 +9,13 @@ const mocks = vi.hoisted(() => ({
   updateMany: vi.fn(),
   findFirst: vi.fn(),
   emitToUsers: vi.fn(),
+  pushVenueChanged: vi.fn().mockResolvedValue(undefined),
   assembleEventCard: vi.fn(),
 }));
 vi.mock("../../lib/prisma", () => ({
   prisma: { $transaction: mocks.transaction, event: { findFirst: mocks.findFirst } },
 }));
-vi.mock("../../realtime", () => ({ emitToUsers: mocks.emitToUsers }));
+vi.mock("../../realtime", () => ({ emitToUsers: mocks.emitToUsers, pushVenueChanged: mocks.pushVenueChanged }));
 vi.mock("../events/assembleEventCard", () => ({ assembleEventCard: mocks.assembleEventCard }));
 
 import { signToken } from "../../lib/auth";
@@ -119,6 +120,7 @@ describe("POST report-closed", () => {
       "event:venue_changed",
       { event_id: eventId },
     );
+    expect(mocks.pushVenueChanged).toHaveBeenCalledWith([alice, bob], eventId);
   });
 
   it("rejects a nonparticipant without attempting an update", async () => {
@@ -127,6 +129,7 @@ describe("POST report-closed", () => {
     expect(await response.json()).toEqual({ error: "not_a_participant" });
     expect(mocks.updateMany).not.toHaveBeenCalled();
     expect(mocks.emitToUsers).not.toHaveBeenCalled();
+    expect(mocks.pushVenueChanged).not.toHaveBeenCalled();
   });
 
   it("returns the current event on a stale place ID", async () => {
@@ -141,6 +144,7 @@ describe("POST report-closed", () => {
     });
     expect(mocks.assembleEventCard).toHaveBeenCalledWith(expect.objectContaining({ venuePlaceId: "already-swapped" }), alice);
     expect(mocks.updateMany).not.toHaveBeenCalled();
+    expect(mocks.pushVenueChanged).not.toHaveBeenCalled();
   });
 
   it("treats a failed place-ID guard as a concurrent swap", async () => {
@@ -150,6 +154,7 @@ describe("POST report-closed", () => {
     expect(response.status).toBe(409);
     expect((await response.json()).error).toBe("venue_already_changed");
     expect(mocks.emitToUsers).not.toHaveBeenCalled();
+    expect(mocks.pushVenueChanged).not.toHaveBeenCalled();
   });
 
   it("moves to chatted and emits when no backups remain", async () => {
@@ -161,5 +166,14 @@ describe("POST report-closed", () => {
       data: { status: "chatted", venueStatus: "reported_closed" },
     }));
     expect(mocks.emitToUsers).toHaveBeenCalledOnce();
+    expect(mocks.pushVenueChanged).toHaveBeenCalledWith([alice, bob], eventId);
+  });
+
+  it("isolates push notification failures from the response", async () => {
+    mocks.pushVenueChanged.mockRejectedValueOnce(new Error("Expo network failure"));
+    const response = await post({ current_place_id: "current" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, status: "swapped" });
+    expect(mocks.pushVenueChanged).toHaveBeenCalledWith([alice, bob], eventId);
   });
 });

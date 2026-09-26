@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EventCardPayload, LoginRequest, SignupRequest, optionFromRow, type OptionRowLike } from "./schemas";
+import { EventCardPayload, ExpoPushToken, LoginRequest, SignupRequest, optionFromRow, type OptionRowLike } from "./schemas";
 
 describe("EventCardPayload match reason", () => {
   it("accepts null or a reason up to 90 characters", () => {
@@ -62,4 +62,17 @@ describe("optionFromRow", () => {
       ai_blurb: "Great coffee spot",
     });
   });
+});
+
+describe("ExpoPushToken", () => {
+  it.each(["ExpoPushToken[current-token_123]", "ExponentPushToken[legacy-token-123]"])("accepts %s", (token) => {
+    expect(ExpoPushToken.parse(token)).toBe(token);
+  });
+
+  it.each(["not-an-expo-token", "ExpoPushToken[]", "ExpoPushToken[token with spaces]", "OtherPushToken[token]"])(
+    "rejects %s",
+    (token) => {
+      expect(ExpoPushToken.safeParse(token).success).toBe(false);
+    },
+  );
 });

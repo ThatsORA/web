@@ -24,8 +24,18 @@ export function GoogleCalendarConnect() {
   }, []);
 
   useEffect(() => {
-    fetchStatus();
-  }, [fetchStatus]);
+    let cancelled = false;
+    api("/calendar/google", GoogleCalendarStatusResponse)
+      .then((res) => {
+        if (!cancelled) setStatus(res);
+      })
+      .catch((e) => {
+        console.error(e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleConnect = async () => {
     setLoading(true);
