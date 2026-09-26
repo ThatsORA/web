@@ -1,4 +1,5 @@
 // Owner: Andy — dev gallery: the event card in every state on stub fixtures (no backend needed).
+import { Redirect } from "expo-router";
 import { Fragment } from "react";
 import { EventCard, FIXTURES, FindingCard, type CardActions } from "../../features/event-card";
 import { Screen, Txt } from "../../ui";
@@ -6,6 +7,10 @@ import { Screen, Txt } from "../../ui";
 const noop: CardActions = { vote: () => {}, ghostPass: () => {}, reportClosed: () => {} };
 
 export default function CardStates() {
+  if (!__DEV__) {
+    return <Redirect href="/(main)" />;
+  }
+
   return (
     <Screen eyebrow="Dev" title="Card states">
       <Txt variant="eyebrow">Finding a time</Txt>
@@ -19,3 +24,4 @@ export default function CardStates() {
     </Screen>
   );
 }
+
