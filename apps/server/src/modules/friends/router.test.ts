@@ -23,6 +23,37 @@ vi.mock("../../lib/prisma", () => ({
         mocks.rows.set(k(where), row);
         return row;
       },
+      findMany: async ({ where }: { where: { OR: Array<{ userLowId?: string; lowAddedHigh?: boolean; userHighId?: string; highAddedLow?: boolean }> } }) => {
+        const result: Array<Record<string, unknown>> = [];
+        for (const [key, row] of mocks.rows.entries()) {
+          const [userLowId, userHighId] = key.split("|");
+          const userLow = users.find((u) => u.id === userLowId);
+          const userHigh = users.find((u) => u.id === userHighId);
+          const matches = where.OR.some((clause) => {
+            if (clause.userLowId && clause.userLowId === userLowId && clause.lowAddedHigh && row.lowAddedHigh) return true;
+            if (clause.userHighId && clause.userHighId === userHighId && clause.highAddedLow && row.highAddedLow) return true;
+            return false;
+          });
+          if (matches) {
+            result.push({
+              userLowId,
+              userHighId,
+              ...row,
+              userLow,
+              userHigh,
+            });
+          }
+        }
+        return result;
+      },
+      updateMany: async ({ where, data }: { where: { userLowId: string; userHighId: string }; data: Record<string, unknown> }) => {
+        const key = `${where.userLowId}|${where.userHighId}`;
+        const existing = mocks.rows.get(key);
+        if (existing) {
+          mocks.rows.set(key, { ...existing, ...data });
+        }
+        return { count: existing ? 1 : 0 };
+      },
     },
   },
 }));
@@ -79,5 +110,44 @@ describe("close-friend handshake", () => {
     const res = await as(A, "/users/search?q=R");
     expect(await res.json()).toEqual({ users: [{ id: B, username: "riley" }] });
     expect(await (await as(A, "/users/search?q=")).json()).toEqual({ users: [] });
+  });
+
+  it("GET /friends/close returns my additions without mutual signal even if mutual in DB", async () => {
+    // Empty initially
+    let res = await as(A, "/friends/close");
+    expect(await res.json()).toEqual({ friends: [] });
+
+    // A adds B (one-sided)
+    await as(A, "/friends/close", { method: "POST", body: { username: "riley" } });
+    res = await as(A, "/friends/close");
+    const dataOneSided = await res.json();
+    expect(dataOneSided).toEqual({ friends: [{ id: B, username: "riley" }] });
+    expect(dataOneSided.friends[0]).not.toHaveProperty("mutual");
+
+    // B adds A (now mutual in DB)
+    await as(B, "/friends/close", { method: "POST", body: { username: "andy" } });
+    res = await as(A, "/friends/close");
+    const dataMutual = await res.json();
+    // Privacy invariant: never reveal whether someone added you back!
+    expect(dataMutual).toEqual({ friends: [{ id: B, username: "riley" }] });
+    expect(dataMutual.friends[0]).not.toHaveProperty("mutual");
+  });
+
+  it("DELETE /friends/close/:userId silently clears my flag and leaves other side alone", async () => {
+    // Setup mutual friendship
+    await as(A, "/friends/close", { method: "POST", body: { username: "riley" } });
+    await as(B, "/friends/close", { method: "POST", body: { username: "andy" } });
+
+    // A removes B
+    const delRes = await as(A, `/friends/close/${B}`, { method: "DELETE" });
+    expect(delRes.status).toBe(204);
+
+    // A's list is now empty
+    const aList = await (await as(A, "/friends/close")).json();
+    expect(aList).toEqual({ friends: [] });
+
+    // B's list still has A (silent delete does not remove the other user's addition)
+    const bList = await (await as(B, "/friends/close")).json();
+    expect(bList).toEqual({ friends: [{ id: A, username: "andy" }] });
   });
 });

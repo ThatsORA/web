@@ -58,9 +58,15 @@ export const PutBusyBlocksResponse = z.object({ stored: z.number().int() });
 // ---------- friends (Ojas) ----------
 export const UserSearchResult = z.object({ id: Id, username: z.string() }); // never reveals "added you"
 export const UserSearchResponse = z.object({ users: z.array(UserSearchResult) });
-export const CloseFriend = z.object({ id: Id, username: z.string(), mutual: z.boolean() });
+export const CloseFriend = z.object({ id: Id, username: z.string() });
 export const CloseFriendsResponse = z.object({ friends: z.array(CloseFriend) });
 export const AddCloseFriendRequest = z.object({ username: z.string() });
+
+export type UserSearchResult = z.infer<typeof UserSearchResult>;
+export type UserSearchResponse = z.infer<typeof UserSearchResponse>;
+export type CloseFriend = z.infer<typeof CloseFriend>;
+export type CloseFriendsResponse = z.infer<typeof CloseFriendsResponse>;
+export type AddCloseFriendRequest = z.infer<typeof AddCloseFriendRequest>;
 
 // ---------- favorites (Andy) ----------
 export const PutFavoritesRequest = z.object({ categories: z.array(z.string()).max(20) });
