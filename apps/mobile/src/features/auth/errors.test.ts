@@ -5,7 +5,8 @@ describe("authErrorMessage", () => {
   it("maps server statuses to messages", () => {
     expect(authErrorMessage(409, "signup")).toMatch(/taken/);
     expect(authErrorMessage(401, "login")).toMatch(/Wrong email or password/);
-    expect(authErrorMessage(400, "signup")).toMatch(/8\+ characters/);
+    expect(authErrorMessage(400, "signup")).toMatch(/10–128 characters/);
+    expect(authErrorMessage(429, "login")).toMatch(/Wait 15 minutes/);
     expect(authErrorMessage(null, "login")).toMatch(/server/);
   });
 });
