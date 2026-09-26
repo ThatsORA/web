@@ -55,6 +55,14 @@ export const PutBusyBlocksRequest = z.object({
 });
 export const PutBusyBlocksResponse = z.object({ stored: z.number().int() });
 
+export const GoogleCalendarStatusResponse = z.object({ connected: z.boolean(), last_synced_at: z.string().nullable() });
+export const GoogleCalendarStartResponse = z.object({ url: z.string() });
+export const GoogleCalendarStartRequest = z.object({ redirect_uri: z.string().optional() });
+
+export type GoogleCalendarStatusResponse = z.infer<typeof GoogleCalendarStatusResponse>;
+export type GoogleCalendarStartResponse = z.infer<typeof GoogleCalendarStartResponse>;
+export type GoogleCalendarStartRequest = z.infer<typeof GoogleCalendarStartRequest>;
+
 // ---------- friends (Ojas) ----------
 export const UserSearchResult = z.object({ id: Id, username: z.string() }); // never reveals "added you"
 export const UserSearchResponse = z.object({ users: z.array(UserSearchResult) });
