@@ -1,13 +1,21 @@
 // Owner: Andy — main app navigator: bottom tabs (Hangouts / Friends / Squads / You).
 // Screens draw their own Primer title via <Screen>, so tab headers are off.
 // JS tabs (not native tabs) so the bar takes theme tokens and runs in Expo Go.
-import { SymbolView } from "expo-symbols";
+import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import { Tabs } from "expo-router/js-tabs";
 import { CalendarForegroundSync } from "../../features/calendar";
 import { getToken } from "../../lib/api";
-import { HIDDEN_MAIN_ROUTES, MAIN_TABS } from "../../lib/mainTabs";
 import { userIdFromToken } from "../../lib/session";
 import { Txt, useTheme } from "../../ui";
+
+// `name` is the route file in this folder; other lanes link to these (e.g. /(main)/friends). First = initial tab.
+// Icons: SF Symbol on iOS, Material Symbol on Android/web (expo-symbols ships in Expo Go).
+const TABS: { name: string; title: string; icon: SymbolViewProps["name"] }[] = [
+  { name: "index", title: "Hangouts", icon: { ios: "calendar", android: "calendar_month", web: "calendar_month" } },
+  { name: "friends", title: "Friends", icon: { ios: "person.2", android: "group", web: "group" } },
+  { name: "squads", title: "Squads", icon: { ios: "person.3", android: "groups", web: "groups" } },
+  { name: "you", title: "You", icon: { ios: "person.crop.circle", android: "account_circle", web: "account_circle" } },
+];
 
 export default function MainLayout() {
   const t = useTheme();
@@ -23,7 +31,7 @@ export default function MainLayout() {
         tabBarStyle: { backgroundColor: t.colors.background, borderTopColor: t.colors.border, borderTopWidth: 1 },
       }}
     >
-      {MAIN_TABS.map((tab) => (
+      {TABS.map((tab) => (
         <Tabs.Screen
           key={tab.name}
           name={tab.name}
@@ -38,9 +46,8 @@ export default function MainLayout() {
           }}
         />
       ))}
-      {HIDDEN_MAIN_ROUTES.map((name) => (
-        <Tabs.Screen key={name} name={name} options={{ href: null }} />
-      ))}
+      {/* Dev gallery: still a route (linked from the feed in __DEV__ only), never a tab. */}
+      <Tabs.Screen name="card-states" options={{ href: null }} />
     </Tabs>
   </>;
 }
