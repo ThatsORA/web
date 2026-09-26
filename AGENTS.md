@@ -35,12 +35,15 @@ in your PR.
 - **Invariants are hard rules.** Time, privacy, money, Google APIs, the AI
   boundary and keys all have rules, and breaking one fails review.
 
-## Read before coding
+## Where to look
 
-| Page | What's in it |
+Read only the pages and sections your task needs. Don't load the whole
+wiki: it fills your context window with things you won't use.
+
+| Page | Read it when |
 | --- | --- |
-| [`wiki/plan.md`](wiki/plan.md) | Demo script, scope, schema, API contract, pipeline |
-| [`wiki/workflow.md`](wiki/workflow.md) | Session steps, commands, branches and PRs, definition of done |
-| [`wiki/codebase.md`](wiki/codebase.md) | Scaffold map and the lanes table |
-| [`wiki/invariants.md`](wiki/invariants.md) | Hard invariants, pinned versions and gotchas |
-| [`wiki/mobile.md`](wiki/mobile.md) | Expo SDK 57 rules for `apps/mobile/` |
+| [`wiki/plan.md`](wiki/plan.md) | You need the spec. Read only the sections your issue links to. |
+| [`wiki/workflow.md`](wiki/workflow.md) | You start a session, run a command, or open a PR |
+| [`wiki/codebase.md`](wiki/codebase.md) | You need to know what already exists or who owns a path |
+| [`wiki/invariants.md`](wiki/invariants.md) | Your change touches time, privacy, money, Google APIs, Gemini, keys or the DB |
+| [`wiki/mobile.md`](wiki/mobile.md) | You're working in `apps/mobile/` |
