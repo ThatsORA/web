@@ -6,6 +6,7 @@ import { withMatcherMutex, createUserHangout } from "../matching/matcher";
 import { EventCardPayload, EventsListResponse, Id, routes } from "@web/contract";
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
+import { publicUserSelect } from "../auth/helpers";
 import { assembleEventCard } from "./assembleEventCard";
 
 export const eventsRouter = Router();
@@ -49,7 +50,7 @@ eventsRouter.post(routes.events, requireAuth, express.json(), async (req, res) =
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: {
-      participants: { include: { user: { select: { id: true, username: true } } } },
+      participants: { include: { user: { select: publicUserSelect } } },
       options: true,
       votes: { select: { userId: true, optionId: true } },
     },
@@ -73,7 +74,7 @@ eventsRouter.get(routes.events, requireAuth, async (req, res) => {
     },
     orderBy: { startsAt: "desc" },
     include: {
-      participants: { include: { user: { select: { id: true, username: true } } } },
+      participants: { include: { user: { select: publicUserSelect } } },
       options: true,
       votes: { select: { userId: true, optionId: true } },
     },
@@ -89,7 +90,7 @@ eventsRouter.get(routes.event(":id"), requireAuth, async (req, res) => {
   const userId = (req as AuthedRequest).userId;
   const event = await prisma.event.findFirst({
     where: { id: id.data, participants: { some: { userId } } },
-    include: { participants: { include: { user: { select: { id: true, username: true } } } }, options: true, votes: { select: { userId: true, optionId: true } } },
+    include: { participants: { include: { user: { select: publicUserSelect } } }, options: true, votes: { select: { userId: true, optionId: true } } },
   });
   if (!event) return res.status(404).json({ error: "not_found" });
   res.json(EventCardPayload.parse(assembleEventCard(event, userId)));

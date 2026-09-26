@@ -79,7 +79,7 @@ function Header({ card, eyebrow, badge, onBrand }: { card: EventCardPayload; eye
           <Txt variant="headline" accessibilityRole="header">
             {timeLabel(card)}
           </Txt>
-          <Txt variant="small">{card.participants.map((p) => p.username).join(" · ")}</Txt>
+          <Txt variant="small">{card.participants.map((p) => p.display_name ?? p.username).join(" · ")}</Txt>
           {card.match_reason ? <Txt variant="small">{card.match_reason}</Txt> : null}
         </>
       )}
@@ -116,7 +116,7 @@ function OpenCard({ card, actions, busy, notice }: Props) {
       {kind === "chatted" ? (
         <>
           <Badge tone="warning" label="Not enough votes" />
-          <Txt>Everyone’s free, you just need a place. Free: {freePeople(card).map((p) => p.username).join(", ")}</Txt>
+          <Txt>Everyone’s free, you just need a place. Free: {freePeople(card).map((p) => p.display_name ?? p.username).join(", ")}</Txt>
           <Button
             label="Open chat"
             onPress={() =>
@@ -258,7 +258,7 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
         </Txt>
         {travelRows(card).map((r) => (
           <View key={r.id} style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Txt>{r.username}</Txt>
+            <Txt>{r.display_name ?? r.username}</Txt>
             <Txt numeric color="heading">
               {r.minutes === null ? "—" : `${Math.round(r.minutes)} min`}
             </Txt>

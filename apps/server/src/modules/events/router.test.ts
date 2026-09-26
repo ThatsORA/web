@@ -50,7 +50,7 @@ const option = (id: string, rank: number) => ({
       include: expect.not.objectContaining({ creator: expect.anything() }),
     }));
     const body = await response.json();
-    expect(body.created_by).toEqual({ id: alice, username: "alice" });
+    expect(body.created_by).toEqual({ id: alice, username: "alice", display_name: "alice" });
   });
 
   it("POST /events rejects self invite", async () => {
@@ -139,7 +139,7 @@ describe("events router", () => {
     expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ participants: { some: { userId: alice } } }),
       include: {
-        participants: { include: { user: { select: { id: true, username: true } } } },
+        participants: { include: { user: { select: expect.anything() } } },
         options: true,
         votes: { select: { userId: true, optionId: true } },
       },

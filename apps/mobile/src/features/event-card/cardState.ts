@@ -22,12 +22,13 @@ export function detectSwap(prev: EventCardPayload | undefined, next: EventCardPa
 }
 
 /** Per-person travel time to the confirmed venue, in attendee order. */
-export function travelRows(card: EventCardPayload): { id: string; username: string; minutes: number | null }[] {
+export function travelRows(card: EventCardPayload): { id: string; username: string; display_name: string; minutes: number | null }[] {
   const venue = card.outcome?.venue;
   if (!venue) return [];
   return card.outcome!.attendees.map((a) => ({
     id: a.id,
     username: a.username,
+    display_name: a.display_name ?? a.username,
     minutes: venue.travel_minutes[a.id] ?? null,
   }));
 }

@@ -57,8 +57,8 @@ describe("detectSwap", () => {
 describe("travelRows", () => {
   it("lists each attendee's minutes to the venue", () => {
     expect(travelRows(get("Confirmed"))).toEqual([
-      { id: ME.id, username: "presenter", minutes: 9 },
-      { id: expect.any(String), username: "riley", minutes: 14 },
+      { id: ME.id, username: "presenter", display_name: "presenter", minutes: 9 },
+      { id: expect.any(String), username: "riley", display_name: "riley", minutes: 14 },
     ]);
   });
 

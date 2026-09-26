@@ -43,6 +43,10 @@ export const PasswordResetSuccess = z.object({ reset: z.literal(true) });
 export const LoginRequest = z.object({ email: z.string().email(), password: z.string() });
 export const AuthResponse = z.object({ token: z.string(), user_id: Id });
 
+/** How any user appears to others: display_name falls back to username. Never email or close-friend status. */
+export const PublicUser = z.object({ id: Id, username: z.string(), display_name: z.string() });
+export type PublicUser = z.infer<typeof PublicUser>;
+
 export const Me = z.object({
   id: Id,
   username: z.string(),
@@ -233,7 +237,7 @@ export const CreateEventRequest = z.object({
 export type CreateEventRequest = z.infer<typeof CreateEventRequest>;
 
 export const EventCardPayload = z.object({
-  created_by: z.object({ id: Id, username: z.string() }).nullable().optional(),
+  created_by: PublicUser.nullable().optional(),
   id: Id,
   status: EventStatus,
   starts_at: Instant,
@@ -241,7 +245,7 @@ export const EventCardPayload = z.object({
   timezone: IanaTimezone,
   vibe_tag: VibeTag,
   match_reason: z.string().max(90).nullable().optional(),
-  participants: z.array(z.object({ id: Id, username: z.string() })),
+  participants: z.array(PublicUser),
   options: z.array(EventOption), // the 3 choices while voting
   progress: z.object({ responded: z.number().int(), total: z.number().int() }),
   my_status: VoteStatus,
@@ -252,7 +256,7 @@ export const EventCardPayload = z.object({
     .object({
       venue: EventOption.nullable(),
       venue_status: VenueStatus,
-      attendees: z.array(z.object({ id: Id, username: z.string() })),
+      attendees: z.array(PublicUser),
       tallies: z.record(Id, z.number().int()).nullable(),
     })
     .nullable(),
