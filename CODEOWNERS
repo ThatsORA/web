@@ -33,3 +33,11 @@
 /packages/contract/                    @andydo4 @rileyh6 @TheRealOP
 /AGENTS.md                             @andydo4 @rileyh6 @TheRealOP
 /wiki/plan.md                          @andydo4 @rileyh6 @TheRealOP
+
+# Ojas owns auth helpers; Andy owns repo config
+/apps/server/src/lib/auth.ts           @TheRealOP
+/package.json                          @andydo4
+/pnpm-workspace.yaml                   @andydo4
+/tsconfig.base.json                    @andydo4
+/.github/                              @andydo4
+/CODEOWNERS                            @andydo4
