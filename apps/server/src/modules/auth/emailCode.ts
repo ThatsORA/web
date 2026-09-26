@@ -1,6 +1,6 @@
 // Owner: Ojas — 6-digit email codes for verify / reset / change_email (#91; reused by #92 and #96).
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
-import type { EmailCodePurpose } from "@prisma/client";
+import type { EmailCodePurpose, Prisma } from "@prisma/client";
 import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
 
@@ -54,17 +54,18 @@ export async function consumeCode(
   purpose: EmailCodePurpose,
   code: string,
   now = new Date(),
+  client: Pick<Prisma.TransactionClient, "emailCode"> = prisma,
 ): Promise<{ result: CodeResult; newEmail: string | null }> {
-  const row = await prisma.emailCode.findFirst({ where: { userId, purpose } });
+  const row = await client.emailCode.findFirst({ where: { userId, purpose } });
   const result = checkCode(row, code, now);
   if (!row || (result !== "ok" && result !== "wrong")) return { result, newEmail: null };
-  const claimed = await prisma.emailCode.updateMany({
+  const claimed = await client.emailCode.updateMany({
     where: { id: row.id, attempts: { lt: MAX_ATTEMPTS } },
     data: { attempts: { increment: 1 } },
   });
   if (!claimed.count) return { result: "locked", newEmail: null };
   if (result === "wrong") return { result, newEmail: null };
   // deleteMany + count so two parallel correct submissions can't both use it.
-  const used = await prisma.emailCode.deleteMany({ where: { id: row.id } });
+  const used = await client.emailCode.deleteMany({ where: { id: row.id } });
   return used.count ? { result: "ok", newEmail: row.newEmail } : { result: "missing", newEmail: null };
 }

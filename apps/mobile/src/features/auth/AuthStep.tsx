@@ -8,6 +8,7 @@ import { stepEyebrow, type OnboardingStepProps } from "../../lib/onboarding";
 import { session } from "../../lib/secureSession";
 import { Button, Callout, Screen, TextField, Txt } from "../../ui";
 import { authErrorMessage } from "./errors";
+import { PasswordResetStep } from "./PasswordResetStep";
 
 type Mode = "signup" | "login";
 
@@ -25,6 +26,7 @@ function AuthStep({ onDone, initialMode }: OnboardingStepProps & { initialMode: 
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
   const signup = mode === "signup";
   const passwordCheck = signup ? checkPassword(password, { username, email }) : { ok: true as const };
   const strength = !passwordCheck.ok ? "Weak" : Array.from(password).length >= 16 ? "Strong" : "Okay";
@@ -48,6 +50,8 @@ function AuthStep({ onDone, initialMode }: OnboardingStepProps & { initialMode: 
     }
   }
 
+  if (resetting) return <PasswordResetStep onBack={() => { setResetting(false); setPassword(""); setError(null); }} />;
+
   return (
     <Screen
       eyebrow={signup ? stepEyebrow("signup") : undefined}
@@ -56,6 +60,7 @@ function AuthStep({ onDone, initialMode }: OnboardingStepProps & { initialMode: 
       footer={
         <>
           <Button label={signup ? "Create account" : "Log in"} onPress={submit} loading={busy} />
+          {!signup ? <Button label="Forgot password?" variant="ghost" onPress={() => setResetting(true)} disabled={busy} /> : null}
           <Button
             label={signup ? "I already have an account" : "Create an account instead"}
             variant="ghost"

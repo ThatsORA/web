@@ -17,6 +17,7 @@ const memberWhere = (m: Member, w: Record<string, any>) =>
   (w.id === undefined || w.id.in.includes(m.id));
 vi.mock("../../lib/prisma", () => ({
   prisma: {
+    user: { findUnique: async () => ({ passwordChangedAt: null }) },
     friendship: {
       count: async ({ where }: { where: { OR: { userLowId: string; userHighId: string }[] } }) =>
         where.OR.filter((p) => p.userLowId !== X && p.userHighId !== X).length,

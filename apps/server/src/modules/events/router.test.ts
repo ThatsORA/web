@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { EventCardPayload, EventsListResponse } from "@web/contract";
 
 const mocks = vi.hoisted(() => ({ findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() }));
-vi.mock("../../lib/prisma", () => ({ prisma: { event: mocks, friendship: mocks, user: mocks } }));
+vi.mock("../../lib/prisma", () => ({ prisma: { event: mocks, friendship: mocks, user: { findUnique: async () => ({ passwordChangedAt: null }) } } }));
 
 const matcherMocks = vi.hoisted(() => ({
   withMatcherMutex: vi.fn(async (cb) => cb()),

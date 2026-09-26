@@ -4,6 +4,8 @@ export const API_PREFIX = "/api/v1";
 export const routes = {
   signup: "/auth/signup",
   login: "/auth/login",
+  passwordResetRequest: "/auth/password-reset/request",
+  passwordResetConfirm: "/auth/password-reset/confirm",
   me: "/me",
   verifyEmailSend: "/auth/verify-email/send", // 204, or 429 + Retry-After during the 60 s cooldown
   verifyEmail: "/auth/verify-email", // { code } → Me

@@ -6,7 +6,7 @@ import { signToken } from "../../lib/auth";
 
 const mockPrisma = vi.hoisted(() => ({
   user: {
-    findUnique: vi.fn(),
+    findUnique: vi.fn(async () => ({ passwordChangedAt: null })),
   },
   pushToken: {
     upsert: vi.fn(),

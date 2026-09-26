@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({ create: vi.fn(), findUnique: vi.fn(), update: 
 const codes = vi.hoisted(() => ({ rows: [] as Record<string, any>[], sent: [] as string[], sentTo: [] as string[], notices: [] as string[] }));
 vi.mock("../../lib/prisma", () => ({
   prisma: {
-    user: mocks,
+    user: { ...mocks, findUnique: (args: { select?: { passwordChangedAt?: boolean } }) => args.select?.passwordChangedAt ? Promise.resolve({ passwordChangedAt: null }) : mocks.findUnique(args) },
     emailCode: {
       findFirst: async ({ where }: { where: { userId: string } }) => codes.rows.filter((r) => r.userId === where.userId).at(-1) ?? null,
       deleteMany: async ({ where }: { where: { id?: string; userId?: string } }) => {
@@ -36,7 +36,7 @@ import { hashPassword, verifyPassword } from "./passwordHash";
 import { passwordReasons } from "@web/contract";
 let base: string;
 let close: () => void;
-const user: User = { id: "6f48fb35-1518-481d-ab60-cfd2dcc28acf", username: "ojas", email: "ojas@example.com", passwordHash: bcrypt.hashSync("correct-horse", 4), timezone: "America/New_York", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: new Date(), displayName: null, bio: null, usernameChangedAt: null };
+const user: User = { id: "6f48fb35-1518-481d-ab60-cfd2dcc28acf", username: "ojas", email: "ojas@example.com", passwordHash: bcrypt.hashSync("correct-horse", 4), timezone: "America/New_York", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: new Date(), displayName: null, bio: null, usernameChangedAt: null, passwordChangedAt: null };
 beforeAll(async () => {
   const app = express();
   app.use(express.json(), authRouter);
