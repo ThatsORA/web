@@ -46,24 +46,19 @@ eventsRouter.post(routes.events, requireAuth, express.json(), async (req, res) =
     return res.status(422).json({ error: "no_common_time" });
   }
 
-  const [event, caller] = await Promise.all([
-    prisma.event.findUnique({
-      where: { id: eventId },
-      include: {
-        participants: { include: { user: { select: { id: true, username: true } } } },
-        options: true,
-        votes: { select: { userId: true, optionId: true } }
-      }
-    }),
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, username: true }
-    })
-  ]);
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    include: {
+      participants: { include: { user: { select: { id: true, username: true } } } },
+      options: true,
+      creator: { select: { id: true, username: true } },
+      votes: { select: { userId: true, optionId: true } },
+    },
+  });
 
   if (!event) return res.status(500).json({ error: "creation_failed" });
 
-  res.status(201).json(EventCardPayload.parse(assembleEventCard({ ...event, created_by: caller }, userId)));
+  res.status(201).json(EventCardPayload.parse(assembleEventCard(event, userId)));
 });
 
 
