@@ -2,14 +2,20 @@
 // The server joins it to user:{id}; every event:* message just names an event to refetch.
 import { useEffect, useRef } from "react";
 import { io } from "socket.io-client";
-import { API_URL, getToken } from "../../lib/api";
+import { API_URL, useToken } from "../../lib/api";
 import { onAnyEventUpdate, type EventEmitterLike } from "./socketEvents";
 
 /**
  * Calls `onEvent(eventId)` on any event:* message, and `onConnect()` on every (re)connect
  * so the caller can catch up on anything missed while the phone was asleep.
  */
-export function useEventSocket(onEvent: (eventId: string) => void, onConnect?: () => void) {
+export function useEventSocket(
+  onEvent: (eventId: string) => void,
+  onConnect?: () => void,
+  tokenOverride?: string | null,
+) {
+  const currentToken = useToken();
+  const token = tokenOverride !== undefined ? tokenOverride : currentToken;
   const handlers = useRef({ onEvent, onConnect });
 
   useEffect(() => {
@@ -17,7 +23,6 @@ export function useEventSocket(onEvent: (eventId: string) => void, onConnect?: (
   }, [onEvent, onConnect]);
 
   useEffect(() => {
-    const token = getToken();
     if (!token) return;
     const socket = io(API_URL, { auth: { token }, transports: ["websocket"] });
     const off = onAnyEventUpdate(socket as unknown as EventEmitterLike, (id) => handlers.current.onEvent(id));
@@ -28,5 +33,5 @@ export function useEventSocket(onEvent: (eventId: string) => void, onConnect?: (
       socket.off("connect", connected);
       socket.disconnect();
     };
-  }, []);
+  }, [token]);
 }
