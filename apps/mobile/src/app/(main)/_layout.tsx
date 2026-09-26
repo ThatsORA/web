@@ -58,6 +58,8 @@ export default function MainLayout() {
       <Tabs.Screen name="new-hangout" options={{ href: null }} />
       {/* Fallback group chat (#147): opened from a chatted card's "Open chat", never a bottom tab. */}
       <Tabs.Screen name="chat/[eventId]" options={{ href: null }} />
+      {/* Someone's profile (#97): opened via profileHref(id), never a bottom tab. */}
+      <Tabs.Screen name="user/[userId]" options={{ href: null }} />
     </Tabs>
   </>;
 }

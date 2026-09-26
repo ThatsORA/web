@@ -1,5 +1,6 @@
 // Owner: Andy — Primer (violet) components. Light/dark aware via useTheme().
 // Use these + tokens only: no raw hex, px or font names in screens. See wiki/design.md.
+export { Avatar } from "./Avatar";
 export { Badge } from "./Badge";
 export { Button } from "./Button";
 export { Callout } from "./Callout";

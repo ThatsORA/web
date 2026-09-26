@@ -12,3 +12,6 @@ export const NEW_HANGOUT_HREF = "/(main)/new-hangout";
 /** A chatted card's "Open chat" button: the event's fallback group chat. */
 export const CHAT_PATHNAME = "/(main)/chat/[eventId]";
 
+/** Someone's public profile (#97). Friend lists, search, squads and cards link here: router.push(profileHref(id)). */
+export const profileHref = (userId: string) => ({ pathname: "/(main)/user/[userId]", params: { userId } }) as const;
+
