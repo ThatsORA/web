@@ -5,6 +5,8 @@ import { Server } from "socket.io";
 import { userRoom, type ServerToClientEvents } from "@web/contract";
 import { verifyToken } from "../lib/auth";
 
+export { pushVenueChanged } from "./push";
+
 let io: Server<Record<string, never>, ServerToClientEvents> | null = null;
 
 export function attachRealtime(server: HttpServer) {
