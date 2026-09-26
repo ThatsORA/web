@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getToken, setToken } from "./api";
-import { createSession, TOKEN_KEY, type KeyValueStore } from "./session";
+import { createSession, TOKEN_KEY, userIdFromToken, type KeyValueStore } from "./session";
+
+it("uses the JWT subject as the signed-in shell key", () => {
+  const payload = btoa(JSON.stringify({ sub: "user-a" })).replace(/=/g, "");
+  expect(userIdFromToken(`header.${payload}.signature`)).toBe("user-a");
+  expect(userIdFromToken(null)).toBeNull();
+  expect(userIdFromToken("invalid")).toBeNull();
+});
 
 function memoryStore(): KeyValueStore & { data: Map<string, string> } {
   const data = new Map<string, string>();

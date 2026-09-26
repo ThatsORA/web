@@ -10,6 +10,21 @@ export type KeyValueStore = {
 
 export const TOKEN_KEY = "web.auth.token";
 
+/** The server signs JWTs with the user ID in `sub`; this is only a UI key, not an auth check. */
+export function userIdFromToken(token: string | null): string | null {
+  if (!token) return null;
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const decoded: unknown = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "=")));
+    if (typeof decoded !== "object" || decoded === null || !("sub" in decoded)) return null;
+    return typeof decoded.sub === "string" ? decoded.sub : null;
+  } catch {
+    return null;
+  }
+}
+
 export function createSession(store: KeyValueStore) {
   return {
     /** Reads the stored token (if any) into the api client. Call once at startup. */

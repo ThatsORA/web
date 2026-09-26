@@ -31,7 +31,7 @@ export function FindingCard() {
         <ActivityIndicator color={t.colors.primary} />
         <Txt variant="headline">Finding a time…</Txt>
       </View>
-      <Txt variant="small">We'll show a plan here when your close friends are free together.</Txt>
+      <Txt variant="small">We’ll show a plan here when your close friends are free together.</Txt>
     </Card>
   );
 }
@@ -98,7 +98,7 @@ function OpenCard({ card, actions, busy, notice }: Props) {
       {kind === "chatted" ? (
         <>
           <Badge tone="warning" label="Not enough votes" />
-          <Txt>Everyone's free, you just need a place. Free: {freePeople(card).map((p) => p.username).join(", ")}</Txt>
+          <Txt>Everyone’s free, you just need a place. Free: {freePeople(card).map((p) => p.username).join(", ")}</Txt>
           <Button
             label="Plan it yourselves"
             onPress={() => void Share.share({ message: shareMessage(card, freePeople(card)) })}

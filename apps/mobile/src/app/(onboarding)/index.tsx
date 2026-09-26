@@ -20,7 +20,7 @@ export default function Welcome() {
           Web
         </Txt>
         <Txt variant="body" color="onPrimary">
-          Tell us when you're busy and who your close friends are. We'll find the time and the place.
+          Tell us when you’re busy and who your close friends are. We’ll find the time and the place.
         </Txt>
       </View>
       <View style={{ padding: t.spacing.lg }}>

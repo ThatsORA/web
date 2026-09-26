@@ -78,7 +78,8 @@ touches before you write code.
   `GET /events/:id`, so don't add fat payloads.
 - **The matcher runs behind a single in-process mutex.** Don't call the
   pipeline around it.
-- **Expo Go is the target.** Don't add a native module that forces a dev
-  build without asking the team first.
+- **Expo Go is the target.** Import calendar access from
+  `expo-calendar/legacy`; SDK 57's class-based calendar API requires a
+  development build.
 - **Demo config:** `VOTE_TIMEOUT_SEC=90`, `COOLDOWN_HOURS=0`,
   `REPORT_CLOSED_WINDOW_HOURS=168`.
