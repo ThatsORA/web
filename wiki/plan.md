@@ -213,6 +213,7 @@ events
   timezone text                    -- group's shared tz
   venue_place_id, venue_name, venue_lat, venue_lng   -- null until confirmed
   venue_status enum(open, reported_closed) default 'open'
+  venue_snapshot jsonb null        -- full EventOption of the current venue; the swap copies backup_venues[0] here
   backup_venues jsonb default '[]' -- ordered array of EventOption snapshots
   vote_closes_at, created_at, resolved_at
   UNIQUE (group_key) WHERE status IN ('voting','confirmed')   -- raw SQL in migration
@@ -497,7 +498,7 @@ so it never looks broken.
 - **The request** includes `current_place_id`. If that no longer matches
   the event's venue, the server returns 409 with the current event. This
   handles two people tapping at once.
-- **The swap:** the venue becomes `backup_venues[0]`, the list shifts,
+- **The swap:** the venue (including `venue_snapshot`) becomes `backup_venues[0]`, the list shifts,
   and `venue_status` is set back to `open` for the new venue. Then the
   server emits `event:venue_changed`.
 - **No backups left:** the event becomes `chatted`.

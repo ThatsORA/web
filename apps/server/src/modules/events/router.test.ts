@@ -86,6 +86,18 @@ describe("events router", () => {
     expect(body.outcome?.attendees.map((person) => person.id)).toEqual([alice, bob]);
   });
 
+  it("keeps venue facts and travel times after a swap to a backup that was never a vote option", async () => {
+    const backup = {
+      rank: 4, place_id: "place-4", name: "Backup Bistro", lat: 25.76, lng: -80.38,
+      primary_type: "restaurant", price_level: 2, rating: 4.4, user_rating_count: 80,
+      travel_minutes: { [alice]: 14, [bob]: 9 }, max_travel_min: 14, route_score: 15.1,
+      facts_line: "★4.4 · $$ · max 14 min travel", ai_blurb: null,
+    };
+    mocks.findFirst.mockResolvedValueOnce({ ...event(), status: "confirmed", venuePlaceId: "place-4", venueSnapshot: backup });
+    const body = EventCardPayload.parse(await (await get(`/events/${eventId}`)).json());
+    expect(body.outcome?.venue).toMatchObject({ place_id: "place-4", facts_line: backup.facts_line, travel_minutes: backup.travel_minutes });
+  });
+
   it("requires authentication and hides events from nonparticipants", async () => {
     expect((await fetch(`${base}/events`)).status).toBe(401);
     expect((await get("/events/not-a-uuid")).status).toBe(404);
