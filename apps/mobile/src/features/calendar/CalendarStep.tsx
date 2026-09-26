@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { OnboardingStepProps } from "../../lib/onboarding";
+import { stepEyebrow, type OnboardingStepProps } from "../../lib/onboarding";
 import { Button, Callout, Screen } from "../../ui";
 import { createDeviceCalendarSync } from "./device";
 
@@ -20,7 +20,11 @@ export function CalendarStep({ onDone }: OnboardingStepProps) {
     } finally { setLoading(false); }
   }
   return (
-    <Screen title="Connect your calendar" footer={<Button label={count === null ? "Skip for now" : "Continue"} onPress={onDone} disabled={loading} />}>
+    <Screen
+      eyebrow={stepEyebrow("calendar")}
+      title="Connect your calendar"
+      footer={<Button label={count === null ? "Skip for now" : "Continue"} onPress={onDone} disabled={loading} />}
+    >
       <Callout title={count === null ? "Share when you’re busy" : `Synced ${count} busy blocks`}>
         We only sync busy times. Event titles, notes and attendees stay on your device.
       </Callout>
