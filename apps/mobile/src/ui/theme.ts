@@ -104,6 +104,8 @@ export const spacing = { xs: 4, sm: 8, ms: 12, md: 16, lg: 24, xl: 32, xxl: 48 }
 export const radius = { sm: 1, md: 1, pill: 999 } as const;
 /** Minimum touch target (buttons, chips, inputs). */
 export const touch = 44;
+/** Avatar diameters: sm for list rows, md for headers, lg for a profile. */
+export const avatar = { sm: 32, md: touch, lg: 72 } as const;
 /** Font sizes. Prefer the `type` presets below, which set family + line height too. */
 export const font = { small: 12, body: 15, label: 15, heading: 20, title: 28, display: 34 } as const;
 
@@ -145,6 +147,7 @@ export type Theme = {
   fonts: typeof fonts;
   type: typeof type;
   touch: typeof touch;
+  avatar: typeof avatar;
 };
 
 /** Maps the OS setting to a theme. Anything other than "dark" falls back to light. */
@@ -159,6 +162,7 @@ export function themeFor(scheme: string | null | undefined): Theme {
     fonts,
     type,
     touch,
+    avatar,
   };
 }
 

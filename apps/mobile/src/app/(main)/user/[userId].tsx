@@ -76,7 +76,7 @@ function UserProfile({ userId }: { userId: string }) {
       {profile ? (
         <>
           <View style={{ gap: t.spacing.sm }}>
-            <Avatar name={profile.display_name} />
+            <Avatar name={profile.display_name} size="lg" />
             <Txt variant="display" accessibilityRole="header">
               {profile.display_name}
             </Txt>

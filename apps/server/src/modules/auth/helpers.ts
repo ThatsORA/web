@@ -27,7 +27,7 @@ export function toMe(user: User): MeT {
     home_lat: user.homeLat,
     home_lng: user.homeLng,
     travel_mode: user.travelMode as MeT["travel_mode"],
-    email_verified: user.emailVerifiedAt !== null,
+    email_verified: isFindable(user), // true for everyone when verification is off, so the app skips the step
     display_name: user.displayName,
     bio: user.bio,
   };

@@ -1,29 +1,36 @@
-// Owner: Andy — round avatar. Initials on violet for now: the backend has no avatar upload yet (#134).
-// `radius.pill` is allowed here: avatars and status dots are the only round things (wiki/design.md).
+// Owner: Andy — round avatar (#97). Initials on primarySoft until avatar upload exists
+// (#96 shipped without it). radius.pill is allowed here: avatars and dots only.
 import { View } from "react-native";
 import { initials } from "./initials";
 import { Txt } from "./Txt";
 import { useTheme } from "./useTheme";
 
-type Props = { name: string };
+type Props = {
+  /** What others see: display_name ?? username. */
+  name: string;
+  size?: "sm" | "md" | "lg";
+};
 
-export function Avatar({ name }: Props) {
+const TEXT = { sm: "small", md: "label", lg: "section" } as const;
+
+export function Avatar({ name, size = "md" }: Props) {
   const t = useTheme();
-  const size = t.spacing.xxl * 2;
+  const d = t.avatar[size];
   return (
     <View
+      // Decorative: the name is always shown next to it.
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={{
-        width: size,
-        height: size,
+        width: d,
+        height: d,
         borderRadius: t.radius.pill,
-        backgroundColor: t.colors.primary,
+        backgroundColor: t.colors.primarySoft,
         alignItems: "center",
         justifyContent: "center",
       }}
     >
-      <Txt variant="title" color="onPrimary">
+      <Txt variant={TEXT[size]} color="heading">
         {initials(name)}
       </Txt>
     </View>

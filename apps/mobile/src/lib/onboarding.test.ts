@@ -42,7 +42,7 @@ describe("resumeAfterLogin", () => {
     expect(resumeAfterLogin({ home_lat: null, email_verified: true }, 0)).toBe("location");
   });
 
-  it("asks for location first even when close friends already exist", () => {
+  it("asks for location first even when friends already exist", () => {
     expect(resumeAfterLogin({ home_lat: null, email_verified: true }, 2)).toBe("location");
   });
 
@@ -51,11 +51,11 @@ describe("resumeAfterLogin", () => {
     expect(resumeAfterLogin({ home_lat: 28.602, email_verified: false }, 1)).toBe("done");
   });
 
-  it("sends a user with a home but no close friends to the friends step", () => {
+  it("sends a user with a home but no friends or sent requests to the friends step", () => {
     expect(resumeAfterLogin({ home_lat: 28.602, email_verified: true }, 0)).toBe("friends");
   });
 
-  it("finishes (enter main) when home and at least one close friend are set", () => {
+  it("finishes (enter main) when home is set and they have a friend or a sent request", () => {
     expect(resumeAfterLogin({ home_lat: 28.602, email_verified: true }, 1)).toBe("done");
   });
 });

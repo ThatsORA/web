@@ -6,6 +6,9 @@ export const FRIENDS_HREF = "/(main)/friends";
 /** Entry point to Settings from the Hangouts header. */
 export const SETTINGS_HREF = "/(main)/settings";
 
+/** "Edit profile" on the You tab and Settings (#97). */
+export const PROFILE_HREF = "/(main)/profile";
+
 /** The Hangouts feed's "+ New hangout" button. */
 export const NEW_HANGOUT_HREF = "/(main)/new-hangout";
 

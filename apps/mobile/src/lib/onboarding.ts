@@ -32,16 +32,17 @@ export type ResumeStep = "verify-email" | "location" | "friends" | "done";
 
 /**
  * After the auth step or an app launch with a stored token, skip what's already set up.
- * Only location and close friends are required; calendar and favorites are optional and
- * never forced here. A brand-new account (no home yet) starts at "verify-email" (or
+ * Only location and the friends step are required; calendar and favorites are optional and
+ * never forced here. `friendCount` is accepted friends plus my outgoing requests, since a new
+ * user has usually only sent requests (none accepted or starred yet) when they leave the step. A brand-new account (no home yet) starts at "verify-email" (or
  * "location" once verified) and continues the normal sequence from there. A returning
  * account that already has a home is never sent back to verify.
  */
 export function resumeAfterLogin(
   me: Pick<z.infer<typeof Me>, "home_lat" | "email_verified">,
-  closeFriendCount: number,
+  friendCount: number,
 ): ResumeStep {
   if (me.home_lat == null) return me.email_verified ? "location" : "verify-email";
-  if (closeFriendCount === 0) return "friends";
+  if (friendCount === 0) return "friends";
   return "done";
 }

@@ -1,4 +1,4 @@
-import { SocketEvents } from "@web/contract";
+import { FriendSocketEvents, SocketEvents } from "@web/contract";
 import { describe, expect, it } from "vitest";
 import { onAnyEventUpdate, onAnyFriendUpdate, type EventEmitterLike } from "./socketEvents";
 
@@ -38,8 +38,8 @@ describe("onAnyFriendUpdate", () => {
     const events: string[] = [];
     onAnyFriendUpdate(socket, () => changes++);
     onAnyEventUpdate(socket, (id) => events.push(id));
-    emit("friend:request", { event_id: "ignored" });
-    emit("friend:accepted", { event_id: "ignored" });
+    emit(FriendSocketEvents.friendRequest, { event_id: "ignored" });
+    emit(FriendSocketEvents.friendAccepted, { event_id: "ignored" });
     emit(SocketEvents.eventCreated, { event_id: "e1" });
     expect(changes).toBe(2);
     expect(events).toEqual(["e1"]);
@@ -50,7 +50,7 @@ describe("onAnyFriendUpdate", () => {
     let changes = 0;
     const off = onAnyFriendUpdate(socket, () => changes++);
     off();
-    emit("friend:request", { event_id: "ignored" });
+    emit(FriendSocketEvents.friendRequest, { event_id: "ignored" });
     expect(changes).toBe(0);
   });
 });

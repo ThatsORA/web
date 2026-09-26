@@ -1,5 +1,5 @@
 // Owner: Andy — entry: restore the stored token, then resume where the account left off
-// (location, close friends, or (main)), or start onboarding when there's no usable session.
+// (location, friends, or (main)), or start onboarding when there's no usable session.
 import { Redirect, type Href } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";

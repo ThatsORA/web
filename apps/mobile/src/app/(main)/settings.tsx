@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { z } from "zod";
 import { api } from "../../lib/api";
 import { unregisterPushToken } from "../../lib/push";
+import { PROFILE_HREF } from "../../lib/routes";
 import { session } from "../../lib/secureSession";
 import { AvailabilitySettings } from "../../features/calendar";
 import { FavoritesSettings } from "../../features/favorites";
@@ -63,6 +64,7 @@ export default function Settings() {
           <>
             <TextField label="Username" value={me?.username ? `@${me.username}` : ""} editable={false} />
             <TextField label="Email" value={me?.email ?? ""} editable={false} />
+            <Button label="Edit profile" variant="outline" onPress={() => router.push(PROFILE_HREF)} />
           </>
         )}
       </Card>
