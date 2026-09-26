@@ -18,4 +18,5 @@ export const routes = {
   runMatcher: "/internal/run-matcher", // header X-Internal-Secret
   expenses: (id: string) => `/events/${id}/expenses`,
   expenseSplit: (id: string) => `/expense-splits/${id}`,
+  eventMessages: (id: string) => `/events/${id}/messages`,
 } as const;

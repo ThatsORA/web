@@ -184,5 +184,27 @@ export const CreateExpenseRequest = z.object({
 });
 export const PatchExpenseSplitRequest = z.object({ settled: z.boolean() });
 
+// ---------- chat (Ojas) ----------
+export const ChatMessage = z.object({
+  id: Id,
+  event_id: Id,
+  user_id: Id,
+  username: z.string(),
+  body: z.string().min(1).max(1000),
+  created_at: Instant,
+});
+export type ChatMessage = z.infer<typeof ChatMessage>;
+
+export const ChatMessagesResponse = z.object({
+  messages: z.array(ChatMessage),
+  next_cursor: Instant.nullable(),
+});
+export type ChatMessagesResponse = z.infer<typeof ChatMessagesResponse>;
+
+export const SendChatMessageRequest = z.object({
+  body: z.string().min(1).max(1000),
+});
+export type SendChatMessageRequest = z.infer<typeof SendChatMessageRequest>;
+
 // ---------- errors ----------
 export const ApiError = z.object({ error: z.string(), message: z.string().optional() });

@@ -77,6 +77,7 @@ model User {
   expensesPaid             Expense[]
   expenseSplits            ExpenseSplit[]
   googleCalendarConnection GoogleCalendarConnection?
+  chatMessages             ChatMessage[]
 
   @@map("users")
 }
@@ -193,6 +194,7 @@ model Event {
   options      EventOption[]
   votes        Vote[]
   expenses     Expense[]
+  chatMessages ChatMessage[]
 
   @@index([groupKey, status])
   @@index([status, voteClosesAt])
@@ -281,4 +283,18 @@ model ExpenseSplit {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("expense_splits")
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid()) @map("_id")
+  eventId   String   @map("event_id")
+  userId    String   @map("user_id")
+  body      String   @map("body")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, createdAt])
+  @@map("chat_messages")
 }
