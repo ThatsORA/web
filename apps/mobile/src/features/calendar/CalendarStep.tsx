@@ -3,6 +3,8 @@ import { stepEyebrow, type OnboardingStepProps } from "../../lib/onboarding";
 import { Button, Callout, Screen } from "../../ui";
 import { createDeviceCalendarSync } from "./device";
 
+import { GoogleCalendarConnect } from "./GoogleCalendarConnect";
+
 export function CalendarStep({ onDone }: OnboardingStepProps) {
   const [sync] = useState(createDeviceCalendarSync);
   const [loading, setLoading] = useState(false);
@@ -29,7 +31,8 @@ export function CalendarStep({ onDone }: OnboardingStepProps) {
         We only sync busy times. Event titles, notes and attendees stay on your device.
       </Callout>
       {error ? <Callout tone="warning">{error}</Callout> : null}
-      <Button label={count === null ? "Connect calendar" : "Sync again"} onPress={() => { void connect(); }} loading={loading} />
+      <Button label={count === null ? "Connect Apple/Local calendar" : "Sync Apple/Local again"} onPress={() => { void connect(); }} loading={loading} />
+      <GoogleCalendarConnect />
     </Screen>
   );
 }

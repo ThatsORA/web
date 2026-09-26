@@ -23,4 +23,8 @@ export const routes = {
   runMatcher: "/internal/run-matcher", // header X-Internal-Secret
   expenses: (id: string) => `/events/${id}/expenses`,
   expenseSplit: (id: string) => `/expense-splits/${id}`,
+  googleCalendar: "/calendar/google",
+  googleCalendarStart: "/calendar/google/start",
+  googleCalendarCallback: "/calendar/google/callback",
+  googleCalendarSync: "/calendar/google/sync",
 } as const;
