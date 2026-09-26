@@ -41,8 +41,12 @@ export function buildCreateEventRequest(
   });
 }
 
-/** POST /events answers 422 `{ error: "no_common_time" }` when the group has no shared free window. */
-export const isNoCommonTime = (e: unknown) =>
-  e instanceof ApiError &&
-  e.status === 422 &&
-  (e.body as { error?: unknown } | null)?.error === "no_common_time";
+/**
+ * POST /events answers 422 `no_common_time` when the group has no shared free window, and
+ * 422 `no_venues` when someone has no home location or too few places are nearby.
+ */
+export function noMatchReason(e: unknown): "no_common_time" | "no_venues" | null {
+  if (!(e instanceof ApiError) || e.status !== 422) return null;
+  const error = (e.body as { error?: unknown } | null)?.error;
+  return error === "no_common_time" || error === "no_venues" ? error : null;
+}

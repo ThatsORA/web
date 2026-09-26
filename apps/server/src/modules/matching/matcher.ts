@@ -260,7 +260,7 @@ export async function createUserHangout(
   vibeTag?: import("@web/contract").VibeTag,
   earliest?: string,
   latest?: string,
-): Promise<string | null> {
+): Promise<{ eventId: string } | { error: "no_common_time" | "no_venues" }> {
   const memberIds = [...new Set([callerId, ...inviteeIds])].sort();
   const now = new Date();
 
@@ -281,7 +281,7 @@ export async function createUserHangout(
   const usersById = new Map(users.map((user) => [user.id, user]));
   const eventsByParticipant = openEventsByParticipant(openEvents);
 
-  if (users.length !== memberIds.length) return null;
+  if (users.length !== memberIds.length) return { error: "no_common_time" };
 
   const availability = memberIds.map((id) => {
     const user = usersById.get(id)!;
@@ -294,28 +294,34 @@ export async function createUserHangout(
     };
   });
 
+  const earliestMs = earliest ? new Date(earliest).getTime() : -Infinity;
+  const latestMs = latest ? new Date(latest).getTime() : Infinity;
+  // Search far enough to reach `latest` ("next week" ends up to ~8 days out), capped at 14 days.
+  const horizonDays = latest
+    ? Math.min(14, Math.max(env.MATCH_HORIZON_DAYS, (latestMs - now.getTime()) / 86_400_000))
+    : env.MATCH_HORIZON_DAYS;
   const windows = freeWindows(availability, now, {
     busyPaddingMin: env.BUSY_PADDING_MIN,
     minLeadHours: env.MIN_LEAD_HOURS,
-    horizonDays: env.MATCH_HORIZON_DAYS,
+    horizonDays,
   });
 
   let bestSlot = null;
   const timezones = Object.fromEntries(users.map((u) => [u.id, u.timezone]));
 
   for (const window of windows) {
-    if (earliest && window.end < new Date(earliest)) continue;
-    if (latest && window.start > new Date(latest)) continue;
+    const start = new Date(Math.max(window.start.getTime(), earliestMs));
+    const end = new Date(Math.min(window.end.getTime(), latestMs));
+    if (start >= end) continue;
 
-    const slot = classifySlot(window, Object.values(timezones));
-    if (slot && (!vibeTag || slot.vibe_tag === vibeTag)) {
-      if (vibeTag) slot.vibe_tag = vibeTag;
+    const slot = classifySlot({ start, end }, Object.values(timezones), vibeTag);
+    if (slot) {
       bestSlot = slot;
       break;
     }
   }
 
-  if (!bestSlot) return null;
+  if (!bestSlot) return { error: "no_common_time" };
 
   const groupKey = memberIds.join(",");
   const favoritesByUser = new Map(users.map((u) => [u.id, u.favorites]));
@@ -330,14 +336,15 @@ export async function createUserHangout(
     };
   });
 
+  // fetchCandidates returns [] when any member has no home location.
   const rankedVenues = await fetchCandidates(bestSlot, venueMembers);
-  if (rankedVenues.length < 3) return null;
+  if (rankedVenues.length < 3) return { error: "no_venues" };
 
   const group = { memberIds, memberTimezones: timezones, groupKey, sourceGroupId: null };
   const candidate = { group, slot: bestSlot, matchReason: null };
 
   const options = await curateVenues(rankedVenues, curateContext(candidate, favoritesByUser));
-  if (options.length !== 3) return null;
+  if (options.length !== 3) return { error: "no_venues" };
 
   const eventTimezone = timezoneClosestToVenueCentroid(venueMembers, options) ??
     earliestTimezone(bestSlot.start, Object.values(timezones));
@@ -364,6 +371,6 @@ export async function createUserHangout(
     return event.id;
   });
 
-  if (createdId) await openVoting(createdId);
-  return createdId;
+  await openVoting(createdId);
+  return { eventId: createdId };
 }

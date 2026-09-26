@@ -41,11 +41,10 @@ eventsRouter.post(routes.events, requireAuth, express.json(), async (req, res) =
 
   if (!valid) return res.status(400).json({ error: "invalid_invitees" });
 
-  const eventId = await withMatcherMutex(() => createUserHangout(userId, invitee_ids, vibe_tag, earliest, latest));
-
-  if (!eventId) {
-    return res.status(422).json({ error: "no_common_time" });
-  }
+  const result = await withMatcherMutex(() => createUserHangout(userId, invitee_ids, vibe_tag, earliest, latest));
+  // 422 no_common_time: no shared free window. 422 no_venues: missing home location or too few places.
+  if ("error" in result) return res.status(422).json({ error: result.error });
+  const eventId = result.eventId;
 
   const event = await prisma.event.findUnique({
     where: { id: eventId },
