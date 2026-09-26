@@ -220,8 +220,6 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
       setAddingCalendar(false);
     }
   };
-    }
-  };
 
   return (
     <View>
