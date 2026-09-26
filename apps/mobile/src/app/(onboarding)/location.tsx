@@ -4,6 +4,7 @@ import * as Location from "expo-location";
 import { useState } from "react";
 import { api } from "../../lib/api";
 import { roundedHome } from "../../lib/geo";
+import { stepEyebrow } from "../../lib/onboarding";
 import { useOnboardingNav } from "../../lib/useOnboardingNav";
 import { Button, Callout, Screen } from "../../ui";
 
@@ -34,6 +35,7 @@ export default function LocationStep() {
 
   return (
     <Screen
+      eyebrow={stepEyebrow("location")}
       title="Where's home?"
       subtitle="We use your approximate home to pick places that are fair for everyone to get to."
       footer={

@@ -18,3 +18,9 @@ export function nextStep(step: OnboardingStep): OnboardingStep | "done" {
 export function stepProgress(step: OnboardingStep): { current: number; total: number } {
   return { current: ONBOARDING_STEPS.indexOf(step), total: ONBOARDING_STEPS.length - 1 };
 }
+
+/** Screen eyebrow for a step, e.g. "Step 2 of 5" (Txt uppercases it). */
+export function stepEyebrow(step: OnboardingStep): string {
+  const { current, total } = stepProgress(step);
+  return `Step ${current} of ${total}`;
+}

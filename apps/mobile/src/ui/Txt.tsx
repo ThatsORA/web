@@ -6,7 +6,7 @@ import type { Palette } from "./theme";
 import { useTheme } from "./useTheme";
 
 type Props = Omit<TextProps, "children"> & {
-  variant?: "display" | "headline" | "title" | "section" | "stat" | "body" | "label" | "small" | "eyebrow";
+  variant?: "hero" | "display" | "headline" | "title" | "section" | "stat" | "body" | "label" | "small" | "eyebrow";
   color?: keyof Palette;
   /** Tabular numbers for counts, times and countdowns. */
   numeric?: boolean;
@@ -15,7 +15,7 @@ type Props = Omit<TextProps, "children"> & {
 
 export function Txt({ variant = "body", color, numeric, style, children, ...rest }: Props) {
   const t = useTheme();
-  const serif = variant === "display" || variant === "headline";
+  const serif = variant === "hero" || variant === "display" || variant === "headline";
   const fallback: keyof Palette =
     serif || variant === "title" || variant === "section" || variant === "stat" ? "heading" : variant === "small" || variant === "eyebrow" ? "textMuted" : "text";
   const content = variant === "eyebrow" && typeof children === "string" ? children.toUpperCase() : children;

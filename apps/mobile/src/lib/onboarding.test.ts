@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { nextStep, ONBOARDING_STEPS, stepProgress } from "./onboarding";
+import { nextStep, ONBOARDING_STEPS, stepEyebrow, stepProgress } from "./onboarding";
+
+describe("stepEyebrow", () => {
+  it("labels each step for the screen eyebrow", () => {
+    expect(stepEyebrow("signup")).toBe("Step 1 of 5");
+    expect(stepEyebrow("favorites")).toBe("Step 4 of 5");
+  });
+});
 
 describe("nextStep", () => {
   it("follows the demo order: welcome → sign up → location → calendar → favorites → friends → main", () => {

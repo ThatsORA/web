@@ -4,11 +4,11 @@ import { Button } from "./Button";
 import { Callout } from "./Callout";
 import { Screen } from "./Screen";
 
-type Props = OnboardingStepProps & { title: string; owner: string; description: string };
+type Props = OnboardingStepProps & { eyebrow?: string; title: string; owner: string; description: string };
 
-export function StepPlaceholder({ title, owner, description, onDone }: Props) {
+export function StepPlaceholder({ eyebrow, title, owner, description, onDone }: Props) {
   return (
-    <Screen title={title} footer={<Button label="Continue" onPress={onDone} />}>
+    <Screen eyebrow={eyebrow} title={title} footer={<Button label="Continue" onPress={onDone} />}>
       <Callout title={`Placeholder: ${owner}'s step`}>{description}</Callout>
     </Screen>
   );
