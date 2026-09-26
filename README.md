@@ -8,6 +8,8 @@ Built in 36 hours at the FIU hackathon (Google/Waymo Mobility Challenge).
 
 ## Start here
 
+0. **New teammate?** Open your agent in this folder and say: *"I'm
+   <name>. Read wiki/setup.md and set me up."*
 1. **Plan:** [`wiki/plan.md`](wiki/plan.md) is the source of truth: demo
    script, scope, schema, API contract, pipeline and timeline.
 2. **Agent rules:** [`AGENTS.md`](AGENTS.md) holds the principles (YAGNI,
@@ -30,7 +32,7 @@ wiki/               the plan and team docs
 ## Setup
 
 ```bash
-corepack enable                      # gives you pnpm 10
+npm install -g pnpm@10.28.0          # not corepack: it fails on Windows without admin
 pnpm install
 cp .env.example apps/server/.env     # fill in keys + DATABASE_URL
 ```
