@@ -11,6 +11,9 @@ vi.mock("../lib/prisma", () => ({
   prisma: mockPrisma,
 }));
 
+const mockEnv = vi.hoisted(() => ({ DEMO_MODE: false }));
+vi.mock("../env", () => ({ env: mockEnv }));
+
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
@@ -28,6 +31,7 @@ import {
 describe("realtime/push", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockEnv.DEMO_MODE = false;
   });
 
   describe("message formatters (no vote leakage)", () => {
@@ -111,6 +115,13 @@ describe("realtime/push", () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
+    it("never calls Expo in DEMO_MODE", async () => {
+      mockEnv.DEMO_MODE = true;
+      await pushEventCreated(["user-1"], "evt-123");
+      expect(mockPrisma.pushToken.findMany).not.toHaveBeenCalled();
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it("does nothing when no tokens are found in DB", async () => {
       mockPrisma.pushToken.findMany.mockResolvedValueOnce([]);
       await pushEventCreated(["user-1"], "evt-123");
@@ -146,6 +157,7 @@ describe("realtime/push", () => {
       const [url, options] = mockFetch.mock.calls[0]!;
       expect(url).toBe(EXPO_PUSH_URL);
       expect(options.method).toBe("POST");
+      expect(options.signal).toBeInstanceOf(AbortSignal);
       expect(options.headers).toMatchObject({
         "Content-Type": "application/json",
         Accept: "application/json",

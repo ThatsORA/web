@@ -46,14 +46,20 @@ export const PatchMeRequest = z
   })
   .partial();
 
+// Expo's documented token forms; anything else can't be delivered, so reject it at the door.
+export const ExpoPushToken = z
+  .string()
+  .max(512)
+  .regex(/^(?:ExponentPushToken|ExpoPushToken)\[[^\[\]\s]+\]$/);
+
 export const SavePushTokenRequest = z.object({
-  token: z.string().min(1),
+  token: ExpoPushToken,
   platform: z.enum(["ios", "android", "web"]).default("ios"),
 });
 export type SavePushTokenRequest = z.infer<typeof SavePushTokenRequest>;
 
 export const DeletePushTokenRequest = z.object({
-  token: z.string().min(1),
+  token: ExpoPushToken,
 });
 export type DeletePushTokenRequest = z.infer<typeof DeletePushTokenRequest>;
 

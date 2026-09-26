@@ -1,5 +1,6 @@
 // Owner: Riley — Push notifications via Expo Push API.
 // Thin payloads: data: { event_id }. Bodies never leak votes or ghost passes.
+import { env } from "../env";
 import { prisma } from "../lib/prisma";
 
 export const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
@@ -105,6 +106,8 @@ async function sendToUserTokens(
   userIds: string[],
   content: { title: string; body: string; data: { event_id: string } },
 ): Promise<void> {
+  // Demo runs in Expo Go on sockets; never hit the live push service during rehearsals or fixture runs.
+  if (env.DEMO_MODE) return;
   if (!userIds || userIds.length === 0) return;
 
   try {
@@ -134,6 +137,7 @@ async function sendToUserTokens(
         Accept: "application/json",
       },
       body: JSON.stringify(messages),
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!response.ok) {
