@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { unregisterPushToken } from "../../lib/push";
+import { PROFILE_HREF } from "../../lib/routes";
 import { session } from "../../lib/secureSession";
 import { Button, Callout, Card, Screen, Txt } from "../../ui";
 
@@ -57,6 +58,7 @@ export default function You() {
         <Card>
           <Txt variant="eyebrow">Signed in as</Txt>
           <Txt variant="section">@{username}</Txt>
+          <Button label="Edit profile" variant="outline" onPress={() => router.push(PROFILE_HREF)} />
         </Card>
       ) : null}
       {loadError ? (
