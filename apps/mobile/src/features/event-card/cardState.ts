@@ -38,5 +38,8 @@ export const canReportClosed = (card: EventCardPayload) => card.status === "conf
 /** Who a `chatted` card lists as free: the people still in after ghost passes. */
 export const freePeople = (card: EventCardPayload) => card.outcome?.attendees ?? card.participants;
 
+/** The slot is over, so its chat is read-only. The contract has `ends_at`, not an `is_ended` flag. */
+export const hasEnded = (card: Pick<EventCardPayload, "ends_at">, now = Date.now()) => Date.parse(card.ends_at) <= now;
+
 /** The feed's order: soonest first. */
 export const byStart = (a: EventCardPayload, b: EventCardPayload) => Date.parse(a.starts_at) - Date.parse(b.starts_at);

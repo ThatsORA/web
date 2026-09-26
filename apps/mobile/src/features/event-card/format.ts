@@ -51,9 +51,3 @@ export const swapLabel = (venue: Pick<EventOption, "name" | "max_travel_min">) =
 /** Opens the venue in the phone's maps app (Google Maps URLs work on iOS and Android). */
 export const mapsUrl = (venue: Pick<EventOption, "lat" | "lng" | "place_id">) =>
   `https://www.google.com/maps/search/?api=1&query=${venue.lat},${venue.lng}&query_place_id=${encodeURIComponent(venue.place_id)}`;
-
-/** Prefilled share-sheet text for a `chatted` event ("Plan it yourselves"). */
-export function shareMessage(card: EventCardPayload, free: { username: string }[]): string {
-  const names = free.map((p) => p.username).join(", ");
-  return `Web found a time we're all free: ${slotLabel(card)}. Free: ${names}. Where should we go?`;
-}

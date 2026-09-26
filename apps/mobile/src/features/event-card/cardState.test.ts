@@ -1,6 +1,6 @@
 import { EventCardPayload } from "@web/contract";
 import { describe, expect, it } from "vitest";
-import { byStart, canReportClosed, cardKind, detectSwap, freePeople, travelRows } from "./cardState";
+import { byStart, canReportClosed, cardKind, detectSwap, freePeople, hasEnded, travelRows } from "./cardState";
 import { FIXTURES, ME } from "./fixtures";
 
 const get = (label: string) => FIXTURES.find((f) => f.label === label)!.card;
@@ -76,6 +76,12 @@ describe("helpers", () => {
   it("chatted lists the attendees as free, falling back to participants", () => {
     expect(freePeople(get("Chatted")).map((p) => p.username)).toEqual(["presenter", "riley", "ojas"]);
     expect(freePeople(get("Voting")).length).toBe(3);
+  });
+
+  it("an event has ended from its ends_at onwards (chat goes read-only)", () => {
+    const card = { ends_at: "2026-10-01T20:30:00-04:00" };
+    expect(hasEnded(card, Date.parse("2026-10-01T20:29:59-04:00"))).toBe(false);
+    expect(hasEnded(card, Date.parse("2026-10-01T20:30:00-04:00"))).toBe(true);
   });
 
   it("sorts soonest first", () => {
