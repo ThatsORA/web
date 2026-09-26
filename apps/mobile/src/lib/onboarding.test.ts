@@ -3,20 +3,21 @@ import { nextStep, ONBOARDING_STEPS, resumeAfterLogin, stepEyebrow, stepProgress
 
 describe("stepEyebrow", () => {
   it("labels each step for the screen eyebrow", () => {
-    expect(stepEyebrow("signup")).toBe("Step 1 of 5");
-    expect(stepEyebrow("favorites")).toBe("Step 4 of 5");
+    expect(stepEyebrow("signup")).toBe("Step 1 of 6");
+    expect(stepEyebrow("verify-email")).toBe("Step 2 of 6");
+    expect(stepEyebrow("favorites")).toBe("Step 5 of 6");
   });
 });
 
 describe("nextStep", () => {
-  it("follows the demo order: welcome → sign up → location → calendar → favorites → friends → main", () => {
+  it("follows the demo order: welcome → sign up → verify email → location → calendar → favorites → friends → main", () => {
     const visited: string[] = ["welcome"];
     let step = nextStep("welcome");
     while (step !== "done") {
       visited.push(step);
       step = nextStep(step);
     }
-    expect(visited).toEqual(["welcome", "signup", "location", "calendar", "favorites", "friends"]);
+    expect(visited).toEqual(["welcome", "signup", "verify-email", "location", "calendar", "favorites", "friends"]);
   });
 
   it("finishes after close friends", () => {
@@ -26,26 +27,35 @@ describe("nextStep", () => {
 
 describe("stepProgress", () => {
   it("counts every step after welcome", () => {
-    expect(stepProgress("signup")).toEqual({ current: 1, total: 5 });
-    expect(stepProgress("friends")).toEqual({ current: 5, total: 5 });
+    expect(stepProgress("signup")).toEqual({ current: 1, total: 6 });
+    expect(stepProgress("friends")).toEqual({ current: 6, total: 6 });
     expect(stepProgress("friends").total).toBe(ONBOARDING_STEPS.length - 1);
   });
 });
 
 describe("resumeAfterLogin", () => {
-  it("sends a user with no home location to the location step", () => {
-    expect(resumeAfterLogin({ home_lat: null }, 0)).toBe("location");
+  it("sends a just-signed-up account (unverified, no home) to verify its email", () => {
+    expect(resumeAfterLogin({ home_lat: null, email_verified: false }, 0)).toBe("verify-email");
+  });
+
+  it("sends a verified user with no home location to the location step", () => {
+    expect(resumeAfterLogin({ home_lat: null, email_verified: true }, 0)).toBe("location");
   });
 
   it("asks for location first even when close friends already exist", () => {
-    expect(resumeAfterLogin({ home_lat: null }, 2)).toBe("location");
+    expect(resumeAfterLogin({ home_lat: null, email_verified: true }, 2)).toBe("location");
+  });
+
+  it("never sends a returning user with a home back to verify, even if still unverified", () => {
+    expect(resumeAfterLogin({ home_lat: 28.602, email_verified: false }, 0)).toBe("friends");
+    expect(resumeAfterLogin({ home_lat: 28.602, email_verified: false }, 1)).toBe("done");
   });
 
   it("sends a user with a home but no close friends to the friends step", () => {
-    expect(resumeAfterLogin({ home_lat: 28.602 }, 0)).toBe("friends");
+    expect(resumeAfterLogin({ home_lat: 28.602, email_verified: true }, 0)).toBe("friends");
   });
 
   it("finishes (enter main) when home and at least one close friend are set", () => {
-    expect(resumeAfterLogin({ home_lat: 28.602 }, 1)).toBe("done");
+    expect(resumeAfterLogin({ home_lat: 28.602, email_verified: true }, 1)).toBe("done");
   });
 });
