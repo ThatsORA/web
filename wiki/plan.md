@@ -136,8 +136,9 @@ needs a one-line approval from each of the other two.
 - **Server:** Node, Express and TypeScript, with Socket.io. The matcher
   runs in-process on `node-cron`, so there is a single deployable.
 - **Database:** MongoDB Atlas (shared free M0 cluster, AWS us-east-1)
-  through Prisma 6. Server hosting is Railway; Socket.io needs a
-  long-running server, not serverless.
+  through Prisma 6. Server hosting is DigitalOcean App Platform (a
+  long-running web service, not serverless), because Socket.io, the voting sweep and the
+  cron matcher all need a process that stays up.
 - **Monorepo:** pnpm workspaces with `node-linker=hoisted` in `.npmrc` (for
   Metro compatibility).
 
@@ -626,7 +627,7 @@ fallback chat.
 
 - Create the GCP project, enable billing, add a budget alert, and create
   API keys for Places (New) and Routes. Get a Gemini API key.
-- Create the Expo, Railway or Render, and GitHub repo accounts. Push the
+- Create the Expo, DigitalOcean, and GitHub repo accounts. Push the
   context kit.
 - Set up the demo calendar account on phone A, and install Expo Go on all
   three phones.
@@ -638,6 +639,7 @@ fallback chat.
 | 2026-09-26 | **Database: MongoDB Atlas** (Prisma 6, `provider = "mongodb"`). The MongoDB sponsor challenge requires Atlas as the database. No migrations; `db:push` syncs indexes. |
 | 2026-09-26 | **Reach goal: MongoDB Atlas showcase**, either (A) a geospatial venue cache or (B) change streams driving the sockets. Decide at the hour-8 checkpoint; build in hours 20–28. Ranked above expenses. |
 | 2026-09-26 | **Travel mode: DRIVE** (`routingPreference` TRAFFIC_AWARE). Matches the Waymo/autonomous-ride framing. |
+| 2026-09-26 | **Hosting: DigitalOcean App Platform** instead of Railway. Same shape as Railway: GitHub auto-deploy and a long-running process for Socket.io. |
 | 2026-09-26 | **Demo location: around FIU's Modesto A. Maidique Campus (Miami).** It's the hackathon venue, so the presenter's live device location is on campus. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)

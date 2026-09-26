@@ -82,5 +82,6 @@ unblock yourself.
 - **Database is MongoDB Atlas** (a shared cluster). There are no
   migrations. Only Ojas's agent runs `pnpm --filter @web/server db:push`,
   and only on a schema issue. Everyone else only runs `prisma generate`.
-  (The Railway `start` script also runs `prisma db push` on each deploy,
-  so a merged schema change reaches Atlas automatically.)
+  (The server's `start` script, which DigitalOcean App Platform runs on
+  each deploy, also runs `prisma db push`, so a merged schema change
+  reaches Atlas automatically.)
