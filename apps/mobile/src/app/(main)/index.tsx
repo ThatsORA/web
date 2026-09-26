@@ -1,20 +1,37 @@
 // Owner: Andy — event feed; renders the event card in every state.
-import { Link, router } from "expo-router";
+import { Link, router, useLocalSearchParams } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { Pressable, RefreshControl } from "react-native";
+import { useEffect, useRef } from "react";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { EmptyFeedCard, EventCard, FindingCard, useEvents } from "../../features/event-card";
 import { useFeedEmptyState } from "../../lib/matcherTrigger";
 import { FRIENDS_HREF, NEW_HANGOUT_HREF, SETTINGS_HREF } from "../../lib/routes";
 import { Button, Callout, Screen, Txt, useTheme } from "../../ui";
 
+/** A tapped push opens the feed with `?event=<id>` (#79): scroll to that card once it has laid out, then drop the param. */
+function scrollToCard(scroll: ScrollView | null, y: number | undefined) {
+  if (!scroll || y === undefined) return;
+  scroll.scrollTo({ y, animated: true });
+  router.setParams({ event: undefined });
+}
+
 export default function Home() {
   const t = useTheme();
   const { cards, swapped, busy, notice, loaded, error, refreshing, reload, actionsFor } = useEvents();
   const feedState = useFeedEmptyState(cards.length);
+  const { event } = useLocalSearchParams<{ event?: string }>();
+  const scrollRef = useRef<ScrollView>(null);
+  const cardY = useRef<Record<string, number>>({});
+
+  // The card may already be on screen (warm app); otherwise its onLayout below scrolls.
+  useEffect(() => {
+    if (event) scrollToCard(scrollRef.current, cardY.current[event]);
+  }, [event]);
 
   return (
     <Screen
       title="Hangouts"
+      scrollRef={scrollRef}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -54,14 +71,21 @@ export default function Home() {
       {loaded && feedState === "finding" ? <FindingCard /> : null}
       {loaded && feedState === "empty" ? <EmptyFeedCard onAddFriends={() => router.push(FRIENDS_HREF)} /> : null}
       {cards.map((card) => (
-        <EventCard
+        <View
           key={card.id}
-          card={card}
-          actions={actionsFor(card)}
-          swapped={swapped[card.id]}
-          busy={busy[card.id]}
-          notice={notice[card.id]}
-        />
+          onLayout={(e) => {
+            cardY.current[card.id] = e.nativeEvent.layout.y;
+            if (card.id === event) scrollToCard(scrollRef.current, e.nativeEvent.layout.y);
+          }}
+        >
+          <EventCard
+            card={card}
+            actions={actionsFor(card)}
+            swapped={swapped[card.id]}
+            busy={busy[card.id]}
+            notice={notice[card.id]}
+          />
+        </View>
       ))}
       {__DEV__ ? (
         <Link href="/(main)/card-states">

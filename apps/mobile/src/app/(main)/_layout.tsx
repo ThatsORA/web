@@ -7,6 +7,7 @@ import { CalendarForegroundSync } from "../../features/calendar";
 import { useSessionSocket } from "../../features/event-card";
 import { getToken } from "../../lib/api";
 import { userIdFromToken } from "../../lib/session";
+import { usePushNotifications } from "../../lib/usePushNotifications";
 import { Txt, useTheme } from "../../ui";
 
 // `name` is the route file in this folder; other lanes link to these (e.g. /(main)/friends). First = initial tab.
@@ -21,6 +22,7 @@ const TABS: { name: string; title: string; icon: SymbolViewProps["name"] }[] = [
 export default function MainLayout() {
   const t = useTheme();
   useSessionSocket(); // the app's one socket lives here so every tab (Hangouts, Friends) can listen
+  usePushNotifications(); // only signed-in, onboarded users reach (main), so the prompt never comes at first launch
   const userId = userIdFromToken(getToken());
   return <>
     {userId ? <CalendarForegroundSync key={userId} /> : null}
