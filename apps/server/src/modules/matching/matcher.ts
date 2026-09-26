@@ -4,7 +4,7 @@
 import type { CurateContext, EventOption, RankedVenue } from "@web/contract";
 import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
-import { curateVenues } from "../intelligence/curateVenues";
+import { curateVenues, factsLine } from "../intelligence/curateVenues";
 import { openVoting } from "../voting/lifecycle";
 import { candidateGroups, selectCandidates, type GroupSlot } from "./candidates";
 import { classifySlot, formatTimeHHMM, freeWindows, getLocalParts } from "./timeMath";
@@ -18,6 +18,8 @@ const STUB_VENUES = [
   { place_id: "stub-fiu-campus-bistro", name: "Campus Bistro", lat: 25.756, lng: -80.376, primary_type: "restaurant", price_level: 2, rating: 4.5, user_rating_count: 180, minutes: [8, 11, 14] },
   { place_id: "stub-sweetwater-kitchen", name: "Sweetwater Kitchen", lat: 25.763, lng: -80.373, primary_type: "restaurant", price_level: 2, rating: 4.6, user_rating_count: 240, minutes: [10, 12, 15] },
   { place_id: "stub-fiu-grill", name: "FIU Grill", lat: 25.754, lng: -80.38, primary_type: "restaurant", price_level: 2, rating: 4.4, user_rating_count: 130, minutes: [9, 13, 16] },
+  { place_id: "stub-sweetwater-bistro", name: "Sweetwater Bistro", lat: 25.768, lng: -80.367, primary_type: "restaurant", price_level: 2, rating: 4.3, user_rating_count: 115, minutes: [12, 16, 18] },
+  { place_id: "stub-campus-table", name: "Campus Table", lat: 25.749, lng: -80.385, primary_type: "restaurant", price_level: 2, rating: 4.2, user_rating_count: 95, minutes: [14, 17, 20] },
 ] as const;
 
 /** Temporary FIU venues used until the live Places/Routes issue lands. */
@@ -42,6 +44,25 @@ export function stubRankedVenues(memberIds: readonly string[]): RankedVenue[] {
       route_score: max_travel_min + 0.1 * minutes.reduce((sum, minute) => sum + minute, 0),
     };
   });
+}
+
+/** EventOption snapshots for top-five venues that were not selected for voting. */
+export function unusedVenueSnapshots(
+  venues: readonly RankedVenue[],
+  options: readonly Pick<EventOption, "place_id">[],
+): EventOption[] {
+  const selectedPlaceIds = new Set(options.map((option) => option.place_id));
+  return [...venues]
+    .sort((a, b) => a.route_score - b.route_score || a.place_id.localeCompare(b.place_id))
+    .slice(0, 5)
+    .map((venue, index) => ({ venue, rank: index + 1 }))
+    .filter(({ venue }) => !selectedPlaceIds.has(venue.place_id))
+    .map(({ venue, rank }) => ({
+      ...venue,
+      rank,
+      facts_line: factsLine(venue),
+      ai_blurb: null,
+    }));
 }
 
 function curateContext(
@@ -121,8 +142,9 @@ export async function runPipeline(now = new Date()): Promise<void> {
 
   const selected = selectCandidates(groupSlots, friendships, events, now, env.COOLDOWN_HOURS);
   for (const candidate of selected) {
+    const rankedVenues = stubRankedVenues(candidate.group.memberIds);
     const options = await curateVenues(
-      stubRankedVenues(candidate.group.memberIds),
+      rankedVenues,
       curateContext(candidate, favoritesByUser),
     );
     if (options.length !== 3) throw new Error(`Venue curation returned ${options.length} options; expected 3`);
@@ -142,7 +164,7 @@ export async function runPipeline(now = new Date()): Promise<void> {
           endsAt: candidate.slot.end,
           vibeTag: candidate.slot.vibe_tag,
           timezone: candidate.group.timezone,
-          backupVenues: [],
+          backupVenues: unusedVenueSnapshots(rankedVenues, options),
           voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
           participants: {
             create: candidate.group.memberIds.map((userId) => ({ userId, voteStatus: "invited" })),

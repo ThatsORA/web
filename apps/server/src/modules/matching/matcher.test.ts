@@ -22,11 +22,14 @@ vi.mock("../../lib/prisma", () => ({
     $transaction: mocks.transaction,
   },
 }));
-vi.mock("../intelligence/curateVenues", () => ({ curateVenues: mocks.curateVenues }));
+vi.mock("../intelligence/curateVenues", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../intelligence/curateVenues")>(),
+  curateVenues: mocks.curateVenues,
+}));
 vi.mock("../voting/lifecycle", () => ({ openVoting: mocks.openVoting }));
 
 import { env } from "../../env";
-import { runPipeline, stubRankedVenues, triggerMatcher } from "./matcher";
+import { runPipeline, stubRankedVenues, triggerMatcher, unusedVenueSnapshots } from "./matcher";
 
 const NOW = new Date("2026-09-26T12:00:00Z");
 const IDS = [
@@ -78,7 +81,7 @@ function resetData() {
   mocks.transaction.mockImplementation((callback) => callback({
     event: { findFirst: mocks.eventFindFirst, create: mocks.eventCreate },
   }));
-  mocks.curateVenues.mockImplementation(async (venues: RankedVenue[]) => venues.map((venue, index: number) => ({
+  mocks.curateVenues.mockImplementation(async (venues: RankedVenue[]) => venues.slice(0, 3).map((venue, index: number) => ({
     ...venue,
     rank: index + 1,
     facts_line: `max ${venue.max_travel_min} min travel`,
@@ -93,9 +96,9 @@ beforeEach(() => {
 });
 
 describe("stub venues", () => {
-  it("builds three deterministic RankedVenue values for every member", () => {
+  it("builds five deterministic RankedVenue values for every member", () => {
     const venues = stubRankedVenues(IDS);
-    expect(venues).toHaveLength(3);
+    expect(venues).toHaveLength(5);
     for (const venue of venues) {
       expect(Object.keys(venue.travel_minutes)).toEqual(IDS);
       expect(venue.max_travel_min).toBe(Math.max(...Object.values(venue.travel_minutes)));
@@ -103,6 +106,22 @@ describe("stub venues", () => {
         venue.max_travel_min + 0.1 * Object.values(venue.travel_minutes).reduce((sum, value) => sum + value, 0),
       );
     }
+  });
+
+  it("snapshots unselected venues in route order with their top-five ranks", () => {
+    const venues = stubRankedVenues(IDS);
+    const options = [venues[3]!, venues[0]!, venues[4]!];
+    const snapshots = unusedVenueSnapshots(venues, options);
+
+    expect(snapshots.map((venue) => ({ place_id: venue.place_id, rank: venue.rank }))).toEqual([
+      { place_id: "stub-sweetwater-kitchen", rank: 2 },
+      { place_id: "stub-fiu-grill", rank: 3 },
+    ]);
+    expect(snapshots.every((venue) => venue.ai_blurb === null && venue.id === undefined)).toBe(true);
+    expect(snapshots.map((venue) => venue.facts_line)).toEqual([
+      "★4.6 · $$ · max 15 min travel",
+      "★4.4 · $$ · max 16 min travel",
+    ]);
   });
 });
 
@@ -138,9 +157,23 @@ describe("matcher pipeline", () => {
       endsAt: new Date("2026-10-02T00:30:00Z"),
       vibeTag: "dinner",
       timezone: "America/New_York",
-      backupVenues: [],
       voteClosesAt: new Date(NOW.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
     });
+    expect(create.data.backupVenues).toEqual([
+      expect.objectContaining({
+        place_id: "stub-sweetwater-bistro",
+        rank: 4,
+        ai_blurb: null,
+        facts_line: "★4.3 · $$ · max 18 min travel",
+      }),
+      expect.objectContaining({
+        place_id: "stub-campus-table",
+        rank: 5,
+        ai_blurb: null,
+        facts_line: "★4.2 · $$ · max 20 min travel",
+      }),
+    ]);
+    expect(create.data.backupVenues.every((venue: { id?: string }) => venue.id === undefined)).toBe(true);
     expect(create.data.participants.create).toEqual(
       IDS.map((userId) => ({ userId, voteStatus: "invited" })),
     );
