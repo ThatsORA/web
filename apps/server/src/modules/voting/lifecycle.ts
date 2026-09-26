@@ -98,9 +98,9 @@ export async function sweepVoting(now = new Date()): Promise<void> {
     where: { status: "voting", voteClosesAt: { lte: now } },
     select: { id: true },
   });
-  for (const { id } of due) {
-    await closeVoting(id).catch((e: unknown) => console.error("closeVoting", id, e));
-  }
+  await Promise.all(
+    due.map(({ id }) => closeVoting(id).catch((e: unknown) => console.error("closeVoting", id, e))),
+  );
 
   const ended = await prisma.event.findMany({
     where: { status: "confirmed", endsAt: { lte: now } },
