@@ -2,10 +2,11 @@
 // Styled per wiki/design.md "The event card": Primer components + tokens only.
 import type { EventCardPayload, EventOption } from "@web/contract";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActionSheetIOS, ActivityIndicator, Linking, Platform, Share, View } from "react-native";
 import { Badge, Button, Callout, Card, Txt, useTheme } from "../../ui";
 import { ExpenseForm } from "../expenses";
+import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calendarSync";
 import { canReportClosed, cardKind, freePeople, travelRows } from "./cardState";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
 import { progressLabel, shareMessage, swapLabel, timeLabel, vibeLabel } from "./format";
@@ -160,8 +161,21 @@ function OptionRow({ option, mine, disabled, onVote }: { option: EventOption; mi
 function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & { venue: EventOption }) {
   const t = useTheme();
   const [showExpense, setShowExpense] = useState(false);
+  const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
+  const [calendarNotice, setCalendarNotice] = useState<string | null>(null);
+  const [addingCalendar, setAddingCalendar] = useState(false);
   const status = card.status === "completed" ? "Done" : "Confirmed";
   const attendees = card.outcome?.attendees ?? [];
+
+  useEffect(() => {
+    if (swapped) {
+      void syncSwappedEventToCalendar(card).then((res) => {
+        if (res?.success) {
+          setCalendarMessage(res.message);
+        }
+      });
+    }
+  }, [swapped, card]);
 
   const handleGetDirections = () => {
     const venueLoc = {
@@ -187,6 +201,25 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
     } else {
       const url = directionsUrl(venueLoc, Platform.OS);
       void Linking.openURL(url);
+    }
+  };
+
+  const handleAddToCalendar = async () => {
+    setAddingCalendar(true);
+    setCalendarNotice(null);
+    try {
+      const res = await addConfirmedEventToCalendar(card);
+      if (res.success) {
+        setCalendarMessage(res.message);
+      } else {
+        setCalendarNotice(res.message);
+      }
+    } catch (err: any) {
+      setCalendarNotice(err?.message || "Failed to add to calendar");
+    } finally {
+      setAddingCalendar(false);
+    }
+  };
     }
   };
 
@@ -224,6 +257,14 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
           </View>
         ))}
         <Button label="Get directions" variant="outline" onPress={handleGetDirections} />
+        <Button
+          label={calendarMessage || "Add to calendar"}
+          variant="outline"
+          onPress={handleAddToCalendar}
+          loading={addingCalendar}
+          disabled={busy}
+        />
+        {calendarNotice ? <Callout tone="warning">{calendarNotice}</Callout> : null}
         {canReportClosed(card) ? (
           <Button label="It's closed" variant="outline" onPress={actions.reportClosed} loading={busy} />
         ) : null}
