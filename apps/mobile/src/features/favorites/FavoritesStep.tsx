@@ -8,24 +8,26 @@ import { stepEyebrow, type OnboardingStepProps } from "../../lib/onboarding";
 import { Button, Callout, Chip, Screen, useTheme } from "../../ui";
 import { FAVORITE_CATEGORIES, toggleCategory } from "./categories";
 
-// The contract defines no PUT /favorites response body, so accept anything on success.
+// The server replies `{ categories }`, but the contract defines no PUT /favorites response
+// schema, and nothing here reads it, so accept anything on success.
 const PutFavoritesResponse = z.unknown();
 
 export function FavoritesStep({ onDone }: OnboardingStepProps) {
   const t = useTheme();
   const [selected, setSelected] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
 
   async function save() {
     setSaving(true);
-    setError(null);
+    setFailed(false);
     try {
       const body = PutFavoritesRequest.parse({ categories: selected });
       await api(routes.favorites, PutFavoritesResponse, { method: "PUT", body });
       onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      console.warn("PUT /favorites failed", e);
+      setFailed(true);
     } finally {
       setSaving(false);
     }
@@ -39,7 +41,7 @@ export function FavoritesStep({ onDone }: OnboardingStepProps) {
       footer={
         <>
           <Button label="Continue" onPress={save} loading={saving} disabled={selected.length === 0} />
-          {error ? <Button label="Skip for now" variant="ghost" onPress={onDone} /> : null}
+          {failed ? <Button label="Skip for now" variant="ghost" onPress={onDone} /> : null}
         </>
       }
     >
@@ -53,9 +55,9 @@ export function FavoritesStep({ onDone }: OnboardingStepProps) {
           />
         ))}
       </View>
-      {error ? (
+      {failed ? (
         <Callout tone="danger" title="Couldn't save favorites">
-          {error}
+          Check your connection and tap Continue again, or skip for now.
         </Callout>
       ) : null}
     </Screen>
