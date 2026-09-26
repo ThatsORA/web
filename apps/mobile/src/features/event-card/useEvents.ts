@@ -45,7 +45,7 @@ export function useEvents() {
   }, [refetch]);
 
   useEffect(() => {
-    void loadAll();
+    void Promise.resolve().then(loadAll);
   }, [loadAll]);
 
   useEventSocket((id) => void refetch(id).catch(() => {}), () => void loadAll());

@@ -130,9 +130,8 @@ needs a one-line approval from each of the other two.
 
 ## Stack & Repo Layout
 
-- **Mobile:** React Native with Expo and Expo Router. Use Expo Go unless a
-  module forces a dev build (`expo-calendar` and `expo-location` both work
-  in Expo Go).
+- **Mobile:** React Native with Expo and Expo Router. Use development builds
+  on the demo phones; SDK 57 `expo-calendar` is unsupported in Expo Go.
 - **Server:** Node, Express and TypeScript, with Socket.io. The matcher
   runs in-process on `node-cron`, so there is a single deployable.
 - **Database:** MongoDB Atlas (shared free M0 cluster, AWS us-east-1)

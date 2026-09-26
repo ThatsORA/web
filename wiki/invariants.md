@@ -78,7 +78,7 @@ touches before you write code.
   `GET /events/:id`, so don't add fat payloads.
 - **The matcher runs behind a single in-process mutex.** Don't call the
   pipeline around it.
-- **Expo Go is the target.** Don't add a native module that forces a dev
-  build without asking the team first.
+- **Development builds are the target.** SDK 57 `expo-calendar` requires one;
+  install the development client on each demo phone.
 - **Demo config:** `VOTE_TIMEOUT_SEC=90`, `COOLDOWN_HOURS=0`,
   `REPORT_CLOSED_WINDOW_HOURS=168`.

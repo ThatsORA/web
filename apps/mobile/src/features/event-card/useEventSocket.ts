@@ -11,7 +11,10 @@ import { onAnyEventUpdate, type EventEmitterLike } from "./socketEvents";
  */
 export function useEventSocket(onEvent: (eventId: string) => void, onConnect?: () => void) {
   const handlers = useRef({ onEvent, onConnect });
-  handlers.current = { onEvent, onConnect };
+
+  useEffect(() => {
+    handlers.current = { onEvent, onConnect };
+  }, [onEvent, onConnect]);
 
   useEffect(() => {
     const token = getToken();
