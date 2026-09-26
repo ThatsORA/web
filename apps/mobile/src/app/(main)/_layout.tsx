@@ -4,6 +4,7 @@
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import { Tabs } from "expo-router/js-tabs";
 import { CalendarForegroundSync } from "../../features/calendar";
+import { useSessionSocket } from "../../features/event-card";
 import { getToken } from "../../lib/api";
 import { userIdFromToken } from "../../lib/session";
 import { Txt, useTheme } from "../../ui";
@@ -19,6 +20,7 @@ const TABS: { name: string; title: string; icon: SymbolViewProps["name"] }[] = [
 
 export default function MainLayout() {
   const t = useTheme();
+  useSessionSocket(); // the app's one socket lives here so every tab (Hangouts, Friends) can listen
   const userId = userIdFromToken(getToken());
   return <>
     {userId ? <CalendarForegroundSync key={userId} /> : null}
