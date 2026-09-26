@@ -1,5 +1,5 @@
 // Owner: Ojas — signup/login/profile. Plan: "API Contract v2".
-import { Router } from "express";
+import { Router, type Response } from "express";
 import {
   ApiError,
   AuthResponse,
@@ -16,6 +16,7 @@ import {
   routes,
 } from "@web/contract";
 import { requireAuth, signToken, type AuthedRequest } from "../../lib/auth";
+import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
 import { sendCodeEmail, sendEmail } from "./email";
 import { consumeCode, issueCode } from "./emailCode";
@@ -29,6 +30,9 @@ const DUMMY_HASH = hashPassword("not-a-real-password");
 
 export const authRouter = Router();
 authRouter.use(passwordResetRouter);
+
+const emailUnavailable = (res: Response) =>
+  res.status(503).json(ApiError.parse({ error: "email_unavailable" }));
 
 authRouter.post(routes.signup, async (req, res) => {
   const parsed = SignupRequest.safeParse(req.body);
@@ -44,9 +48,18 @@ authRouter.post(routes.signup, async (req, res) => {
       // Explicit null = unverified. Accounts made outside sign-up lack the field and are backfilled as verified.
       data: { email, username, timezone, passwordHash: await hashPassword(password), emailVerifiedAt: null },
     });
-    void issueCode(user.id, "verify")
-      .then((issued) => ("code" in issued ? sendCodeEmail(user.email, issued.code) : undefined))
-      .catch((e: unknown) => console.error("signup verify email", e)); // they can resend from the app
+    if (env.EMAIL_VERIFICATION_REQUIRED) {
+      const issued = await issueCode(user.id, "verify");
+      if ("code" in issued) {
+        try {
+          await sendCodeEmail(user.email, issued.code);
+        } catch {
+          // The account has not been returned to the client, so remove it and let signup retry cleanly.
+          await prisma.user.delete({ where: { id: user.id } });
+          return emailUnavailable(res);
+        }
+      }
+    }
     return res.json(AuthResponse.parse({ token: signToken(user.id), user_id: user.id }));
   } catch (err) {
     if (isUniqueViolation(err)) return res.status(409).json({ error: "email_or_username_taken" });
@@ -79,7 +92,13 @@ authRouter.post(routes.verifyEmailSend, requireAuth, async (req, res) => {
   if ("retryAfterMs" in issued) {
     return res.status(429).set("Retry-After", String(Math.ceil(issued.retryAfterMs / 1000))).json({ error: "cooldown" });
   }
-  await sendCodeEmail(user.email, issued.code);
+  try {
+    await sendCodeEmail(user.email, issued.code);
+  } catch {
+    // Failed deliveries must not start the resend cooldown.
+    await prisma.emailCode.deleteMany({ where: { userId: user.id, purpose: "verify" } });
+    return emailUnavailable(res);
+  }
   return res.status(204).end();
 });
 

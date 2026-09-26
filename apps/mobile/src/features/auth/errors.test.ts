@@ -8,6 +8,7 @@ describe("authErrorMessage", () => {
     expect(authErrorMessage(400, "login")).toMatch(/email or username/);
     expect(authErrorMessage(400, "signup")).toMatch(/10–128 characters/);
     expect(authErrorMessage(429, "login")).toMatch(/Wait 15 minutes/);
+    expect(authErrorMessage(503, "signup", "email_unavailable")).toMatch(/verification email/);
     expect(authErrorMessage(null, "login")).toMatch(/server/);
   });
 });
@@ -18,6 +19,7 @@ describe("verifyErrorMessage", () => {
     expect(verifyErrorMessage(400, "code_expired")).toMatch(/new one/);
     expect(verifyErrorMessage(429)).toMatch(/Wait a minute/);
     expect(verifyErrorMessage(400)).toMatch(/6-digit/);
+    expect(verifyErrorMessage(503, "email_unavailable")).toMatch(/send an email/);
     expect(verifyErrorMessage(null)).toMatch(/server/);
   });
 });
