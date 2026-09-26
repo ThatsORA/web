@@ -188,8 +188,13 @@ users
   created_at
 
 busy_blocks
-  id, user_id fk, starts_at, ends_at, source ('device_calendar'|'seed'), synced_at
+  id, user_id fk, starts_at, ends_at, source ('device_calendar'|'google_calendar'|'seed'), synced_at
   index (user_id, starts_at)
+
+google_calendar_connections
+  id, user_id fk unique (cascade delete), refresh_token_enc text (AES-256-GCM ciphertext only),
+  scopes text[], status enum(active, revoked, error) default 'active',
+  connected_at default now(), last_synced_at null, last_error text null
 
 friendships                -- exactly one row per pair
   id, user_low_id, user_high_id          -- CHECK user_low_id < user_high_id, unique pair
@@ -216,6 +221,7 @@ events
   venue_snapshot jsonb null        -- full EventOption of the current venue; the swap copies backup_venues[0] here
   backup_venues jsonb default '[]' -- ordered array of EventOption snapshots
   vote_closes_at, created_at, resolved_at
+  match_reason text null          -- one-line group/time explanation; null for deterministic fallback
   UNIQUE (group_key) WHERE status IN ('voting','confirmed')   -- raw SQL in migration
 
 event_participants
