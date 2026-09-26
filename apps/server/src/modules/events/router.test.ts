@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { EventCardPayload, EventsListResponse } from "@web/contract";
 
 const mocks = vi.hoisted(() => ({ findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() }));
-vi.mock("../../lib/prisma", () => ({ prisma: { event: mocks, friendship: mocks } }));
+vi.mock("../../lib/prisma", () => ({ prisma: { event: mocks, friendship: mocks, user: mocks } }));
 
 const matcherMocks = vi.hoisted(() => ({
   withMatcherMutex: vi.fn(async (cb) => cb()),
@@ -35,7 +35,7 @@ const option = (id: string, rank: number) => ({
     // caller is alice, invite bob
     mocks.findMany.mockResolvedValueOnce([{ userLowId: alice, userHighId: bob, lowAddedHigh: true, highAddedLow: false }]);
     matcherMocks.createUserHangout.mockResolvedValueOnce(eventId);
-    mocks.findUnique = vi.fn().mockResolvedValueOnce(event());
+    mocks.findUnique.mockResolvedValueOnce(event()).mockResolvedValueOnce({ id: alice, username: "alice" });
 
     const response = await fetch(`${base}/events`, {
       method: "POST",

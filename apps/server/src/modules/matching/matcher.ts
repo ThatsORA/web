@@ -345,7 +345,6 @@ export async function createUserHangout(
     const event = await tx.event.create({
       data: {
         groupKey,
-        createdById: callerId,
         status: "voting",
         startsAt: bestSlot.start,
         endsAt: bestSlot.end,
