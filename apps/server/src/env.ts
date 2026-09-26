@@ -18,8 +18,8 @@ const Env = z.object({
   BUSY_PADDING_MIN: z.coerce.number().default(15),
   GEMINI_TIMEOUT_MS: z.coerce.number().default(8000),
   REPORT_CLOSED_WINDOW_HOURS: z.coerce.number().default(24),
-  EMAIL_API_KEY: z.string().default(""), // Resend; empty = codes are logged instead of sent
-  EMAIL_FROM: z.string().default("Web <onboarding@resend.dev>"),
+  EMAIL_API_KEY: z.string().default(""), // Resend; required when email verification is enabled
+  EMAIL_FROM: z.string().default(""), // Must use a sender allowed by the configured Resend account
   EMAIL_VERIFICATION_REQUIRED: z
     .string()
     .default("true")

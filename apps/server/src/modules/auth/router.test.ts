@@ -3,7 +3,8 @@ import bcrypt from "bcryptjs";
 import express from "express";
 import { Prisma, type User } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ create: vi.fn(), findUnique: vi.fn(), update: vi.fn() }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), delete: vi.fn(), findUnique: vi.fn(), update: vi.fn() }));
+const emailMocks = vi.hoisted(() => ({ sendCodeEmail: vi.fn(), sendEmail: vi.fn() }));
 // In-memory email_codes, enough for issueCode/consumeCode.
 const codes = vi.hoisted(() => ({ rows: [] as Record<string, any>[], sent: [] as string[], sentTo: [] as string[], notices: [] as string[] }));
 vi.mock("../../lib/prisma", () => ({
@@ -26,10 +27,11 @@ vi.mock("../../lib/prisma", () => ({
   },
 }));
 vi.mock("./email", () => ({
-  sendCodeEmail: async (to: string, code: string) => void (codes.sent.push(code), codes.sentTo.push(to)),
-  sendEmail: async (to: string) => void codes.notices.push(to),
+  sendCodeEmail: emailMocks.sendCodeEmail,
+  sendEmail: emailMocks.sendEmail,
 }));
 import { authRouter } from "./router";
+import { env } from "../../env";
 import { signToken } from "../../lib/auth";
 import { loginLimiter } from "./loginLimiter";
 import { hashPassword, verifyPassword } from "./passwordHash";
@@ -52,6 +54,9 @@ beforeEach(() => {
   codes.sent = [];
   codes.sentTo = [];
   codes.notices = [];
+  emailMocks.sendCodeEmail.mockImplementation(async (to: string, code: string) => void (codes.sent.push(code), codes.sentTo.push(to)));
+  emailMocks.sendEmail.mockImplementation(async (to: string) => void codes.notices.push(to));
+  mocks.delete.mockResolvedValue(user);
   for (const email of [user.email, "ghost@example.com"]) loginLimiter.succeeded(email, "127.0.0.1");
 });
 const call = (method: string, path: string, body?: unknown, auth = false) => fetch(base + path, { method, headers: { "content-type": "application/json", ...(auth ? { authorization: `Bearer ${signToken(user.id)}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -90,6 +95,29 @@ describe("auth router", () => {
     await vi.waitFor(() => expect(codes.sent).toHaveLength(1));
     expect(codes.sent[0]).toMatch(/^\d{6}$/);
     expect(JSON.stringify(codes.rows)).not.toContain(codes.sent[0]); // stored hashed
+  });
+  it("returns a retryable error and removes the new account when signup email delivery fails", async () => {
+    mocks.create.mockImplementation(async ({ data }) => ({ ...user, ...data }));
+    emailMocks.sendCodeEmail.mockRejectedValueOnce(new Error("provider failure with private details"));
+
+    const res = await call("POST", "/auth/signup", signup);
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "email_unavailable" });
+    expect(mocks.delete).toHaveBeenCalledWith({ where: { id: user.id } });
+  });
+  it("skips email delivery when verification is disabled for the demo", async () => {
+    const required = env.EMAIL_VERIFICATION_REQUIRED;
+    env.EMAIL_VERIFICATION_REQUIRED = false;
+    mocks.create.mockImplementation(async ({ data }) => ({ ...user, ...data }));
+    emailMocks.sendCodeEmail.mockRejectedValue(new Error("must not be called"));
+    try {
+      const res = await call("POST", "/auth/signup", signup);
+      expect(res.status).toBe(200);
+      expect(emailMocks.sendCodeEmail).not.toHaveBeenCalled();
+    } finally {
+      env.EMAIL_VERIFICATION_REQUIRED = required;
+    }
   });
   it("maps duplicate email/username (P2002) to 409", async () => {
     mocks.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError("dup", { code: "P2002", clientVersion: "6" }));
@@ -154,6 +182,17 @@ describe("email verification", () => {
     expect(again.status).toBe(429);
     expect(Number(again.headers.get("retry-after"))).toBeGreaterThan(0);
     expect(codes.sent).toHaveLength(1);
+  });
+
+  it("reports delivery failure and removes the unsent code so resend can retry", async () => {
+    mocks.findUnique.mockResolvedValue(unverified);
+    emailMocks.sendCodeEmail.mockRejectedValueOnce(new Error("provider failure with private details"));
+
+    const res = await send();
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "email_unavailable" });
+    expect(codes.rows).toEqual([]);
   });
 
   it("409 when already verified", async () => {

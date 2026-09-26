@@ -44,7 +44,8 @@ function AuthStep({ onDone, initialMode }: OnboardingStepProps & { initialMode: 
       await session.save(res.token);
       onDone();
     } catch (e) {
-      setError(authErrorMessage(e instanceof ApiError ? e.status : null, mode));
+      const code = e instanceof ApiError ? (e.body as { error?: unknown } | null)?.error : undefined;
+      setError(authErrorMessage(e instanceof ApiError ? e.status : null, mode, code));
     } finally {
       setBusy(false);
     }
