@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start": "prisma migrate deploy && tsx src/index.ts",
+    "start": "prisma db push --skip-generate && tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:seed": "tsx scripts/seed.ts",
     "demo:reset": "tsx scripts/demo-reset.ts"

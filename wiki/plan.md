@@ -119,8 +119,9 @@ needs a one-line approval from each of the other two.
   in Expo Go).
 - **Server:** Node, Express and TypeScript, with Socket.io. The matcher
   runs in-process on `node-cron`, so there is a single deployable.
-- **Database:** Postgres through Prisma. Hosting is Railway or Render, with
-  managed Postgres. Socket.io needs a long-running server, not serverless.
+- **Database:** MongoDB Atlas (shared free M0 cluster, AWS us-east-1)
+  through Prisma 6. Server hosting is Railway; Socket.io needs a
+  long-running server, not serverless.
 - **Monorepo:** pnpm workspaces with `node-linker=hoisted` in `.npmrc` (for
   Metro compatibility).
 
@@ -148,7 +149,15 @@ web/
     src/ui/                             # Andy (shared components)
 ```
 
-## Schema v2 (Postgres)
+## Schema v3 (MongoDB Atlas)
+
+> **2026-09-26: switched to MongoDB Atlas** (the MongoDB sponsor challenge
+> requires Atlas as the database). The source of truth for the schema is now
+> `apps/server/prisma/schema.prisma`. The SQL-style listing below is the
+> original v2 design; the fields are the same, but ids are string UUIDs in
+> `_id`, lat/lng are `Float`, and the CHECK and partial unique index are
+> enforced in code (see AGENTS.md).
+
 
 All timestamps are `timestamptz`, and every time comparison happens on
 instants. Local time is used only for vibe classification and display.
@@ -610,6 +619,7 @@ fallback chat.
 
 | Date | Decision |
 | --- | --- |
+| 2026-09-26 | **Database: MongoDB Atlas** (Prisma 6, `provider = "mongodb"`). The MongoDB sponsor challenge requires Atlas as the database. No migrations; `db:push` syncs indexes. |
 | 2026-09-26 | **Travel mode: DRIVE** (`routingPreference` TRAFFIC_AWARE). Matches the Waymo/autonomous-ride framing. |
 | 2026-09-26 | **Demo location: around FIU's Modesto A. Maidique Campus (Miami).** It's the hackathon venue, so the presenter's live device location is on campus. |
 

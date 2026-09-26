@@ -21,7 +21,7 @@ Built in 36 hours at the FIU hackathon (Google/Waymo Mobility Challenge).
 
 ```
 packages/contract   zod schemas + types shared by server and mobile (API Contract v2)
-apps/server         Express 5 + Socket.io + Prisma 6 (Postgres)
+apps/server         Express 5 + Socket.io + Prisma 6 (MongoDB Atlas)
 apps/mobile         Expo SDK 57 + Expo Router (routes in src/app/)
 wiki/plan.md        the plan
 ```
@@ -34,24 +34,16 @@ pnpm install
 cp .env.example apps/server/.env     # fill in keys + DATABASE_URL
 ```
 
-**First migration (Ojas, once).** Needs a Postgres `DATABASE_URL`:
+**Database: MongoDB Atlas** (shared M0 cluster, set up by Ojas). Get the
+`DATABASE_URL` from Ojas privately and put it in `apps/server/.env`. MongoDB
+has no migrations. After the schema changes, the steward syncs indexes
+with:
 
 ```bash
-cd apps/server
-pnpm prisma migrate dev --name init --create-only
+pnpm --filter @web/server db:push
 ```
 
-Then append this SQL to the generated `migration.sql` (Prisma can't
-express it):
-
-```sql
-ALTER TABLE "friendships" ADD CONSTRAINT "friendships_pair_order"
-  CHECK ("user_low_id" < "user_high_id");
-CREATE UNIQUE INDEX "events_open_group_key"
-  ON "events" ("group_key") WHERE "status" IN ('voting', 'confirmed');
-```
-
-Then apply it: `pnpm prisma migrate dev`.
+Everyone else only runs `prisma generate`.
 
 **Run:**
 

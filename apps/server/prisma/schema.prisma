@@ -1,13 +1,18 @@
-// Schema v2 — mirrors wiki/plan.md "Schema v2". Schema steward: Ojas.
-// Only the steward edits this file or creates migrations.
-// All timestamps are timestamptz; compare instants, never day_of_week.
+// Schema v3 (MongoDB Atlas) — mirrors wiki/plan.md "Schema v3".
+// Schema steward: Ojas. Only the steward edits this file.
+// No migrations on MongoDB: `pnpm --filter @web/server db:push` syncs indexes.
+// IDs are string UUIDs stored in _id (contract Id = uuid). DateTime is a UTC
+// BSON Date: compare instants, never day_of_week.
+// Rules Postgres used to enforce that code must now enforce (see AGENTS.md):
+//   - friendships: userLowId < userHighId (sort the pair before writing)
+//   - one open (voting|confirmed) event per groupKey: matcher mutex + check
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
@@ -44,15 +49,15 @@ enum BusySource {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
+  id           String   @id @default(uuid()) @map("_id")
   username     String   @unique
   email        String   @unique
   passwordHash String   @map("password_hash")
   timezone     String // IANA, e.g. America/New_York
-  homeLat      Decimal? @map("home_lat") @db.Decimal(8, 3) // rounded, ~110 m
-  homeLng      Decimal? @map("home_lng") @db.Decimal(8, 3)
+  homeLat      Float?   @map("home_lat") // rounded to 3 dp (~110 m)
+  homeLng      Float?   @map("home_lng")
   travelMode   String   @default("DRIVE") @map("travel_mode")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt    DateTime @default(now()) @map("created_at")
 
   busyBlocks      BusyBlock[]
   friendshipsLow  Friendship[]       @relation("FriendshipLow")
@@ -69,12 +74,12 @@ model User {
 }
 
 model BusyBlock {
-  id       String     @id @default(uuid()) @db.Uuid
-  userId   String     @map("user_id") @db.Uuid
-  startsAt DateTime   @map("starts_at") @db.Timestamptz(6)
-  endsAt   DateTime   @map("ends_at") @db.Timestamptz(6)
+  id       String     @id @default(uuid()) @map("_id")
+  userId   String     @map("user_id")
+  startsAt DateTime   @map("starts_at")
+  endsAt   DateTime   @map("ends_at")
   source   BusySource
-  syncedAt DateTime   @default(now()) @map("synced_at") @db.Timestamptz(6)
+  syncedAt DateTime   @default(now()) @map("synced_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -82,16 +87,16 @@ model BusyBlock {
   @@map("busy_blocks")
 }
 
-/// Exactly one row per pair; user_low_id < user_high_id (CHECK in migration SQL).
+/// Exactly one document per pair; code must sort so userLowId < userHighId.
 /// mutual = lowAddedHigh AND highAddedLow — compute in queries.
 model Friendship {
-  id               String    @id @default(uuid()) @db.Uuid
-  userLowId        String    @map("user_low_id") @db.Uuid
-  userHighId       String    @map("user_high_id") @db.Uuid
+  id               String    @id @default(uuid()) @map("_id")
+  userLowId        String    @map("user_low_id")
+  userHighId       String    @map("user_high_id")
   lowAddedHigh     Boolean   @default(false) @map("low_added_high")
   highAddedLow     Boolean   @default(false) @map("high_added_low")
-  interactionScore Float     @default(0.5) @map("interaction_score") @db.Real
-  lastHangoutAt    DateTime? @map("last_hangout_at") @db.Timestamptz(6)
+  interactionScore Float     @default(0.5) @map("interaction_score")
+  lastHangoutAt    DateTime? @map("last_hangout_at")
 
   userLow  User @relation("FriendshipLow", fields: [userLowId], references: [id], onDelete: Cascade)
   userHigh User @relation("FriendshipHigh", fields: [userHighId], references: [id], onDelete: Cascade)
@@ -101,9 +106,9 @@ model Friendship {
 }
 
 model ExplicitGroup {
-  id        String @id @default(uuid()) @db.Uuid
+  id        String @id @default(uuid()) @map("_id")
   name      String
-  createdBy String @map("created_by") @db.Uuid
+  createdBy String @map("created_by")
 
   creator User          @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   members GroupMember[]
@@ -113,20 +118,21 @@ model ExplicitGroup {
 }
 
 model GroupMember {
-  groupId String @map("group_id") @db.Uuid
-  userId  String @map("user_id") @db.Uuid
+  id      String @id @default(uuid()) @map("_id")
+  groupId String @map("group_id")
+  userId  String @map("user_id")
   role    String @default("member")
 
   group ExplicitGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([groupId, userId])
+  @@unique([groupId, userId])
   @@map("group_members")
 }
 
 model UserFavorite {
-  id            String  @id @default(uuid()) @db.Uuid
-  userId        String  @map("user_id") @db.Uuid
+  id            String  @id @default(uuid()) @map("_id")
+  userId        String  @map("user_id")
   category      String
   venueName     String? @map("venue_name")
   googlePlaceId String? @map("google_place_id")
@@ -137,15 +143,13 @@ model UserFavorite {
   @@map("user_favorites")
 }
 
-/// Partial unique index on group_key WHERE status IN ('voting','confirmed')
-/// lives in migration SQL (Prisma can't express it).
 model Event {
-  id            String      @id @default(uuid()) @db.Uuid
+  id            String      @id @default(uuid()) @map("_id")
   groupKey      String      @map("group_key") // sorted member ids joined
-  sourceGroupId String?     @map("source_group_id") @db.Uuid
+  sourceGroupId String?     @map("source_group_id")
   status        EventStatus @default(voting)
-  startsAt      DateTime    @map("starts_at") @db.Timestamptz(6)
-  endsAt        DateTime    @map("ends_at") @db.Timestamptz(6)
+  startsAt      DateTime    @map("starts_at")
+  endsAt        DateTime    @map("ends_at")
   vibeTag       VibeTag     @map("vibe_tag")
   timezone      String
   venuePlaceId  String?     @map("venue_place_id")
@@ -154,9 +158,9 @@ model Event {
   venueLng      Float?      @map("venue_lng")
   venueStatus   VenueStatus @default(open) @map("venue_status")
   backupVenues  Json        @default("[]") @map("backup_venues") // EventOption[] snapshots
-  voteClosesAt  DateTime    @map("vote_closes_at") @db.Timestamptz(6)
-  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  resolvedAt    DateTime?   @map("resolved_at") @db.Timestamptz(6)
+  voteClosesAt  DateTime    @map("vote_closes_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  resolvedAt    DateTime?   @map("resolved_at")
 
   sourceGroup  ExplicitGroup?     @relation(fields: [sourceGroupId], references: [id], onDelete: SetNull)
   participants EventParticipant[]
@@ -164,26 +168,28 @@ model Event {
   votes        Vote[]
   expenses     Expense[]
 
-  @@index([groupKey])
+  @@index([groupKey, status])
   @@index([status, voteClosesAt])
   @@map("events")
 }
 
 model EventParticipant {
-  eventId    String     @map("event_id") @db.Uuid
-  userId     String     @map("user_id") @db.Uuid
+  id         String     @id @default(uuid()) @map("_id")
+  eventId    String     @map("event_id")
+  userId     String     @map("user_id")
   voteStatus VoteStatus @default(invited) @map("vote_status")
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([eventId, userId])
+  @@unique([eventId, userId])
+  @@index([userId])
   @@map("event_participants")
 }
 
 model EventOption {
-  id              String  @id @default(uuid()) @db.Uuid
-  eventId         String  @map("event_id") @db.Uuid
+  id              String  @id @default(uuid()) @map("_id")
+  eventId         String  @map("event_id")
   rank            Int
   placeId         String  @map("place_id")
   name            String
@@ -191,11 +197,11 @@ model EventOption {
   lng             Float
   primaryType     String? @map("primary_type")
   priceLevel      Int?    @map("price_level")
-  rating          Float?  @db.Real
+  rating          Float?
   userRatingCount Int?    @map("user_rating_count")
   travelMinutes   Json    @map("travel_minutes") // { "<user_id>": 12, ... }
   maxTravelMin    Int     @map("max_travel_min")
-  routeScore      Float   @map("route_score") @db.Real
+  routeScore      Float   @map("route_score")
   factsLine       String  @map("facts_line")
   aiBlurb         String? @map("ai_blurb")
 
@@ -206,29 +212,30 @@ model EventOption {
   @@map("event_options")
 }
 
-/// Never exposed per-user via API or socket.
+/// Never exposed per-user via API or socket. One vote per (event, user).
 model Vote {
-  eventId  String   @map("event_id") @db.Uuid
-  userId   String   @map("user_id") @db.Uuid
-  optionId String   @map("option_id") @db.Uuid
-  castAt   DateTime @default(now()) @map("cast_at") @db.Timestamptz(6)
+  id       String   @id @default(uuid()) @map("_id")
+  eventId  String   @map("event_id")
+  userId   String   @map("user_id")
+  optionId String   @map("option_id")
+  castAt   DateTime @default(now()) @map("cast_at")
 
   event  Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   option EventOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
 
-  @@id([eventId, userId])
+  @@unique([eventId, userId])
   @@map("votes")
 }
 
 // ---------- stretch ----------
 model Expense {
-  id          String   @id @default(uuid()) @db.Uuid
-  eventId     String   @map("event_id") @db.Uuid
-  paidBy      String   @map("paid_by") @db.Uuid
+  id          String   @id @default(uuid()) @map("_id")
+  eventId     String   @map("event_id")
+  paidBy      String   @map("paid_by")
   totalCents  Int      @map("total_cents")
   description String
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at")
 
   event  Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
   payer  User           @relation(fields: [paidBy], references: [id], onDelete: Cascade)
@@ -238,9 +245,9 @@ model Expense {
 }
 
 model ExpenseSplit {
-  id              String  @id @default(uuid()) @db.Uuid
-  expenseId       String  @map("expense_id") @db.Uuid
-  userId          String  @map("user_id") @db.Uuid
+  id              String  @id @default(uuid()) @map("_id")
+  expenseId       String  @map("expense_id")
+  userId          String  @map("user_id")
   amountOwedCents Int     @map("amount_owed_cents")
   settled         Boolean @default(false)
 

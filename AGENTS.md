@@ -52,8 +52,9 @@ unblock yourself.
   resolution, UI on stub data).
 - **Database needed:** `DATABASE_URL` in `apps/server/.env` (copy
   `.env.example`); ask your human for the shared URL.
-- **Migrations:** never run `prisma migrate dev` unless you are Ojas's
-  agent on a schema issue. Everyone else only runs `prisma generate`.
+- **Database is MongoDB Atlas** (a shared cluster). There are no
+  migrations. Only Ojas's agent runs `pnpm --filter @web/server db:push`,
+  and only on a schema issue. Everyone else only runs `prisma generate`.
 
 ## Scaffold map (what already exists; extend it, don't rebuild it)
 
@@ -118,7 +119,7 @@ fit, open an issue for the owner.
   or register a cron job in `index.ts`. Keep it to the few lines you need
   and say so in the PR. `lib/auth.ts` belongs to Ojas.
 
-- **`apps/server/prisma/schema.prisma` and migrations:** only Ojas (the
+- **`apps/server/prisma/schema.prisma` and `db:push`:** only Ojas (the
   schema steward) edits them. If you need a schema change, open an issue
   labeled `schema` and stub around it.
 - **`packages/contract/`:** a PR that touches it gets the `contract` label
@@ -145,8 +146,8 @@ fit, open an issue for the owner.
 ## Hard invariants (breaking these fails review)
 
 **Time**
-- All stored times are `timestamptz`. Compare instants, never
-  `day_of_week`. Convert to local time (IANA `users.timezone`) only for
+- All stored times are `DateTime` (a UTC BSON Date in MongoDB). Compare
+  instants, never `day_of_week`. Convert to local time (IANA `users.timezone`) only for
   vibe classification and display.
 
 **Privacy**
@@ -202,17 +203,28 @@ fit, open an issue for the owner.
   changes every SDK, so read `apps/mobile/AGENTS.md` and use the v57 docs,
   not memory. Add Expo packages with `npx expo install <pkg>` from
   `apps/mobile`.
-- **Prisma 6** (`prisma-client-js`, `url` in `schema.prisma`). Prisma 7
-  changed the config format, so don't write Prisma 7 code.
+- **Prisma 6** (`prisma-client-js`, `provider = "mongodb"`, `url` in
+  `schema.prisma`). Prisma 7 changed the config format and has limited
+  MongoDB support, so don't write Prisma 7 code.
 - **Express 5, zod 3, Socket.io 4, Vitest 5, Node 22, pnpm 10.**
 - Server code runs through `tsx` (ESM, bundler resolution), so relative
   imports need no `.js` extension.
 
 ## Things that will bite you
 
-- **Prisma has no generated columns.** Friendship mutuality is computed
-  in queries. The partial unique index on `events(group_key)` is raw SQL
-  in the migration.
+- **MongoDB via Prisma 6** (`provider = "mongodb"`):
+  - IDs are string UUIDs in `_id`, so keep `@id @default(uuid())
+    @map("_id")`.
+  - Composite keys don't exist; use an `id` plus `@@unique([...])`.
+  - No `Decimal` (use `Float`), no `@db.*` Postgres types, no raw SQL.
+  - Transactions work because Atlas is a replica set; use
+    `prisma.$transaction`.
+- **Rules Postgres used to enforce, now in code:**
+  - Sort friendship pairs so `userLowId < userHighId` before any write.
+  - One open (voting/confirmed) event per `groupKey`, guaranteed by the
+    matcher mutex plus a check before insert.
+- **Friendship mutuality is computed in queries**
+  (`lowAddedHigh && highAddedLow`); there's no stored column.
 - **Socket payloads are thin** (`{ event_id }`). The client refetches
   `GET /events/:id`, so don't add fat payloads.
 - **The matcher runs behind a single in-process mutex.** Don't call the
