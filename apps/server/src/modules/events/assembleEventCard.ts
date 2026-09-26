@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { EventCardPayload, EventOption, type VoteStatus } from "@web/contract";
+import { EventCardPayload, EventOption, optionFromRow, type VoteStatus } from "@web/contract";
 
 export type EventWithCardData = Prisma.EventGetPayload<{
   include: {
@@ -8,26 +8,6 @@ export type EventWithCardData = Prisma.EventGetPayload<{
     votes: { select: { userId: true; optionId: true } };
   };
 }>;
-
-function optionFromRow(row: EventWithCardData["options"][number]): EventOption {
-  return EventOption.parse({
-    id: row.id,
-    rank: row.rank,
-    place_id: row.placeId,
-    name: row.name,
-    lat: row.lat,
-    lng: row.lng,
-    primary_type: row.primaryType,
-    price_level: row.priceLevel,
-    rating: row.rating,
-    user_rating_count: row.userRatingCount,
-    travel_minutes: row.travelMinutes,
-    max_travel_min: row.maxTravelMin,
-    route_score: row.routeScore,
-    facts_line: row.factsLine,
-    ai_blurb: row.aiBlurb,
-  });
-}
 
 /** Only the caller's option is exposed while voting. Every field is allowlisted by the contract. */
 export function assembleEventCard(event: EventWithCardData, userId: string): EventCardPayload {

@@ -1,32 +1,11 @@
 // Owner: Ojas — called by Riley's matcher after it writes the event row.
 // openVoting emits event:created to every participant; the 15 s sweep
 // closes/resolves events (plan §9–§10).
-import type { EventOption as OptionRow } from "@prisma/client";
-import { EventOption } from "@web/contract";
+import { EventOption, optionFromRow } from "@web/contract";
 import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
 import { emitToUsers } from "../../realtime";
 import { progress, resolveEvent, voteClosesAt } from "./resolution";
-
-function toOption(o: OptionRow): EventOption & { id: string } {
-  return {
-    id: o.id,
-    rank: o.rank,
-    place_id: o.placeId,
-    name: o.name,
-    lat: o.lat,
-    lng: o.lng,
-    primary_type: o.primaryType,
-    price_level: o.priceLevel,
-    rating: o.rating,
-    user_rating_count: o.userRatingCount,
-    travel_minutes: o.travelMinutes as Record<string, number>,
-    max_travel_min: o.maxTravelMin,
-    route_score: o.routeScore,
-    facts_line: o.factsLine,
-    ai_blurb: o.aiBlurb,
-  };
-}
 
 export async function openVoting(eventId: string): Promise<void> {
   const event = await prisma.event.findUniqueOrThrow({
@@ -59,7 +38,7 @@ export async function closeVoting(eventId: string): Promise<void> {
   const r = resolveEvent({
     participants: event.participants,
     votes: event.votes,
-    options: event.options.map(toOption),
+    options: event.options.map(optionFromRow),
     unusedVenues: unused.success ? unused.data : [],
   });
   const now = new Date();
@@ -98,9 +77,9 @@ export async function sweepVoting(now = new Date()): Promise<void> {
     where: { status: "voting", voteClosesAt: { lte: now } },
     select: { id: true },
   });
-  for (const { id } of due) {
-    await closeVoting(id).catch((e: unknown) => console.error("closeVoting", id, e));
-  }
+  await Promise.all(
+    due.map(({ id }) => closeVoting(id).catch((e: unknown) => console.error("closeVoting", id, e))),
+  );
 
   const ended = await prisma.event.findMany({
     where: { status: "confirmed", endsAt: { lte: now } },

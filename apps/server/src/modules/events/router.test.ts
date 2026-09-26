@@ -50,7 +50,7 @@ afterAll(() => close());
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.findFirst.mockResolvedValue(event());
-  mocks.findMany.mockResolvedValue([{ id: eventId, status: "voting", startsAt: instant, vibeTag: "dinner" }]);
+  mocks.findMany.mockResolvedValue([event()]);
 });
 const get = (path: string, userId = alice) => fetch(`${base}${path}`, { headers: { authorization: `Bearer ${signToken(userId)}` } });
 
@@ -61,7 +61,23 @@ describe("events router", () => {
     expect(EventsListResponse.parse(await response.json()).events[0]?.id).toBe(eventId);
     expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ participants: { some: { userId: alice } } }),
+      include: {
+        participants: { include: { user: { select: { id: true, username: true } } } },
+        options: true,
+        votes: { select: { userId: true, optionId: true } },
+      },
     }));
+  });
+
+  it("keeps voter identities hidden in GET /events response", async () => {
+    const aliceList = EventsListResponse.parse(await (await get("/events", alice)).json());
+    const bobList = EventsListResponse.parse(await (await get("/events", bob)).json());
+    expect(aliceList.events[0]?.my_option_id).toBe(firstOption);
+    expect(bobList.events[0]?.my_option_id).toBe(secondOption);
+    expect(JSON.stringify(aliceList)).not.toContain(`"my_option_id":"${secondOption}"`);
+    expect(JSON.stringify(bobList)).not.toContain(`"my_option_id":"${firstOption}"`);
+    expect(JSON.stringify(aliceList)).not.toContain("userId");
+    expect(JSON.stringify(bobList)).not.toContain("userId");
   });
 
   it("keeps each voter's choice private while voting and counts ghost pass as responded", async () => {

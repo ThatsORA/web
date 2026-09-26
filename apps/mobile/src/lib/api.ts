@@ -2,15 +2,30 @@
 import { API_PREFIX } from "@web/contract";
 import type { z } from "zod";
 
+import { useSyncExternalStore } from "react";
+
 /** Server origin; the socket connects here, REST calls go to API_URL + API_PREFIX. */
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000";
 const BASE = API_URL + API_PREFIX;
 let token: string | null = null;
+const tokenListeners = new Set<() => void>();
 
 export const setToken = (t: string | null) => {
   token = t;
+  tokenListeners.forEach((fn) => fn());
 };
 export const getToken = () => token;
+
+export const subscribeToken = (listener: () => void) => {
+  tokenListeners.add(listener);
+  return () => {
+    tokenListeners.delete(listener);
+  };
+};
+
+export function useToken(): string | null {
+  return useSyncExternalStore(subscribeToken, getToken, getToken);
+}
 
 /** A non-2xx response. `status` lets callers handle e.g. 409 from report-closed. */
 export class ApiError extends Error {
