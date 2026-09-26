@@ -57,7 +57,8 @@ pnpm dev:mobile      # scan the QR with Expo Go
 ```
 
 On a phone, set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` to your
-laptop's LAN IP (not localhost), or to the deployed server.
+laptop's LAN IP (not localhost), or to the deployed server. Use the server
+origin only (for example `http://192.168.1.10:3000`); the client adds `/api/v1`.
 
 **Checks** (the same ones CI runs): `pnpm -r typecheck && pnpm -r test`.
 
