@@ -2,7 +2,7 @@ import { commonPasswords } from "./passwords/common-passwords";
 
 const blocked = new Set(commonPasswords.map((password) => password.toLowerCase()));
 export const passwordReasons = {
-  length: "Use 10–128 characters.",
+  length: "Use 6–30 characters.",
   common: "This password is too common. Choose a different one.",
   username: "Your password must not contain your username.",
   email: "Your password must not contain the part of your email before @.",
@@ -15,7 +15,7 @@ export type PasswordCheck = { ok: true } | { ok: false; reason: string };
 /** Shared signup/password-change policy. Never apply it during login. */
 export function checkPassword(password: string, { username, email }: { username: string; email: string }): PasswordCheck {
   const characters = Array.from(password);
-  if (characters.length < 10 || characters.length > 128) return { ok: false, reason: passwordReasons.length };
+  if (characters.length < 6 || characters.length > 30) return { ok: false, reason: passwordReasons.length };
   const lower = password.toLowerCase();
   // Prefer the more specific explanation when a pattern also occurs in the blocklist.
   if (characters.every((character) => character === characters[0])) return { ok: false, reason: passwordReasons.repeated };
