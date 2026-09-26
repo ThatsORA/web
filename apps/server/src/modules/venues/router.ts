@@ -5,7 +5,7 @@ import { Id, ReportClosedRequest, routes } from "@web/contract";
 import { env } from "../../env";
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
-import { emitToUsers } from "../../realtime";
+import { emitToUsers, pushVenueChanged } from "../../realtime";
 import { assembleEventCard } from "../events/assembleEventCard";
 import { swapToBackup } from "./swapToBackup";
 
@@ -73,6 +73,9 @@ venuesRouter.post(routes.reportClosed(":id"), requireAuth, async (req, res) => {
     return res.status(result.decision.status).json({ error: result.decision.error });
   }
 
+  pushVenueChanged(result.participantIds, id.data).catch((err) => {
+    console.error("pushVenueChanged failed:", err);
+  });
   emitToUsers(result.participantIds, "event:venue_changed", { event_id: id.data });
   return res.json({ ok: true, status: result.transition });
 });
