@@ -3,7 +3,6 @@ import { View, Alert, ActivityIndicator } from "react-native";
 import { Button, Txt, useTheme } from "../../ui";
 import { GoogleCalendarStatusResponse, GoogleCalendarStartResponse } from "@web/contract";
 import { api } from "../../lib/api";
-import { z } from "zod";
 
 export function GoogleCalendarConnect() {
   const [status, setStatus] = useState<GoogleCalendarStatusResponse | null>(null);
@@ -24,8 +23,18 @@ export function GoogleCalendarConnect() {
   }, []);
 
   useEffect(() => {
-    fetchStatus();
-  }, [fetchStatus]);
+    let cancelled = false;
+    api("/calendar/google", GoogleCalendarStatusResponse)
+      .then((res) => {
+        if (!cancelled) setStatus(res);
+      })
+      .catch((e) => {
+        console.error(e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleConnect = async () => {
     setLoading(true);
