@@ -4,7 +4,7 @@ import { CreateExpenseRequest, PatchExpenseSplitRequest, routes } from "@web/con
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import type { Prisma } from "@prisma/client";
-import { splitEqually } from "./split";
+import { customSplitError, splitEqually } from "./split";
 
 export const expensesRouter = Router();
 expensesRouter.use(requireAuth);
@@ -29,15 +29,21 @@ expensesRouter.post(routes.expenses(":id"), async (req, res) => {
   const { event, userId, confirmed } = found;
   if (event.status !== "confirmed" && event.status !== "completed") return res.status(409).json({ error: "event_not_confirmed" });
   if (!confirmed.includes(userId)) return res.status(403).json({ error: "not_attendee" });
+  const { total_cents, splits: custom } = body.data;
+  const invalid = custom && customSplitError(total_cents, custom, confirmed);
+  if (invalid) return res.status(422).json({ error: invalid });
+  const shares = custom
+    ? custom.map((s) => ({ userId: s.user_id, amountCents: s.amount_cents }))
+    : splitEqually(total_cents, confirmed);
 
   const expense = await prisma.expense.create({
     data: {
       eventId: event.id,
       paidBy: userId,
-      totalCents: body.data.total_cents,
+      totalCents: total_cents,
       description: body.data.description,
       splits: {
-        create: splitEqually(body.data.total_cents, confirmed).map((s) => ({
+        create: shares.map((s) => ({
           userId: s.userId,
           amountOwedCents: s.amountCents,
           settled: s.userId === userId, // the payer doesn't owe themselves
