@@ -164,6 +164,19 @@ export function formatTimeHHMM(date: Date, tz: string): string {
   return `${hh}:${mm}`;
 }
 
+/** The timezone whose local wall clock is earliest at an instant. */
+export function earliestTimezone(date: Date, timezones: readonly string[]): string {
+  const unique = [...new Set(timezones)];
+  if (!unique.length) return "America/New_York";
+  return unique.sort((a, b) => {
+    const aParts = getLocalParts(date, a);
+    const bParts = getLocalParts(date, b);
+    const aLocal = Date.UTC(aParts.year, aParts.month - 1, aParts.day, aParts.hour, aParts.minute, aParts.second);
+    const bLocal = Date.UTC(bParts.year, bParts.month - 1, bParts.day, bParts.hour, bParts.minute, bParts.second);
+    return aLocal - bLocal || a.localeCompare(b);
+  })[0]!;
+}
+
 /**
  * Merges overlapping or abutting time intervals into disjoint intervals.
  */
@@ -407,16 +420,19 @@ export function freeWindows(
 /**
  * Core matching time math: classifySlot (plan §4).
  *
- * Evaluates template feasibility for a free window in local time:
- * - s = the later of W.start and template earliest start, rounded up to next 15 min.
+ * Evaluates template feasibility for a free window in every member's local time:
+ * - s = the latest of W.start and each member's template earliest start, rounded up to 15 min.
  * - len = min(template max duration, W.end - s).
- * - Feasible if s <= template latest start and len >= template min duration.
- * - Choose by priority based on local weekday of s:
+ * - Feasible if s <= every member's template latest start and len >= template min duration.
+ * - Choose by priority based on the weekday of the earliest local timezone:
  *   - Fri/Sat: night_out > dinner > casual_hangout > quick_coffee
  *   - Sun–Thu: dinner > night_out > casual_hangout > quick_coffee
  * - Returns the slot [s, s + len] or null if discarded.
  */
-export function classifySlot(window: TimeWindowInput, tz: string = "America/New_York"): ClassifiedSlot | null {
+export function classifySlot(
+  window: TimeWindowInput,
+  timezone: string | readonly string[] = "America/New_York",
+): ClassifiedSlot | null {
   const start = new Date(window.start);
   const end = new Date(window.end);
 
@@ -424,20 +440,30 @@ export function classifySlot(window: TimeWindowInput, tz: string = "America/New_
     return null;
   }
 
-  const startParts = getLocalParts(start, tz);
-  const { year, month, day, weekday } = startParts;
+  const timezones = typeof timezone === "string" ? [timezone] : [...new Set(timezone)];
+  if (!timezones.length) return null;
+  const priorityTimezone = earliestTimezone(start, timezones);
+  const weekday = getLocalParts(start, priorityTimezone).weekday;
 
   const FIFTEEN_MIN_MS = 15 * 60 * 1000;
   const feasible: Partial<Record<VibeTag, ClassifiedSlot>> = {};
 
   for (const [tag, tmpl] of Object.entries(VIBE_TEMPLATES) as Array<[VibeTag, VibeTemplate]>) {
-    const e = tmpl.earliestStart(weekday);
-    const l = tmpl.latestStart;
-
-    const earliestDate = localToUtc(year, month, day, e.hour, e.minute, tz);
-    const latestDate = localToUtc(year, month, day, l.hour, l.minute, tz);
-
-    const rawStartMs = Math.max(start.getTime(), earliestDate.getTime());
+    let rawStartMs = start.getTime();
+    let latestStartMs = end.getTime();
+    for (const tz of timezones) {
+      const local = getLocalParts(start, tz);
+      const earliest = tmpl.earliestStart(local.weekday);
+      const latest = tmpl.latestStart;
+      rawStartMs = Math.max(
+        rawStartMs,
+        localToUtc(local.year, local.month, local.day, earliest.hour, earliest.minute, tz).getTime(),
+      );
+      latestStartMs = Math.min(
+        latestStartMs,
+        localToUtc(local.year, local.month, local.day, latest.hour, latest.minute, tz).getTime(),
+      );
+    }
     const sMs = Math.ceil(rawStartMs / FIFTEEN_MIN_MS) * FIFTEEN_MIN_MS;
     const s = new Date(sMs);
 
@@ -445,7 +471,7 @@ export function classifySlot(window: TimeWindowInput, tz: string = "America/New_
     const remainingMinutes = Math.floor(remainingMs / (60 * 1000));
     const lenMinutes = Math.min(tmpl.maxDurationMinutes, remainingMinutes);
 
-    if (sMs <= latestDate.getTime() && lenMinutes >= tmpl.minDurationMinutes) {
+    if (sMs <= latestStartMs && lenMinutes >= tmpl.minDurationMinutes) {
       const slotEnd = new Date(sMs + lenMinutes * 60 * 1000);
       feasible[tag] = {
         vibe_tag: tag,

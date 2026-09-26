@@ -8,7 +8,15 @@ const edge = (a: string, b: string, score = 0.5, lastHangoutAt: Date | null = nu
 const clique = (ids: string[]) => ids.flatMap((a, i) => ids.slice(i + 1).map(b => edge(a, b)));
 const explicit = (ids: string[], id = "squad") => ({ id, members: ids.map(userId => ({ userId })) });
 function candidate(ids: string[], start = 24, end = start + 2): GroupSlot {
-  return { group: { groupKey: groupKey(ids), memberIds: ids, timezone: "America/New_York", sourceGroupId: null }, slot: { start: at(start), end: at(end), vibe_tag: "dinner", durationMinutes: (end - start) * 60 } };
+  return {
+    group: {
+      groupKey: groupKey(ids),
+      memberIds: ids,
+      memberTimezones: Object.fromEntries(ids.map(id => [id, "America/New_York"])),
+      sourceGroupId: null,
+    },
+    slot: { start: at(start), end: at(end), vibe_tag: "dinner", durationMinutes: (end - start) * 60 },
+  };
 }
 function event(ids: string[], status: MatchingEvent["status"] = "voting", start = 24, end = 26): MatchingEvent {
   return { groupKey: groupKey(ids), status, startsAt: at(start), endsAt: at(end), resolvedAt: at(-1), participants: ids.map(userId => ({ userId })) };
@@ -32,9 +40,15 @@ describe("candidate groups", () => {
     const result = candidateGroups(users(["a", "b", "c", "d"]), [...clique(["a", "b", "c"]), edge("b", "d"), edge("c", "d")]);
     expect(result.filter(g => g.memberIds.length === 3).map(g => g.groupKey)).toEqual(["a,b,c", "b,c,d"]);
   });
-  it("requires known same-timezone members and does not turn explicit two-member groups into friend pairs", () => {
+  it("keeps known members across timezones and does not turn explicit two-member groups into friend pairs", () => {
     const ids = ["a", "b", "c"];
-    expect(candidateGroups([...users(["a", "b"]), { id: "c", timezone: "Europe/London" }], clique(ids)).map(g => g.groupKey)).toEqual(["a,b"]);
+    const result = candidateGroups([...users(["a", "b"]), { id: "c", timezone: "Europe/London" }], clique(ids));
+    expect(result.map(g => g.groupKey)).toEqual(["a,b", "a,b,c", "a,c", "b,c"]);
+    expect(result.find(g => g.groupKey === "a,b,c")?.memberTimezones).toEqual({
+      a: "America/New_York",
+      b: "America/New_York",
+      c: "Europe/London",
+    });
     expect(candidateGroups(users(["a", "b"]), [], [explicit(ids), explicit(["a", "b"])])).toEqual([]);
     expect(candidateGroups([], [])).toEqual([]);
   });

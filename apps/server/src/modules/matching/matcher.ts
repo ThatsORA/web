@@ -5,10 +5,10 @@ import type { CurateContext, EventOption, RankedVenue } from "@web/contract";
 import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
 import { curateVenues, factsLine } from "../intelligence/curateVenues";
-import { fetchCandidates } from "../venues/liveVenues";
+import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
 import { openVoting } from "../voting/lifecycle";
 import { candidateGroups, selectCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
-import { classifySlot, formatTimeHHMM, freeWindows, getLocalParts } from "./timeMath";
+import { classifySlot, earliestTimezone, formatTimeHHMM, freeWindows, getLocalParts } from "./timeMath";
 
 export { freeWindows, classifySlot } from "./timeMath";
 
@@ -56,12 +56,30 @@ function curateContext(
       favorite_counts[favorite.category] = (favorite_counts[favorite.category] ?? 0) + 1;
     }
   }
-  const local = getLocalParts(candidate.slot.start, candidate.group.timezone);
+  const timezone = earliestTimezone(candidate.slot.start, Object.values(candidate.group.memberTimezones));
+  const local = getLocalParts(candidate.slot.start, timezone);
   return {
     vibe_tag: candidate.slot.vibe_tag,
-    slot_local: `${local.weekday} ${formatTimeHHMM(candidate.slot.start, candidate.group.timezone)}–${formatTimeHHMM(candidate.slot.end, candidate.group.timezone)}`,
+    slot_local: `${local.weekday} ${formatTimeHHMM(candidate.slot.start, timezone)}–${formatTimeHHMM(candidate.slot.end, timezone)}`,
     favorite_counts,
   };
+}
+
+export function timezoneClosestToVenueCentroid(
+  members: readonly Pick<VenueMember, "id" | "timezone" | "homeLat" | "homeLng">[],
+  venues: readonly Pick<EventOption, "lat" | "lng">[],
+): string | null {
+  if (!venues.length) return null;
+  const latitude = venues.reduce((sum, venue) => sum + venue.lat, 0) / venues.length;
+  const longitude = venues.reduce((sum, venue) => sum + venue.lng, 0) / venues.length;
+  const longitudeScale = Math.cos(latitude * Math.PI / 180);
+  return members
+    .filter((member) => member.homeLat !== null && member.homeLng !== null)
+    .map((member) => ({
+      member,
+      distance: (member.homeLat! - latitude) ** 2 + ((member.homeLng! - longitude) * longitudeScale) ** 2,
+    }))
+    .sort((a, b) => a.distance - b.distance || a.member.id.localeCompare(b.member.id))[0]?.member.timezone ?? null;
 }
 
 function optionData(option: EventOption) {
@@ -146,12 +164,11 @@ export async function runPipeline(now = new Date()): Promise<void> {
         .map((event) => ({ start: event.startsAt, end: event.endsAt })),
     }));
     for (const window of freeWindows(availability, now, {
-      timezone: group.timezone,
       busyPaddingMin: env.BUSY_PADDING_MIN,
       minLeadHours: env.MIN_LEAD_HOURS,
       horizonDays: env.MATCH_HORIZON_DAYS,
     })) {
-      const slot = classifySlot(window, group.timezone);
+      const slot = classifySlot(window, Object.values(group.memberTimezones));
       if (slot) groupSlots.push({ group, slot });
     }
   }
@@ -175,6 +192,8 @@ export async function runPipeline(now = new Date()): Promise<void> {
       curateContext(candidate, favoritesByUser),
     );
     if (options.length !== 3) throw new Error(`Venue curation returned ${options.length} options; expected 3`);
+    const eventTimezone = timezoneClosestToVenueCentroid(venueMembers, options) ??
+      earliestTimezone(candidate.slot.start, Object.values(candidate.group.memberTimezones));
 
     const created = await prisma.$transaction(async (tx) => {
       const duplicate = await tx.event.findFirst({
@@ -190,7 +209,7 @@ export async function runPipeline(now = new Date()): Promise<void> {
           startsAt: candidate.slot.start,
           endsAt: candidate.slot.end,
           vibeTag: candidate.slot.vibe_tag,
-          timezone: candidate.group.timezone,
+          timezone: eventTimezone,
           backupVenues: unusedVenueSnapshots(rankedVenues, options),
           voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
           participants: {
