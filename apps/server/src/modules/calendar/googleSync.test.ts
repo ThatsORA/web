@@ -119,13 +119,15 @@ describe("syncGoogleCalendar", () => {
     expect(prisma.$transaction).toHaveBeenCalled();
     // First op should be deleteMany google_calendar blocks
     expect(prisma.busyBlock.deleteMany).toHaveBeenCalled();
-    expect(vi.mocked(prisma.busyBlock.deleteMany).mock.calls[0][0].where.source).toBe("google_calendar");
+    const deleteCalls = vi.mocked(prisma.busyBlock.deleteMany).mock.calls;
+    expect((deleteCalls[0]?.[0] as any)?.where?.source).toBe("google_calendar");
     
     // Second op should be createMany with merged blocks
     expect(prisma.busyBlock.createMany).toHaveBeenCalled();
-    const created = vi.mocked(prisma.busyBlock.createMany).mock.calls[0][0].data;
+    const createCalls = vi.mocked(prisma.busyBlock.createMany).mock.calls;
+    const created = (createCalls[0]?.[0] as any)?.data as Array<{ startsAt: Date; endsAt: Date }>;
     expect(created).toHaveLength(2);
-    expect(created[0].startsAt).toEqual(new Date("2026-09-29T10:00:00Z"));
-    expect(created[0].endsAt).toEqual(new Date("2026-09-29T11:30:00Z"));
+    expect(created[0]?.startsAt).toEqual(new Date("2026-09-29T10:00:00Z"));
+    expect(created[0]?.endsAt).toEqual(new Date("2026-09-29T11:30:00Z"));
   });
 });
