@@ -106,6 +106,7 @@ export const PutBusyBlocksRequest = z.object({
   blocks: z.array(BusyBlock).max(2000),
 });
 export const PutBusyBlocksResponse = z.object({ stored: z.number().int() });
+export const MyAvailabilityResponse = z.object({ windows: z.array(z.object({ starts_at: Instant, ends_at: Instant })) });
 
 export const GoogleCalendarStatusResponse = z.object({ connected: z.boolean(), last_synced_at: z.string().nullable(), revoked: z.boolean().optional() });
 export const GoogleCalendarStartResponse = z.object({ url: z.string() });

@@ -1,9 +1,11 @@
 // Owner: Riley — replace the caller's busy blocks inside a half-open horizon.
 import { Router } from "express";
-import { PutBusyBlocksRequest, PutBusyBlocksResponse, routes } from "@web/contract";
+import { MyAvailabilityResponse, PutBusyBlocksRequest, PutBusyBlocksResponse, routes } from "@web/contract";
+import { env } from "../../env";
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { triggerMatcher } from "../matching/matcher";
+import { freeWindows } from "../matching/timeMath";
 import { syncGoogleCalendar } from "./googleSync";
 
 export const calendarRouter = Router();
@@ -40,6 +42,31 @@ calendarRouter.put(routes.busyBlocks, requireAuth, async (req, res) => {
   // The sync has committed. Matcher failure must not turn a successful upload into an error.
   void triggerMatcher().catch(() => console.error("Matcher failed after busy-block sync"));
   return res.json(PutBusyBlocksResponse.parse({ stored: unique.length }));
+});
+
+// The caller's own free windows, computed exactly as the matcher does (same freeWindows + env config).
+calendarRouter.get(routes.myAvailability, requireAuth, async (req, res) => {
+  const userId = (req as AuthedRequest).userId;
+  const [user, openEvents] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, include: { busyBlocks: true } }),
+    prisma.event.findMany({
+      where: { status: { in: ["voting", "confirmed"] }, participants: { some: { userId } } },
+    }),
+  ]);
+  if (!user) return res.status(404).json({ error: "user_not_found" });
+  const windows = freeWindows([{
+    id: user.id,
+    timezone: user.timezone,
+    busyBlocks: user.busyBlocks.map(block => ({ start: block.startsAt, end: block.endsAt })),
+    openEvents: openEvents.map(event => ({ start: event.startsAt, end: event.endsAt })),
+  }], new Date(), {
+    busyPaddingMin: env.BUSY_PADDING_MIN,
+    minLeadHours: env.MIN_LEAD_HOURS,
+    horizonDays: env.MATCH_HORIZON_DAYS,
+  });
+  return res.json(MyAvailabilityResponse.parse({
+    windows: windows.map(w => ({ starts_at: w.start.toISOString(), ends_at: w.end.toISOString() })),
+  }));
 });
 
 calendarRouter.get(routes.googleCalendar, requireAuth, async (req, res) => {

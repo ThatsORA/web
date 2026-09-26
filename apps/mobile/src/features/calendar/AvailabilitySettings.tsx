@@ -8,6 +8,7 @@ import { api } from "../../lib/api";
 import { roundedHome } from "../../lib/geo";
 import { createDeviceCalendarSync } from "./device";
 import { GoogleCalendarConnect } from "./GoogleCalendarConnect";
+import { MyAvailability } from "./MyAvailability";
 
 export function AvailabilitySettings() {
   const theme = useTheme();
@@ -127,6 +128,8 @@ export function AvailabilitySettings() {
         />
         <GoogleCalendarConnect />
       </View>
+
+      <MyAvailability />
     </View>
   );
 }
