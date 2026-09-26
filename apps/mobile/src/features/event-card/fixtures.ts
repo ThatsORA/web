@@ -35,6 +35,8 @@ const OPTIONS = [
   option(3, "Pollo Tropical", "★4.2 · $ · max 9 min travel", null, [5, 9, 8]),
 ];
 
+const MATCH_REASON = "You three haven't hung out in 10 days. Thursday works for everyone.";
+
 const voting: EventCardPayload = {
   id: id(50),
   status: "voting",
@@ -69,7 +71,9 @@ export const FIXTURES: { label: string; card: EventCardPayload; swapped?: boolea
   { label: "Voting", card: voting },
   { label: "Waiting (voted)", card: { ...voting, my_status: "voted", my_option_id: OPTIONS[1]!.id!, progress: { responded: 2, total: 3 } } },
   { label: "Waiting (ghost passed)", card: { ...voting, my_status: "ghost_passed", progress: { responded: 2, total: 3 } } },
+  { label: "Voting (with match reason)", card: { ...voting, match_reason: MATCH_REASON } },
   { label: "Confirmed", card: confirmed },
+  { label: "Confirmed (with match reason)", card: { ...confirmed, match_reason: MATCH_REASON } },
   {
     label: "Swapped",
     card: { ...confirmed, outcome: { ...confirmed.outcome!, venue: OPTIONS[1]! } },

@@ -17,7 +17,9 @@ describe("cardKind", () => {
       ["Voting", "voting"],
       ["Waiting (voted)", "waiting"],
       ["Waiting (ghost passed)", "waiting"],
+      ["Voting (with match reason)", "voting"],
       ["Confirmed", "confirmed"],
+      ["Confirmed (with match reason)", "confirmed"],
       ["Swapped", "confirmed"],
       ["Chatted", "chatted"],
       ["Expired", "expired"],
@@ -68,7 +70,7 @@ describe("travelRows", () => {
 
 describe("helpers", () => {
   it("offers It's closed only on a confirmed event with a venue", () => {
-    expect(FIXTURES.filter((f) => canReportClosed(f.card)).map((f) => f.label)).toEqual(["Confirmed", "Swapped"]);
+    expect(FIXTURES.filter((f) => canReportClosed(f.card)).map((f) => f.label)).toEqual(["Confirmed", "Confirmed (with match reason)", "Swapped"]);
   });
 
   it("chatted lists the attendees as free, falling back to participants", () => {
