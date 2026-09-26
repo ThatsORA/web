@@ -1,0 +1,30 @@
+// Owner: Ojas — pure auth/profile helpers.
+import { Prisma, type User } from "@prisma/client";
+import type { Me } from "@web/contract";
+import type { z } from "zod";
+
+type MeT = z.infer<typeof Me>;
+
+/** Home coords are stored rounded to 3 decimals (~110 m). Avoids -0. */
+export function roundCoord(value: number): number {
+  const r = Math.round(value * 1000) / 1000;
+  return Object.is(r, -0) ? 0 : r;
+}
+
+/** Duplicate email/username (unique constraint) → 409, anything else is a real failure. */
+export function isUniqueViolation(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+}
+
+/** The only shape a user leaves the server in: never includes password_hash. */
+export function toMe(user: User): MeT {
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    timezone: user.timezone,
+    home_lat: user.homeLat,
+    home_lng: user.homeLng,
+    travel_mode: user.travelMode as MeT["travel_mode"],
+  };
+}
