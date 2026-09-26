@@ -94,6 +94,12 @@ export const SendFriendRequestResponse = z.object({ status: z.enum(["requested",
 export const FriendRequest = z.object({ id: Id, user: UserSearchResult, requested_at: Instant });
 export const FriendRequestsResponse = z.object({ incoming: z.array(FriendRequest), outgoing: z.array(FriendRequest) });
 
+export type UserSearchResult = z.infer<typeof UserSearchResult>;
+export type UserSearchResponse = z.infer<typeof UserSearchResponse>;
+export type CloseFriend = z.infer<typeof CloseFriend>;
+export type CloseFriendsResponse = z.infer<typeof CloseFriendsResponse>;
+export type AddCloseFriendRequest = z.infer<typeof AddCloseFriendRequest>;
+
 // ---------- squads (Ojas) ----------
 // Joining needs the invitee's yes; in a squad of 3+ active members any member can also
 // object (remove the invite) within 24 h of it being sent.
@@ -139,6 +145,44 @@ export const EventOption = RankedVenue.extend({
 });
 export type EventOption = z.infer<typeof EventOption>;
 
+export interface OptionRowLike {
+  id: string;
+  rank: number;
+  placeId: string;
+  name: string;
+  lat: number;
+  lng: number;
+  primaryType: string | null;
+  priceLevel: number | null;
+  rating: number | null;
+  userRatingCount: number | null;
+  travelMinutes: unknown;
+  maxTravelMin: number;
+  routeScore: number;
+  factsLine: string;
+  aiBlurb: string | null;
+}
+
+export function optionFromRow(row: OptionRowLike): EventOption & { id: string } {
+  return EventOption.parse({
+    id: row.id,
+    rank: row.rank,
+    place_id: row.placeId,
+    name: row.name,
+    lat: row.lat,
+    lng: row.lng,
+    primary_type: row.primaryType,
+    price_level: row.priceLevel,
+    rating: row.rating,
+    user_rating_count: row.userRatingCount,
+    travel_minutes: row.travelMinutes,
+    max_travel_min: row.maxTravelMin,
+    route_score: row.routeScore,
+    facts_line: row.factsLine,
+    ai_blurb: row.aiBlurb,
+  }) as EventOption & { id: string };
+}
+
 export const CurateContext = z.object({
   vibe_tag: VibeTag,
   slot_local: z.string(), // e.g. "Thu 6:30–8:30pm"
@@ -172,8 +216,9 @@ export const EventCardPayload = z.object({
 export type EventCardPayload = z.infer<typeof EventCardPayload>;
 
 export const EventsListResponse = z.object({
-  events: z.array(EventCardPayload.pick({ id: true, status: true, starts_at: true, vibe_tag: true })),
+  events: z.array(EventCardPayload),
 });
+export type EventsListResponse = z.infer<typeof EventsListResponse>;
 
 export const VoteRequest = z.object({ option_id: Id });
 export const ReportClosedRequest = z.object({ current_place_id: z.string() });
@@ -182,6 +227,8 @@ export const ReportClosedRequest = z.object({ current_place_id: z.string() });
 export const CreateExpenseRequest = z.object({
   total_cents: z.number().int().positive(),
   description: z.string().max(120),
+  // Custom split (#81); omitted → equal split. Must sum exactly to total_cents.
+  splits: z.array(z.object({ user_id: Id, amount_cents: z.number().int().nonnegative() })).optional(),
 });
 export const PatchExpenseSplitRequest = z.object({ settled: z.boolean() });
 

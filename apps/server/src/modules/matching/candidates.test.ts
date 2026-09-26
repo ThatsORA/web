@@ -8,41 +8,56 @@ const edge = (a: string, b: string, score = 0.5, lastHangoutAt: Date | null = nu
 const clique = (ids: string[]) => ids.flatMap((a, i) => ids.slice(i + 1).map(b => edge(a, b)));
 const explicit = (ids: string[], id = "squad") => ({ id, members: ids.map(userId => ({ userId })) });
 function candidate(ids: string[], start = 24, end = start + 2): GroupSlot {
-  return { group: { groupKey: groupKey(ids), memberIds: ids, timezone: "America/New_York", sourceGroupId: null }, slot: { start: at(start), end: at(end), starts_at: at(start), ends_at: at(end), vibe: "dinner", vibe_tag: "dinner", durationMinutes: (end - start) * 60 } };
+  return {
+    group: {
+      groupKey: groupKey(ids),
+      memberIds: ids,
+      memberTimezones: Object.fromEntries(ids.map(id => [id, "America/New_York"])),
+      sourceGroupId: null,
+    },
+    slot: { start: at(start), end: at(end), vibe_tag: "dinner", durationMinutes: (end - start) * 60 },
+  };
 }
 function event(ids: string[], status: MatchingEvent["status"] = "voting", start = 24, end = 26): MatchingEvent {
   return { groupKey: groupKey(ids), status, startsAt: at(start), endsAt: at(end), resolvedAt: at(-1), participants: ids.map(userId => ({ userId })) };
 }
 describe("candidate groups", () => {
-  it("forms one triangle, but no group from a chain or one-way edge", () => {
+  it("forms every mutual pair plus a maximal triangle, but never a one-way pair", () => {
     const ids = ["a", "b", "c"];
-    expect(candidateGroups(users(ids), clique(ids)).map(g => g.groupKey)).toEqual(["a,b,c"]);
-    expect(candidateGroups(users(ids), [edge("a", "b"), edge("b", "c")])).toEqual([]);
-    expect(candidateGroups(users(ids), [edge("a", "b"), edge("b", "c"), { ...edge("a", "c"), highAddedLow: false }])).toEqual([]);
+    expect(candidateGroups(users(ids), clique(ids)).map(g => g.groupKey)).toEqual(["a,b", "a,b,c", "a,c", "b,c"]);
+    expect(candidateGroups(users(ids), [edge("a", "b"), edge("b", "c")]).map(g => g.groupKey)).toEqual(["a,b", "b,c"]);
+    expect(candidateGroups(users(ids), [{ ...edge("a", "b"), highAddedLow: false }])).toEqual([]);
   });
   it("deduplicates explicit groups, maximal cliques and one-drop subsets with stable provenance", () => {
     const ids = ["a", "b", "c", "d"];
     const result = candidateGroups(users(ids), clique(ids), [explicit([...ids].reverse(), "z"), explicit(ids, "a")]);
-    expect(result).toHaveLength(5);
-    expect(result.every(g => g.sourceGroupId === "a")).toBe(true);
-    expect(result.map(g => g.memberIds.length).sort()).toEqual([3, 3, 3, 3, 4]);
+    expect(result).toHaveLength(11);
+    expect(result.filter(g => g.memberIds.length >= 3).every(g => g.sourceGroupId === "a")).toBe(true);
+    expect(result.map(g => g.memberIds.length).sort()).toEqual([2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 4]);
     expect(candidateGroups(users(ids).reverse(), clique(ids).reverse(), [explicit(ids, "a"), explicit(ids, "z")])).toEqual(result);
   });
   it("finds overlapping maximal cliques without losing either", () => {
-    expect(candidateGroups(users(["a", "b", "c", "d"]), [...clique(["a", "b", "c"]), edge("b", "d"), edge("c", "d")]).map(g => g.groupKey)).toEqual(["a,b,c", "b,c,d"]);
+    const result = candidateGroups(users(["a", "b", "c", "d"]), [...clique(["a", "b", "c"]), edge("b", "d"), edge("c", "d")]);
+    expect(result.filter(g => g.memberIds.length === 3).map(g => g.groupKey)).toEqual(["a,b,c", "b,c,d"]);
   });
-  it("requires known same-timezone members and excludes pairs", () => {
+  it("keeps known members across timezones and does not turn explicit two-member groups into friend pairs", () => {
     const ids = ["a", "b", "c"];
-    expect(candidateGroups([...users(["a", "b"]), { id: "c", timezone: "Europe/London" }], clique(ids))).toEqual([]);
+    const result = candidateGroups([...users(["a", "b"]), { id: "c", timezone: "Europe/London" }], clique(ids));
+    expect(result.map(g => g.groupKey)).toEqual(["a,b", "a,b,c", "a,c", "b,c"]);
+    expect(result.find(g => g.groupKey === "a,b,c")?.memberTimezones).toEqual({
+      a: "America/New_York",
+      b: "America/New_York",
+      c: "Europe/London",
+    });
     expect(candidateGroups(users(["a", "b"]), [], [explicit(ids), explicit(["a", "b"])])).toEqual([]);
     expect(candidateGroups([], [])).toEqual([]);
   });
   it("keeps only 3–6 members and generates exactly one level of subsets", () => {
     const ids = ["a", "b", "c", "d", "e", "f", "g"];
-    const seven = candidateGroups(users(ids), clique(ids));
+    const seven = candidateGroups(users(ids), clique(ids)).filter(g => g.memberIds.length >= 3);
     expect(seven).toHaveLength(7);
     expect(seven.every(g => g.memberIds.length === 6)).toBe(true);
-    const six = candidateGroups(users(ids.slice(0, 6)), clique(ids.slice(0, 6)));
+    const six = candidateGroups(users(ids.slice(0, 6)), clique(ids.slice(0, 6))).filter(g => g.memberIds.length >= 3);
     expect(six).toHaveLength(7);
     expect(six.every(g => g.memberIds.length >= 5)).toBe(true);
   });
@@ -71,6 +86,13 @@ describe("ranking and cooldown", () => {
     expect(rankCandidates([b, a], pairs, now).map(c => c.group.groupKey)).toEqual(["a,b,c", "d,e,f"]);
     expect(rankCandidates([candidate(["d", "e", "f"]), candidate(["a", "b", "c"])], [], now).map(c => c.group.groupKey)).toEqual(["a,b,c", "d,e,f"]);
   });
+  it("ranks a pair below a 3-person group when their base scores are equal", () => {
+    const pair = candidate(["d", "e"]);
+    const group = candidate(["a", "b", "c"]);
+    const ranked = rankCandidates([pair, group], [...clique(group.group.memberIds), edge("d", "e")], now);
+    expect(ranked.map(c => c.group.groupKey)).toEqual(["a,b,c", "d,e"]);
+    expect(ranked[1]!.score).toBeCloseTo(ranked[0]!.score * 0.85);
+  });
   it.each(["expired", "chatted"] as const)("uses %s resolution for cooldown with an exact boundary and demo disable", status => {
     const e = event(["a", "b", "c"], status);
     expect(onCooldown(e.groupKey, [e], now, 2)).toBe(true);
@@ -82,6 +104,10 @@ describe("ranking and cooldown", () => {
   it("does not cool down completed events", () => {
     const e = event(["a", "b", "c"], "completed");
     expect(onCooldown(e.groupKey, [e], now, 48)).toBe(false);
+  });
+  it("applies cooldown to a mutual pair's group key", () => {
+    const pair = event(["a", "b"], "expired");
+    expect(onCooldown("a,b", [pair], now, 48)).toBe(true);
   });
 });
 describe("greedy selection", () => {
@@ -105,5 +131,9 @@ describe("greedy selection", () => {
     expect(selectCandidates(inputs, [], [], now).map(c => c.slot.start)).toEqual([at(24), at(26)]);
     expect(inputs[0]).toBe(duplicate);
     expect(selectCandidates([a], [], [event(a.group.memberIds, "expired")], now, 48)).toEqual([]);
+  });
+  it("suppresses a pair while either member has an overlapping open group event", () => {
+    const pair = candidate(["a", "b"]);
+    expect(selectCandidates([pair], [edge("a", "b")], [event(["b", "c", "d"], "voting", 25, 27)], now)).toEqual([]);
   });
 });

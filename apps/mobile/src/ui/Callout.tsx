@@ -24,7 +24,7 @@ export function Callout({ tone = "info", title, children }: Props) {
       }}
     >
       {title ? (
-        <Txt variant="label" style={{ color: fg, fontFamily: t.fonts.monoSemi }}>
+        <Txt variant="label" style={{ color: fg }}>
           {title}
         </Txt>
       ) : null}

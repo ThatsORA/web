@@ -13,7 +13,7 @@ export type MatchingEvent = Pick<Event, "groupKey" | "startsAt" | "endsAt" | "re
 export interface CandidateGroup {
   groupKey: string;
   memberIds: string[];
-  timezone: string;
+  memberTimezones: Record<string, string>;
   sourceGroupId: string | null;
 }
 export interface GroupSlot {
@@ -30,7 +30,7 @@ const HOUR = 3_600_000;
 const lexical = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 export const groupKey = (ids: readonly string[]) => [...new Set(ids)].sort(lexical).join(",");
 
-/** Maximal mutual cliques plus explicit groups and one-drop subsets (not recursive). */
+/** Mutual pairs, maximal mutual cliques, explicit groups and one-drop subsets (not recursive). */
 export function candidateGroups(
   users: readonly Pick<User, "id" | "timezone">[],
   friendships: readonly MatchingFriendship[],
@@ -48,10 +48,10 @@ export function candidateGroups(
   function add(ids: string[], sourceGroupId: string | null) {
     const memberIds = [...new Set(ids)].sort(lexical);
     if (memberIds.length < 3 || memberIds.length > 6) return;
-    const timezone = zones.get(memberIds[0]!);
-    if (!timezone || memberIds.some(id => zones.get(id) !== timezone)) return;
+    if (memberIds.some(id => !zones.has(id))) return;
     const key = groupKey(memberIds);
-    if (!groups.has(key)) groups.set(key, { groupKey: key, memberIds, timezone, sourceGroupId });
+    const memberTimezones = Object.fromEntries(memberIds.map(id => [id, zones.get(id)!]));
+    if (!groups.has(key)) groups.set(key, { groupKey: key, memberIds, memberTimezones, sourceGroupId });
   }
   function addFamily(ids: string[], sourceGroupId: string | null) {
     const unique = [...new Set(ids)];
@@ -63,6 +63,14 @@ export function candidateGroups(
   // Explicit provenance wins deduplication; ID order makes it independent of DB order.
   for (const group of [...explicitGroups].sort((a, b) => lexical(a.id, b.id))) {
     addFamily(group.members.map(member => member.userId), group.id);
+  }
+  for (const edge of friendships) {
+    if (!edge.lowAddedHigh || !edge.highAddedLow || edge.userLowId === edge.userHighId) continue;
+    const memberIds = [edge.userLowId, edge.userHighId].sort(lexical);
+    if (memberIds.some(id => !zones.has(id))) continue;
+    const key = groupKey(memberIds);
+    const memberTimezones = Object.fromEntries(memberIds.map(id => [id, zones.get(id)!]));
+    groups.set(key, { groupKey: key, memberIds, memberTimezones, sourceGroupId: null });
   }
   function bronKerbosch(r: string[], p: Set<string>, x: Set<string>) {
     if (!p.size && !x.size) { addFamily(r, null); return; }
@@ -107,7 +115,9 @@ export function rankCandidates(candidates: readonly GroupSlot[], friendships: re
     // Most recent pair hangout is the conservative group recency estimate.
     const staleness = lastHangout === null ? 1 : Math.min(Math.max((now.getTime() - lastHangout) / (24 * HOUR), 0), 14) / 14;
     const soonness = 1 - (candidate.slot.start.getTime() - now.getTime()) / (168 * HOUR);
-    return { ...candidate, closeness, staleness, soonness, score: 0.4 * closeness + 0.35 * staleness + 0.25 * soonness };
+    const sizeFactor = ids.length === 2 ? 0.85 : 1;
+    const score = (0.4 * closeness + 0.35 * staleness + 0.25 * soonness) * sizeFactor;
+    return { ...candidate, closeness, staleness, soonness, score };
   }).sort((a, b) => b.score - a.score || a.slot.start.getTime() - b.slot.start.getTime() || lexical(a.group.groupKey, b.group.groupKey));
 }
 

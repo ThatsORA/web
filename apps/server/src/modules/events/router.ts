@@ -16,15 +16,14 @@ eventsRouter.get(routes.events, requireAuth, async (req, res) => {
       OR: [{ status: { in: ["voting", "confirmed"] } }, { endsAt: { gte: recentSince } }],
     },
     orderBy: { startsAt: "desc" },
-    select: { id: true, status: true, startsAt: true, vibeTag: true },
+    include: {
+      participants: { include: { user: { select: { id: true, username: true } } } },
+      options: true,
+      votes: { select: { userId: true, optionId: true } },
+    },
   });
   res.json(EventsListResponse.parse({
-    events: events.map((event) => ({
-      id: event.id,
-      status: event.status,
-      starts_at: event.startsAt.toISOString(),
-      vibe_tag: event.vibeTag,
-    })),
+    events: events.map((event) => assembleEventCard(event, userId)),
   }));
 });
 

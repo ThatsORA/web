@@ -97,7 +97,7 @@ anonymous voting over Socket.io, Ghost Pass, resolution, and
 | 4 | The slices weren't really vertical: Andy owned every screen, several screens had no owner, Riley was overloaded, and Venue Intelligence was split across two owners. | Andy owns the shell, navigation, components, onboarding flow and event card. Riley and Ojas each build their own feature screens. Venue Intelligence moves entirely to Ojas, and the seam is a typed `RankedVenue[]`. Auth and profile go to Ojas. |
 | 5 | Smart Match Ranking used an LLM on purely numeric (and at a hackathon, seeded) inputs, and its effect was invisible in the demo. | Cut. Replaced by a deterministic weighted score. |
 | 6 | The vibe table had gaps and overlaps, and it classified raw windows instead of hangout slots. | One template-based step now classifies the window *and* carves the slot. Priority order resolves overlaps, and unit test cases are listed below. |
-| 7 | Group formation, consensus, timeout and anonymity weren't defined. | Groups are explicit groups plus maximal mutual cliques, with 3–6 members. Resolution uses plurality with a deterministic tie-break. Tallies stay hidden until close, and ghost passes count as "responded". |
+| 7 | Group formation, consensus, timeout and anonymity weren't defined. | Groups are explicit groups, mutual close-friend pairs and maximal mutual cliques, with 2–6 members. Resolution uses plurality with a deterministic tie-break. Tallies stay hidden until close, and ghost passes count as "responded". |
 | 8 | Gemini closure-risk ordering of backups used an LLM on a structured field. | Business status is filtered in code. Backups are the losing vote options, then the unused top-5 venues. The "It's closed" button stays. |
 | 9 | The contract existed only as markdown, and migrations and the lockfile would collide across six agents. | `packages/contract` holds zod schemas that both apps import, and CI runs typecheck and tests on every PR. There is one schema steward and a CODEOWNERS lane map. Scaffolding is budgeted at 2.5 hours. |
 | 10 | The demo depended on the venue wifi and live APIs, and push notifications need a dev build. | The backend is deployed by hour 6, with a hotspot as backup. `DEMO_MODE` replays recorded API responses, a reset script restores state, a recording is the last resort, and notifications use in-app sockets. |
@@ -195,8 +195,13 @@ email_codes                -- one live code per (user, purpose); 6 digits, store
   index (user_id, purpose)
 
 busy_blocks
-  id, user_id fk, starts_at, ends_at, source ('device_calendar'|'seed'), synced_at
+  id, user_id fk, starts_at, ends_at, source ('device_calendar'|'google_calendar'|'seed'), synced_at
   index (user_id, starts_at)
+
+google_calendar_connections
+  id, user_id fk unique (cascade delete), refresh_token_enc text (AES-256-GCM ciphertext only),
+  scopes text[], status enum(active, revoked, error) default 'active',
+  connected_at default now(), last_synced_at null, last_error text null
 
 friendships                -- exactly one row per pair
   id, user_low_id, user_high_id          -- CHECK user_low_id < user_high_id, unique pair
@@ -223,12 +228,13 @@ events
   source_group_id uuid null        -- set if formed from an explicit group
   status enum(voting, confirmed, chatted, expired, completed)
   starts_at, ends_at, vibe_tag enum(quick_coffee, casual_hangout, dinner, night_out)
-  timezone text                    -- group's shared tz
+  timezone text                    -- timezone of member closest to venue centroid
   venue_place_id, venue_name, venue_lat, venue_lng   -- null until confirmed
   venue_status enum(open, reported_closed) default 'open'
   venue_snapshot jsonb null        -- full EventOption of the current venue; the swap copies backup_venues[0] here
   backup_venues jsonb default '[]' -- ordered array of EventOption snapshots
   vote_closes_at, created_at, resolved_at
+  match_reason text null          -- one-line group/time explanation; null for deterministic fallback
   UNIQUE (group_key) WHERE status IN ('voting','confirmed')   -- raw SQL in migration
 
 event_participants
@@ -328,16 +334,18 @@ payloads are deliberately thin: on any event, the client refetches
 
 ### 2. Candidate groups (Riley)
 
-A candidate group has 3–6 members and comes from one of three sources:
+A candidate group has 2–6 members and comes from one of four sources:
 - **Explicit groups:** every member of each explicit group.
+- **Mutual pairs:** each mutual close-friend edge. One-sided adds never
+  become suggestions.
 - **Mutual cliques:** each maximal clique in the mutual close-friend
   graph (Bron–Kerbosch, trivial at demo scale).
 - **Quorum subsets:** for any group with 4 or more members, each subset
   with one member dropped.
 
-Groups are deduplicated by `group_key`. Members must share a timezone; v1
-skips groups that span timezones. Pairs are not auto-matched in v1,
-because anonymous voting is meaningless with two people.
+Groups are deduplicated by `group_key`. Members may span timezones; each
+candidate retains every member's IANA timezone. At equal base score, pairs
+get a 0.85 size factor so groups of 3 or more rank first.
 
 **Cooldown:** a `group_key` isn't re-proposed within `COOLDOWN_HOURS`
 after an event for it ends as `expired` or `chatted`.
@@ -347,13 +355,16 @@ after an event for it ends as `expired` or `chatted`.
 1. For each member, pad every busy block by 15 minutes on each side.
 2. Add the slot of every open event (`voting` or `confirmed`) the member
    belongs to. This prevents double-booking.
-3. Free = waking hours (08:00–24:00 local) minus the merged busy set,
-   within the range `[now + 2h, now + 7d]`.
+3. Free = each member's waking hours (08:00–24:00 in their local time)
+   minus the merged busy set, within `[now + 2h, now + 7d]`.
 4. The group's free windows are the intersection across all members.
 
 ### 4. Vibe tag + slot (Riley, pure function, one step)
 
-Each vibe has a template, and templates are evaluated in local time:
+Each vibe has a template, and templates are evaluated in every member's
+local time. A slot is feasible only when its start and duration fit the
+same template for every member. Priority uses the weekday in the timezone
+whose local wall clock is earliest at the start of the free window.
 
 | vibe_tag | Duration (min–max) | Allowed start (local) | Places types (verify vs. Places New Table A) | Price |
 | --- | --- | --- | --- | --- |
@@ -365,18 +376,18 @@ Each vibe has a template, and templates are evaluated in local time:
 **How a window becomes a slot.** Let W be a free window.
 
 - For each template:
-  - Set `s` = the later of W.start and the template's earliest start,
-    rounded up to the next 15 minutes.
+  - Set `s` = the latest of W.start and the template's earliest start in
+    every member's local timezone, rounded up to the next 15 minutes.
   - Set `len` = the smaller of the template's max duration and
     W.end − s.
-  - The template is feasible if `s` is no later than its latest start and
-    `len` is at least its minimum duration.
+  - The template is feasible if `s` is no later than its latest start in
+    every member's timezone and `len` is at least its minimum duration.
 - Among feasible templates, choose by priority:
   - **Fri/Sat:** night_out > dinner > casual_hangout > quick_coffee
   - **Sun–Thu:** dinner > night_out > casual_hangout > quick_coffee
 - The slot is `[s, s + len]`. If nothing is feasible, discard W.
-- The weekday is the local weekday of `s`, so slots that cross midnight
-  are handled correctly.
+- The weekday is taken from the member timezone whose local wall clock is
+  earliest at W.start.
 - Every template's latest start + minimum duration ends by 24:00, so no
   template can be cut off by the waking-hours limit.
 
@@ -400,9 +411,10 @@ Each vibe has a template, and templates are evaluated in local time:
 Each (group, slot) candidate gets a score:
 
 ```
-score = 0.40 · closeness   (mean interaction_score over member pairs, 0..1)
-      + 0.35 · staleness   (min(days since last hangout, 14) / 14; never = 1)
-      + 0.25 · soonness    (1 − hours_until_start / 168)
+base_score = 0.40 · closeness   (mean interaction_score over member pairs, 0..1)
+           + 0.35 · staleness   (min(days since last hangout, 14) / 14; never = 1)
+           + 0.25 · soonness    (1 − hours_until_start / 168)
+score = base_score × 0.85 for pairs; base_score for groups of 3 or more
 ```
 
 Ties go to the earlier start, then to `group_key` in lexical order.

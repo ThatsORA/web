@@ -2,8 +2,10 @@
 // Styled per wiki/design.md "The event card": Primer components + tokens only.
 import type { EventCardPayload, EventOption } from "@web/contract";
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { ActivityIndicator, Linking, Pressable, Share, View } from "react-native";
 import { Badge, Button, Callout, Card, Txt, useTheme } from "../../ui";
+import { ExpenseForm } from "../expenses";
 import { canReportClosed, cardKind, freePeople, travelRows } from "./cardState";
 import { mapsUrl, progressLabel, shareMessage, swapLabel, timeLabel, vibeLabel } from "./format";
 
@@ -156,7 +158,9 @@ function OptionRow({ option, mine, disabled, onVote }: { option: EventOption; mi
 /** Violet `Card brand` header with the venue, then travel times, map pin and "It's closed". */
 function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & { venue: EventOption }) {
   const t = useTheme();
+  const [showExpense, setShowExpense] = useState(false);
   const status = card.status === "completed" ? "Done" : "Confirmed";
+  const attendees = card.outcome?.attendees ?? [];
   return (
     <View>
       <Card brand>
@@ -210,6 +214,16 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
         </Pressable>
         {canReportClosed(card) ? (
           <Button label="It's closed" variant="outline" onPress={actions.reportClosed} loading={busy} />
+        ) : null}
+        {attendees.length > 0 ? (
+          showExpense ? (
+            <View style={{ gap: t.spacing.sm }}>
+              <ExpenseForm eventId={card.id} attendees={attendees} onSaved={() => setShowExpense(false)} />
+              <Button label="Cancel" variant="ghost" onPress={() => setShowExpense(false)} />
+            </View>
+          ) : (
+            <Button label="Add expense" variant="outline" onPress={() => setShowExpense(true)} />
+          )
         ) : null}
         {notice ? <Callout tone="danger">{notice}</Callout> : null}
       </Card>

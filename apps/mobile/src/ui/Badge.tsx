@@ -31,7 +31,7 @@ export function Badge({ label, tone = "neutral" }: Props) {
         paddingHorizontal: t.spacing.sm,
       }}
     >
-      <Txt variant="small" style={{ color: style.fg, fontFamily: t.fonts.monoMedium }}>
+      <Txt variant="small" style={{ color: style.fg }}>
         {tone === "new" ? label.toUpperCase() : label}
       </Txt>
     </View>
