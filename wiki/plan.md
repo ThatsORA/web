@@ -110,11 +110,11 @@ tests.
 | Owner | Slice | Backend | Screens / client |
 | --- | --- | --- | --- |
 | **Riley** | Availability, matching, venues, mobility | `busy_blocks` sync, free-window math, group formation, vibe/slot, ranking, Places fetch and filter, `computeRouteMatrix` ranking, matcher worker, `report-closed`, seed script | Calendar permission step and client busy-block module, "It's closed" button logic (inside Andy's card) |
-| **Ojas** | Identity, social graph, decision | Auth/profile, `friendships` handshake, seeded `explicit_groups`, **Venue Intelligence (Gemini)**, voting, Ghost Pass, resolution state machine, Socket.io server, expenses (stretch) | Sign-up and login forms, friend search/add screen, vote and Ghost Pass actions (hooks consumed by the card), expenses screen (stretch) |
+| **Ojas** | Identity, social graph, decision | Auth/profile, `friendships` handshake, seeded `explicit_groups`, **Venue Intelligence (Gemini)**, voting, Ghost Pass, resolution state machine, Socket.io server, expenses (stretch) | Sign-up and login forms, friend search/add screen, vote and Ghost Pass actions (hooks in `src/features/voting/`, consumed by the card), expenses screen (stretch) |
 | **Andy** | App shell, onboarding, event card, demo | `PUT /favorites`, `GET /events`, `GET /events/:id` payload assembly | Expo Router shell, navigation, design system and components, onboarding flow container (sequences Ojas's and Riley's steps), favorites screen, event card in every state, socket client hook, demo runbook and reset script |
 
 **Schema steward: Ojas.** Only the steward edits `prisma/schema.prisma` or
-generates migrations. Anyone else who needs a change opens an issue
+runs `db:push` (there are no migrations on MongoDB). Anyone else who needs a change opens an issue
 labeled `schema`.
 
 **Contract owners: all three.** A PR that touches `packages/contract`
@@ -136,8 +136,9 @@ needs a one-line approval from each of the other two.
 - **Server:** Node, Express and TypeScript, with Socket.io. The matcher
   runs in-process on `node-cron`, so there is a single deployable.
 - **Database:** MongoDB Atlas (shared free M0 cluster, AWS us-east-1)
-  through Prisma 6. Server hosting is Railway; Socket.io needs a
-  long-running server, not serverless.
+  through Prisma 6. Server hosting is DigitalOcean App Platform (a
+  long-running web service, not serverless), because Socket.io, the voting sweep and the
+  cron matcher all need a process that stays up.
 - **Monorepo:** pnpm workspaces with `node-linker=hoisted` in `.npmrc` (for
   Metro compatibility).
 
@@ -160,7 +161,7 @@ web/
     src/app/(onboarding)/ src/app/(main)/  # Andy (shell, routes)
     src/lib/                            # Andy (API client, socket hook)
     src/features/calendar/              # Riley
-    src/features/auth/ friends/         # Ojas
+    src/features/auth/ friends/ voting/ # Ojas (voting = vote/Ghost Pass hooks)
     src/features/favorites/ event-card/ # Andy
     src/ui/                             # Andy (shared components)
 ```
@@ -172,7 +173,7 @@ web/
 > `apps/server/prisma/schema.prisma`. The SQL-style listing below is the
 > original v2 design; the fields are the same, but ids are string UUIDs in
 > `_id`, lat/lng are `Float`, and the CHECK and partial unique index are
-> enforced in code (see AGENTS.md).
+> enforced in code (see [`invariants.md`](invariants.md)).
 
 
 All timestamps are `timestamptz`, and every time comparison happens on
@@ -611,7 +612,7 @@ fallback chat.
 
 | Hour | Andy | Riley | Ojas |
 | --- | --- | --- | --- |
-| 0–2.5 | Scaffold the monorepo (Expo Router, Express, Socket.io, contract package), CI, CODEOWNERS, deploy skeleton | GCP billing and budget alert, restricted keys (Places New, Routes). Matching core as pure TS functions with all vibe/slot tests (no DB) | Contract zod schemas, Prisma schema and first migration, auth |
+| 0–2.5 | Scaffold the monorepo (Expo Router, Express, Socket.io, contract package), CI, CODEOWNERS, deploy skeleton | GCP billing and budget alert, restricted keys (Places New, Routes). Matching core as pure TS functions with all vibe/slot tests (no DB) | Contract zod schemas, Prisma schema and first `db:push` on Atlas, auth |
 | 2.5–8 | Shell, navigation, component kit, onboarding container, event-card skeleton on stub data | Seed script, busy-block PUT, client calendar module, matcher wired to DB | Friends and handshake, voting, Ghost Pass, resolution, socket server |
 | **8** | **Checkpoint:** seeded users → run matcher → card on 2 phones → vote → confirmed. Template blurbs and stubbed venues are fine. Backend deployed. | | |
 | 8–20 | Full onboarding flow, favorites, every card state, polish | Places plus route matrix live, report-closed, matcher triggers | Venue Intelligence (Gemini) plus fallback, expiry and chatted handling |
@@ -626,7 +627,7 @@ fallback chat.
 
 - Create the GCP project, enable billing, add a budget alert, and create
   API keys for Places (New) and Routes. Get a Gemini API key.
-- Create the Expo, Railway or Render, and GitHub repo accounts. Push the
+- Create the Expo, DigitalOcean, and GitHub repo accounts. Push the
   context kit.
 - Set up the demo calendar account on phone A, and install Expo Go on all
   three phones.
@@ -638,6 +639,7 @@ fallback chat.
 | 2026-09-26 | **Database: MongoDB Atlas** (Prisma 6, `provider = "mongodb"`). The MongoDB sponsor challenge requires Atlas as the database. No migrations; `db:push` syncs indexes. |
 | 2026-09-26 | **Reach goal: MongoDB Atlas showcase**, either (A) a geospatial venue cache or (B) change streams driving the sockets. Decide at the hour-8 checkpoint; build in hours 20–28. Ranked above expenses. |
 | 2026-09-26 | **Travel mode: DRIVE** (`routingPreference` TRAFFIC_AWARE). Matches the Waymo/autonomous-ride framing. |
+| 2026-09-26 | **Hosting: DigitalOcean App Platform** instead of Railway. Same shape as Railway: GitHub auto-deploy and a long-running process for Socket.io. |
 | 2026-09-26 | **Demo location: around FIU's Modesto A. Maidique Campus (Miami).** It's the hackathon venue, so the presenter's live device location is on campus. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const Env = z.object({
   PORT: z.coerce.number().default(3000),
-  DATABASE_URL: z.string().default("postgresql://postgres:postgres@localhost:5432/web"),
+  DATABASE_URL: z.string().default("mongodb://localhost:27017/web"),
   JWT_SECRET: z.string().default("dev-only-secret"),
   INTERNAL_SECRET: z.string().default("dev-only-internal"),
   GOOGLE_MAPS_API_KEY: z.string().default(""),

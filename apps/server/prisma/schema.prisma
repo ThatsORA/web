@@ -3,7 +3,7 @@
 // No migrations on MongoDB: `pnpm --filter @web/server db:push` syncs indexes.
 // IDs are string UUIDs stored in _id (contract Id = uuid). DateTime is a UTC
 // BSON Date: compare instants, never day_of_week.
-// Rules Postgres used to enforce that code must now enforce (see AGENTS.md):
+// Rules Postgres used to enforce that code must now enforce (see wiki/invariants.md):
 //   - friendships: userLowId < userHighId (sort the pair before writing)
 //   - one open (voting|confirmed) event per groupKey: matcher mutex + check
 
@@ -102,6 +102,7 @@ model Friendship {
   userHigh User @relation("FriendshipHigh", fields: [userHighId], references: [id], onDelete: Cascade)
 
   @@unique([userLowId, userHighId])
+  @@index([userHighId]) // "my friendships" looks up both sides
   @@map("friendships")
 }
 

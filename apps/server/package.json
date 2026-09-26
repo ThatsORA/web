@@ -10,6 +10,7 @@
     "test": "vitest run --passWithNoTests",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
+    "db:smoke": "tsx scripts/db-smoke.ts",
     "db:seed": "tsx scripts/seed.ts",
     "demo:reset": "tsx scripts/demo-reset.ts"
   },
