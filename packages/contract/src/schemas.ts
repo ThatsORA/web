@@ -20,12 +20,13 @@ export type VoteStatus = z.infer<typeof VoteStatus>;
 
 // ---------- auth / profile (Ojas) ----------
 export const SignupRequest = z.object({
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().email(),
   username: z.string().min(3).max(24).regex(/^[a-z0-9_]+$/),
   password: z.string().min(8),
   timezone: IanaTimezone,
 });
-export const LoginRequest = z.object({ email: z.string().email(), password: z.string() });
+// Usernames can't contain "@" (see above), so the server reads an identifier with "@" as an email, otherwise a username.
+export const LoginRequest = z.object({ identifier: z.string().trim().toLowerCase().min(1), password: z.string() });
 export const AuthResponse = z.object({ token: z.string(), user_id: Id });
 
 export const Me = z.object({
