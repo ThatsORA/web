@@ -43,6 +43,11 @@ enum VenueStatus {
   reported_closed
 }
 
+enum GroupMemberStatus {
+  invited
+  active
+}
+
 enum EmailCodePurpose {
   verify
   reset
@@ -145,6 +150,7 @@ model Friendship {
   @@map("friendships")
 }
 
+/// A Squad (#76): a named group joined by consent. Seeded groups predate squads and are all active.
 model ExplicitGroup {
   id        String @id @default(uuid()) @map("_id")
   name      String
@@ -162,6 +168,10 @@ model GroupMember {
   groupId String @map("group_id")
   userId  String @map("user_id")
   role    String @default("member")
+  status      GroupMemberStatus @default(active) // seed rows are active; invites set invited
+  invitedById String?           @map("invited_by_id")
+  invitedAt   DateTime?         @map("invited_at")
+  acceptedAt  DateTime?         @map("accepted_at") // said yes; stays invited until the 24 h objection window passes
 
   group ExplicitGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)

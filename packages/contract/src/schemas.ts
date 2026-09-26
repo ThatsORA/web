@@ -74,6 +74,24 @@ export const SendFriendRequestResponse = z.object({ status: z.enum(["requested",
 export const FriendRequest = z.object({ id: Id, user: UserSearchResult, requested_at: Instant });
 export const FriendRequestsResponse = z.object({ incoming: z.array(FriendRequest), outgoing: z.array(FriendRequest) });
 
+// ---------- squads (Ojas) ----------
+// Joining needs the invitee's yes; in a squad of 3+ active members any member can also
+// object (remove the invite) within 24 h of it being sent.
+export const SquadName = z.string().trim().min(1).max(40);
+export const SquadMemberStatus = z.enum(["invited", "active"]);
+export const CreateSquadRequest = z.object({ name: SquadName, invitee_ids: z.array(Id).min(1).max(5) });
+export const InviteToSquadRequest = z.object({ invitee_ids: z.array(Id).min(1).max(5) });
+export const RespondToSquadRequest = z.object({ accept: z.boolean() });
+export const RenameSquadRequest = z.object({ name: SquadName });
+export const SquadMember = z.object({
+  id: Id,
+  username: z.string(),
+  status: SquadMemberStatus,
+  joins_at: Instant.nullable(), // accepted, waiting out the objection window
+});
+export const Squad = z.object({ id: Id, name: z.string(), my_status: SquadMemberStatus, members: z.array(SquadMember) });
+export const SquadsResponse = z.object({ squads: z.array(Squad) });
+
 // ---------- favorites (Andy) ----------
 export const PutFavoritesRequest = z.object({ categories: z.array(z.string()).max(20) });
 

@@ -25,6 +25,13 @@ async function main() {
     ],
   });
   console.log("backfill users:", JSON.stringify(users));
+
+  // #76: group members from before squads (seed data) are active.
+  const members = await prisma.$runCommandRaw({
+    update: "group_members",
+    updates: [{ q: { status: { $exists: false } }, u: { $set: { status: "active" } }, multi: true }],
+  });
+  console.log("backfill group_members:", JSON.stringify(members));
   await prisma.$disconnect();
 }
 

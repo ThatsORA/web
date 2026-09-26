@@ -11,6 +11,12 @@ export const routes = {
   userSearch: "/users/search", // ?q=
   closeFriends: "/friends/close",
   closeFriend: (userId: string) => `/friends/close/${userId}`,
+  squads: "/squads",
+  squad: (id: string) => `/squads/${id}`, // PATCH { name }
+  squadInvite: (id: string) => `/squads/${id}/invite`,
+  squadInvitee: (id: string, userId: string) => `/squads/${id}/invites/${userId}`, // DELETE = an active member objects
+  squadRespond: (id: string) => `/squads/${id}/respond`,
+  squadLeave: (id: string) => `/squads/${id}/leave`,
   friends: "/friends",
   friend: (userId: string) => `/friends/${userId}`, // DELETE = unfriend
   friendRequests: "/friends/requests",
