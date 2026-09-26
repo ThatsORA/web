@@ -7,7 +7,8 @@ import { prisma } from "../../lib/prisma";
 import { curateVenues, factsLine } from "../intelligence/curateVenues";
 import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
 import { openVoting } from "../voting/lifecycle";
-import { candidateGroups, selectCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
+import { candidateGroups, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
+import { rankWithGemini } from "./rankWithGemini";
 import { classifySlot, earliestTimezone, formatTimeHHMM, freeWindows, getLocalParts } from "./timeMath";
 
 export { freeWindows, classifySlot } from "./timeMath";
@@ -173,7 +174,9 @@ export async function runPipeline(now = new Date()): Promise<void> {
     }
   }
 
-  const selected = selectCandidates(groupSlots, friendships, [...openEvents, ...cooldownEvents], now, env.COOLDOWN_HOURS);
+  const deterministicRanking = rankCandidates(groupSlots, friendships, now);
+  const reranked = await rankWithGemini(deterministicRanking, favoritesByUser);
+  const selected = selectRankedCandidates(reranked, [...openEvents, ...cooldownEvents], now, env.COOLDOWN_HOURS);
   for (const candidate of selected) {
     const venueMembers = candidate.group.memberIds
       .map((id) => usersById.get(id))
@@ -210,6 +213,7 @@ export async function runPipeline(now = new Date()): Promise<void> {
           endsAt: candidate.slot.end,
           vibeTag: candidate.slot.vibe_tag,
           timezone: eventTimezone,
+          matchReason: candidate.matchReason,
           backupVenues: unusedVenueSnapshots(rankedVenues, options),
           voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
           participants: {

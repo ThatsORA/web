@@ -216,6 +216,7 @@ describe("matcher pipeline", () => {
       endsAt: new Date("2026-10-02T00:30:00Z"),
       vibeTag: "dinner",
       timezone: "America/New_York",
+      matchReason: null,
       voteClosesAt: new Date(NOW.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
     });
     expect(create.data.backupVenues).toEqual([

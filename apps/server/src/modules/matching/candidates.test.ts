@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { candidateGroups, groupKey, onCooldown, rankCandidates, selectCandidates, type MatchingFriendship, type MatchingEvent, type GroupSlot } from "./candidates";
+import { candidateGroups, groupKey, onCooldown, rankCandidates, selectCandidates, selectRankedCandidates, type MatchingFriendship, type MatchingEvent, type GroupSlot } from "./candidates";
 const now = new Date("2026-09-26T12:00:00Z");
 const hour = 3_600_000;
 const at = (hours: number) => new Date(now.getTime() + hours * hour);
@@ -131,6 +131,14 @@ describe("greedy selection", () => {
     expect(selectCandidates(inputs, [], [], now).map(c => c.slot.start)).toEqual([at(24), at(26)]);
     expect(inputs[0]).toBe(duplicate);
     expect(selectCandidates([a], [], [event(a.group.memberIds, "expired")], now, 48)).toEqual([]);
+  });
+  it("applies greedy skip rules in the supplied re-ranked order", () => {
+    const first = candidate(["a", "b", "c"]);
+    const overlap = candidate(["c", "d", "e"]);
+    const ranked = rankCandidates([first, overlap], [], now);
+
+    expect(selectRankedCandidates([...ranked].reverse(), [], now).map(item => item.group.groupKey))
+      .toEqual(["c,d,e"]);
   });
   it("suppresses a pair while either member has an overlapping open group event", () => {
     const pair = candidate(["a", "b"]);
