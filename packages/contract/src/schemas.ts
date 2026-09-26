@@ -2,6 +2,7 @@
 // Server parses request bodies with these; mobile parses responses with these.
 // Changing this file needs the `contract` label + the other two approvals.
 import { z } from "zod";
+import { checkPassword } from "./password";
 
 // ---------- primitives ----------
 export const Id = z.string().uuid();
@@ -19,13 +20,23 @@ export type EventStatus = z.infer<typeof EventStatus>;
 export type VoteStatus = z.infer<typeof VoteStatus>;
 
 // ---------- auth / profile (Ojas) ----------
+export const Username = z.string().min(3).max(24).regex(/^[a-z0-9_]+$/);
+export const DisplayName = z.string().trim().min(1).max(40);
+export const Bio = z.string().trim().max(160);
+/** How any user appears to others: display_name falls back to username. Never email or close-friend status. */
+export const PublicUser = z.object({ id: Id, username: z.string(), display_name: z.string() });
+
 export const SignupRequest = z.object({
   email: z.string().trim().toLowerCase().email(),
-  username: z.string().min(3).max(24).regex(/^[a-z0-9_]+$/),
-  password: z.string().min(8),
+  username: Username,
+  password: z.string(),
   timezone: IanaTimezone,
+}).superRefine((data, ctx) => {
+  const result = checkPassword(data.password, data);
+  if (!result.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["password"], message: result.reason, params: { error: "weak_password" } });
 });
-// Usernames can't contain "@" (see above), so the server reads an identifier with "@" as an email, otherwise a username.
+export const WeakPasswordResponse = z.object({ error: z.literal("weak_password"), reason: z.string() });
+// Usernames can't contain "@" (see Username), so the server reads an identifier with "@" as an email, otherwise a username.
 export const LoginRequest = z.object({ identifier: z.string().trim().toLowerCase().min(1), password: z.string() });
 export const AuthResponse = z.object({ token: z.string(), user_id: Id });
 
@@ -37,15 +48,31 @@ export const Me = z.object({
   home_lat: z.number().nullable(),
   home_lng: z.number().nullable(),
   travel_mode: TravelMode,
+  email_verified: z.boolean(),
+  display_name: z.string().nullable(), // as set (null = not set); others see it via PublicUser
+  bio: z.string().nullable(),
 });
+export const VerifyEmailRequest = z.object({ code: z.string().regex(/^\d{6}$/) });
 export const PatchMeRequest = z
   .object({
     timezone: IanaTimezone,
     home_lat: z.number().min(-90).max(90), // server rounds to 3 decimals
     home_lng: z.number().min(-180).max(180),
     travel_mode: TravelMode,
+    display_name: DisplayName.nullable(), // null clears it
+    bio: Bio.nullable(),
+    username: Username, // at most once per 30 days; 409 username_taken / username_cooldown
   })
   .partial();
+/** Starts an email change: a code goes to the new address; the email switches on confirm. */
+export const ChangeEmailRequest = z.object({ new_email: z.string().email(), password: z.string() });
+export const ConfirmEmailChangeRequest = z.object({ code: z.string().regex(/^\d{6}$/) });
+export const FriendshipState = z.enum(["none", "requested", "incoming", "friends"]);
+export const PublicProfile = PublicUser.extend({
+  bio: z.string().nullable(),
+  friendship: FriendshipState,
+  squads: z.array(z.object({ id: Id, name: z.string() })), // squads we're both active in
+});
 
 // Expo's documented token forms; anything else can't be delivered, so reject it at the door.
 export const ExpoPushToken = z
@@ -82,15 +109,15 @@ export type GoogleCalendarStartResponse = z.infer<typeof GoogleCalendarStartResp
 export type GoogleCalendarStartRequest = z.infer<typeof GoogleCalendarStartRequest>;
 
 // ---------- friends (Ojas) ----------
-export const UserSearchResult = z.object({ id: Id, username: z.string() }); // never reveals "added you"
+export const UserSearchResult = PublicUser; // never reveals "added you"
 export const UserSearchResponse = z.object({ users: z.array(UserSearchResult) });
 // Close friends: my silent choices only. Never says whether they chose me back.
-export const CloseFriend = z.object({ id: Id, username: z.string() });
+export const CloseFriend = PublicUser;
 export const CloseFriendsResponse = z.object({ friends: z.array(CloseFriend) });
 export const AddCloseFriendRequest = z.object({ username: z.string() }); // 409 unless we're accepted friends
 
 // Friends: the visible request/accept layer. `close` is MY flag only.
-export const Friend = z.object({ id: Id, username: z.string(), close: z.boolean() });
+export const Friend = PublicUser.extend({ close: z.boolean() });
 export const FriendsResponse = z.object({ friends: z.array(Friend) });
 export const SendFriendRequest = z.object({ username: z.string() });
 /** "friends" when they had already requested me, so this accepted it. */
@@ -103,6 +130,22 @@ export type UserSearchResponse = z.infer<typeof UserSearchResponse>;
 export type CloseFriend = z.infer<typeof CloseFriend>;
 export type CloseFriendsResponse = z.infer<typeof CloseFriendsResponse>;
 export type AddCloseFriendRequest = z.infer<typeof AddCloseFriendRequest>;
+
+// ---------- squads (Ojas) ----------
+// Joining needs the invitee's yes; in a squad of 3+ active members any member can also
+// object (remove the invite) within 24 h of it being sent.
+export const SquadName = z.string().trim().min(1).max(40);
+export const SquadMemberStatus = z.enum(["invited", "active"]);
+export const CreateSquadRequest = z.object({ name: SquadName, invitee_ids: z.array(Id).min(1).max(5) });
+export const InviteToSquadRequest = z.object({ invitee_ids: z.array(Id).min(1).max(5) });
+export const RespondToSquadRequest = z.object({ accept: z.boolean() });
+export const RenameSquadRequest = z.object({ name: SquadName });
+export const SquadMember = PublicUser.extend({
+  status: SquadMemberStatus,
+  joins_at: Instant.nullable(), // accepted, waiting out the objection window
+});
+export const Squad = z.object({ id: Id, name: z.string(), my_status: SquadMemberStatus, members: z.array(SquadMember) });
+export const SquadsResponse = z.object({ squads: z.array(Squad) });
 
 // ---------- favorites (Andy) ----------
 export const PutFavoritesRequest = z.object({ categories: z.array(z.string()).max(20) });

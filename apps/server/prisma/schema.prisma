@@ -43,6 +43,17 @@ enum VenueStatus {
   reported_closed
 }
 
+enum GroupMemberStatus {
+  invited
+  active
+}
+
+enum EmailCodePurpose {
+  verify
+  reset
+  change_email
+}
+
 enum FriendshipStatus {
   pending
   accepted
@@ -70,6 +81,12 @@ model User {
   homeLng      Float?   @map("home_lng")
   travelMode   String   @default("DRIVE") @map("travel_mode")
   createdAt    DateTime @default(now()) @map("created_at")
+  // null = unverified (sign-up writes it explicitly). Accounts made outside sign-up (seed, legacy)
+  // lack the field and scripts/backfill.ts marks them verified.
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  displayName       String?   @map("display_name") // 1–40 chars; others see display_name ?? username
+  bio               String? // ≤ 160 chars
+  usernameChangedAt DateTime? @map("username_changed_at") // once per 30 days
 
   busyBlocks               BusyBlock[]
   friendshipsLow           Friendship[]              @relation("FriendshipLow")
@@ -83,10 +100,28 @@ model User {
   expenseSplits            ExpenseSplit[]
   eventsCreated            Event[]                   @relation("UserCreatedEvents")
   googleCalendarConnection GoogleCalendarConnection?
+  emailCodes               EmailCode[]
   chatMessages             ChatMessage[]
   pushTokens               PushToken[]
 
   @@map("users")
+}
+
+/// One live code per (user, purpose); issuing a new one deletes the old.
+model EmailCode {
+  id        String           @id @default(uuid()) @map("_id")
+  userId    String           @map("user_id")
+  purpose   EmailCodePurpose
+  codeHash  String           @map("code_hash") // HMAC-SHA256 keyed with JWT_SECRET; never the code itself
+  newEmail  String?          @map("new_email") // change_email only
+  expiresAt DateTime         @map("expires_at")
+  attempts  Int              @default(0)
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("email_codes")
 }
 
 model PushToken {
@@ -157,6 +192,7 @@ model Friendship {
   @@map("friendships")
 }
 
+/// A Squad (#76): a named group joined by consent. Seeded groups predate squads and are all active.
 model ExplicitGroup {
   id        String @id @default(uuid()) @map("_id")
   name      String
@@ -174,6 +210,10 @@ model GroupMember {
   groupId String @map("group_id")
   userId  String @map("user_id")
   role    String @default("member")
+  status      GroupMemberStatus @default(active) // seed rows are active; invites set invited
+  invitedById String?           @map("invited_by_id")
+  invitedAt   DateTime?         @map("invited_at")
+  acceptedAt  DateTime?         @map("accepted_at") // said yes; stays invited until the 24 h objection window passes
 
   group ExplicitGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)

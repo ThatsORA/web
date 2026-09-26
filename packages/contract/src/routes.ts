@@ -5,11 +5,22 @@ export const routes = {
   signup: "/auth/signup",
   login: "/auth/login",
   me: "/me",
+  verifyEmailSend: "/auth/verify-email/send", // 204, or 429 + Retry-After during the 60 s cooldown
+  verifyEmail: "/auth/verify-email", // { code } → Me
   pushToken: `${API_PREFIX}/me/push-token`,
   busyBlocks: "/busy-blocks",
   userSearch: "/users/search", // ?q=
+  user: (id: string) => `/users/${id}`, // public profile
+  meEmail: "/me/email", // POST { new_email, password } → code to the new address
+  meEmailConfirm: "/me/email/confirm", // POST { code } → Me
   closeFriends: "/friends/close",
   closeFriend: (userId: string) => `/friends/close/${userId}`,
+  squads: "/squads",
+  squad: (id: string) => `/squads/${id}`, // PATCH { name }
+  squadInvite: (id: string) => `/squads/${id}/invite`,
+  squadInvitee: (id: string, userId: string) => `/squads/${id}/invites/${userId}`, // DELETE = an active member objects
+  squadRespond: (id: string) => `/squads/${id}/respond`,
+  squadLeave: (id: string) => `/squads/${id}/leave`,
   friends: "/friends",
   friend: (userId: string) => `/friends/${userId}`, // DELETE = unfriend
   friendRequests: "/friends/requests",

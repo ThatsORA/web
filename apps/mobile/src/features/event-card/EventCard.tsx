@@ -1,15 +1,17 @@
 // Owner: Andy — the event card in every state (plan demo steps 6–9). Presentational: data in, callbacks out.
 // Styled per wiki/design.md "The event card": Primer components + tokens only.
 import type { EventCardPayload, EventOption } from "@web/contract";
+import { router } from "expo-router";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { ActionSheetIOS, ActivityIndicator, Linking, Platform, Share, View } from "react-native";
+import { ActionSheetIOS, ActivityIndicator, Linking, Platform, View } from "react-native";
+import { CHAT_PATHNAME } from "../../lib/routes";
 import { Badge, Button, Callout, Card, Txt, useTheme } from "../../ui";
 import { ExpenseForm } from "../expenses";
 import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calendarSync";
-import { canReportClosed, cardKind, freePeople, travelRows } from "./cardState";
+import { canReportClosed, cardKind, freePeople, hasEnded, travelRows } from "./cardState";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
-import { progressLabel, shareMessage, swapLabel, timeLabel, vibeLabel } from "./format";
+import { progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
 
 export type CardActions = {
   vote: (optionId: string) => void;
@@ -116,8 +118,10 @@ function OpenCard({ card, actions, busy, notice }: Props) {
           <Badge tone="warning" label="Not enough votes" />
           <Txt>Everyone’s free, you just need a place. Free: {freePeople(card).map((p) => p.username).join(", ")}</Txt>
           <Button
-            label="Plan it yourselves"
-            onPress={() => void Share.share({ message: shareMessage(card, freePeople(card)) })}
+            label="Open chat"
+            onPress={() =>
+              router.push({ pathname: CHAT_PATHNAME, params: { eventId: card.id, ended: hasEnded(card) ? "1" : "0" } })
+            }
           />
         </>
       ) : null}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FIXTURES } from "./fixtures";
-import { mapsUrl, progressLabel, shareMessage, slotLabel, swapLabel, timeLabel } from "./format";
+import { mapsUrl, progressLabel, slotLabel, swapLabel, timeLabel } from "./format";
 
 const card = FIXTURES[0]!.card;
 
@@ -43,12 +43,6 @@ describe("labels", () => {
   it("maps link points at the venue coordinates and place id", () => {
     expect(mapsUrl({ lat: 25.761, lng: -80.37, place_id: "abc 1" })).toBe(
       "https://www.google.com/maps/search/?api=1&query=25.761,-80.37&query_place_id=abc%201",
-    );
-  });
-
-  it("share message carries the window and who's free", () => {
-    expect(shareMessage(card, [{ username: "riley" }, { username: "ojas" }])).toBe(
-      "Web found a time we're all free: Thu · 6:30–8:30pm · Dinner. Free: riley, ojas. Where should we go?",
     );
   });
 });

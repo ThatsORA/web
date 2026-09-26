@@ -20,6 +20,9 @@ touches before you write code.
 - Friend status (pending/accepted) is visible to both people. Close-friend
   status never is: no endpoint or socket payload reveals whether someone
   marked you close, and a declined friend request is never announced.
+- Other users only ever leave the server as `PublicUser` (id, username,
+  display_name) or `PublicProfile`, which are zod-parsed so extra fields
+  (email, close-friend flags) are stripped.
 
 **Money**
 - Money is always integer cents. Split evenly, then give the leftover
@@ -47,6 +50,8 @@ touches before you write code.
 
 **Keys and data**
 - API keys come only from env vars. Never commit `.env`.
+- Email codes are stored only as an HMAC (keyed with `JWT_SECRET`), never
+  in plain text, and every check burns one of 5 attempts.
 - A new env var goes in `.env.example` in the same PR.
 - `DEMO_MODE=true` replays `apps/server/fixtures/` instead of calling
   Google or Gemini. Any new external call needs a fixture path too.

@@ -4,7 +4,7 @@
 import type { Me } from "@web/contract";
 import type { z } from "zod";
 
-export const ONBOARDING_STEPS = ["welcome", "signup", "location", "calendar", "favorites", "friends"] as const;
+export const ONBOARDING_STEPS = ["welcome", "signup", "verify-email", "location", "calendar", "favorites", "friends"] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
 /** The contract every hosted step component implements. */
@@ -28,16 +28,20 @@ export function stepEyebrow(step: OnboardingStep): string {
 }
 
 /** Where a signed-in user picks up: the next required step, or "done" to enter (main). */
-export type ResumeStep = "location" | "friends" | "done";
+export type ResumeStep = "verify-email" | "location" | "friends" | "done";
 
 /**
  * After the auth step or an app launch with a stored token, skip what's already set up.
  * Only location and close friends are required; calendar and favorites are optional and
- * never forced here. A brand-new account has no home yet, so it resolves to "location"
- * and continues the normal sequence from there.
+ * never forced here. A brand-new account (no home yet) starts at "verify-email" (or
+ * "location" once verified) and continues the normal sequence from there. A returning
+ * account that already has a home is never sent back to verify.
  */
-export function resumeAfterLogin(me: Pick<z.infer<typeof Me>, "home_lat">, closeFriendCount: number): ResumeStep {
-  if (me.home_lat == null) return "location";
+export function resumeAfterLogin(
+  me: Pick<z.infer<typeof Me>, "home_lat" | "email_verified">,
+  closeFriendCount: number,
+): ResumeStep {
+  if (me.home_lat == null) return me.email_verified ? "location" : "verify-email";
   if (closeFriendCount === 0) return "friends";
   return "done";
 }

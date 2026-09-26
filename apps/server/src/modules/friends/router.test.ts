@@ -3,11 +3,16 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-// In-memory friendships table plus three users (A < B < C, so A is always the "low" side).
+// In-memory friendships table plus users (A < B < U, so A is always the "low" side). U hasn't verified their email.
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
-const C = "33333333-3333-4333-8333-333333333333";
-const users = [{ id: A, username: "andy" }, { id: B, username: "riley" }, { id: C, username: "ojas" }];
+const U = "33333333-3333-4333-8333-333333333333";
+const verified = new Date();
+const users = [
+  { id: A, username: "andy", emailVerifiedAt: verified as Date | null },
+  { id: B, username: "riley", emailVerifiedAt: verified as Date | null },
+  { id: U, username: "uma", emailVerifiedAt: null as Date | null },
+];
 type Row = Record<string, unknown>;
 type Where = Record<string, unknown>;
 const mocks = vi.hoisted(() => ({ rows: [] as Row[], trigger: vi.fn(), emit: vi.fn() }));
@@ -18,14 +23,28 @@ const matches = (row: Row, where: Where): boolean =>
     : row[k] === v,
   );
 const one = (where: Where) => mocks.rows.find((r) => matches(r, where)) ?? null;
-const withUsers = (r: Row) => ({ ...r, userLow: users.find((u) => u.id === r.userLowId), userHigh: users.find((u) => u.id === r.userHighId) });
+const pub = (id: unknown) => {
+  const u = users.find((x) => x.id === id);
+  return u && { id: u.id, username: u.username, displayName: null };
+};
+const withUsers = (r: Row) => ({ ...r, userLow: pub(r.userLowId), userHigh: pub(r.userHighId) });
+type UserWhere = { username?: string | { startsWith: string }; id?: string | { not: string } | { in: string[] }; emailVerifiedAt?: { not: null } };
+const userMatches = (u: (typeof users)[number], w: UserWhere) =>
+  (w.username === undefined || (typeof w.username === "string" ? u.username === w.username : u.username.startsWith(w.username.startsWith))) &&
+  (w.id === undefined || (typeof w.id === "string" ? u.id === w.id : "not" in w.id ? u.id !== w.id.not : w.id.in.includes(u.id))) &&
+  (w.emailVerifiedAt === undefined || u.emailVerifiedAt !== null);
+// Returns more than any route should expose (email) so tests prove responses strip it.
+const pick = (u: (typeof users)[number]) => ({ id: u.id, username: u.username, displayName: null, bio: null, email: `${u.username}@secret.test` });
 vi.mock("../../lib/prisma", () => ({
   prisma: {
     user: {
-      findUnique: async ({ where }: { where: { username: string } }) => users.find((u) => u.username === where.username) ?? null,
-      findMany: async ({ where }: { where: { username: { startsWith: string }; id: { not: string } } }) =>
-        users.filter((u) => u.username.startsWith(where.username.startsWith) && u.id !== where.id.not),
+      findFirst: async ({ where }: { where: UserWhere }) => {
+        const u = users.find((x) => userMatches(x, where));
+        return u ? pick(u) : null;
+      },
+      findMany: async ({ where }: { where: UserWhere }) => users.filter((u) => userMatches(u, where)).map(pick),
     },
+    explicitGroup: { findMany: async () => [] },
     friendship: {
       findUnique: async ({ where }: { where: Where }) => one(where),
       findFirst: async ({ where }: { where: Where }) => one(where),
@@ -67,6 +86,7 @@ beforeEach(() => {
   mocks.rows.length = 0;
   mocks.trigger.mockReset().mockResolvedValue(undefined);
   mocks.emit.mockReset();
+  users[2]!.emailVerifiedAt = null;
 });
 const as = (userId: string, path: string, init: { method?: string; body?: unknown } = {}) =>
   fetch(base + path, {
@@ -99,8 +119,8 @@ describe("friend requests", () => {
     expect((await as(A, `/friends/requests/${id}/accept`, { method: "POST" })).status).toBe(404);
     expect((await as(B, `/friends/requests/${id}/accept`, { method: "POST" })).status).toBe(204);
     expect(mocks.emit).toHaveBeenLastCalledWith([A], "friend:accepted", { user_id: B });
-    expect(await (await as(A, "/friends")).json()).toEqual({ friends: [{ id: B, username: "riley", close: false }] });
-    expect(await (await as(B, "/friends")).json()).toEqual({ friends: [{ id: A, username: "andy", close: false }] });
+    expect(await (await as(A, "/friends")).json()).toEqual({ friends: [{ id: B, username: "riley", display_name: "riley", close: false }] });
+    expect(await (await as(B, "/friends")).json()).toEqual({ friends: [{ id: A, username: "andy", display_name: "andy", close: false }] });
     expect(await requests(A)).toEqual({ incoming: [], outgoing: [] });
   });
 
@@ -155,7 +175,7 @@ describe("close friends (accepted friends only)", () => {
     expect(await res.text()).toBe("");
     expect(mocks.rows[0]).toMatchObject({ lowAddedHigh: true, highAddedLow: false });
     expect(mocks.trigger).not.toHaveBeenCalled();
-    expect(await (await as(B, "/friends")).json()).toEqual({ friends: [{ id: A, username: "andy", close: false }] });
+    expect(await (await as(B, "/friends")).json()).toEqual({ friends: [{ id: A, username: "andy", display_name: "andy", close: false }] });
   });
 
   it("B marks A back: mutual triggers the matcher once; GET /friends/close has no mutual signal", async () => {
@@ -164,7 +184,7 @@ describe("close friends (accepted friends only)", () => {
     await addClose(B, "andy");
     await addClose(B, "andy");
     expect(mocks.trigger).toHaveBeenCalledOnce();
-    expect(await (await as(A, "/friends/close")).json()).toEqual({ friends: [{ id: B, username: "riley" }] });
+    expect(await (await as(A, "/friends/close")).json()).toEqual({ friends: [{ id: B, username: "riley", display_name: "riley" }] });
   });
 
   it("unfriending deletes the row, clearing both flags", async () => {
@@ -181,7 +201,46 @@ describe("close friends (accepted friends only)", () => {
 describe("search", () => {
   it("excludes self and returns only id + username", async () => {
     const res = await as(A, "/users/search?q=R");
-    expect(await res.json()).toEqual({ users: [{ id: B, username: "riley" }] });
+    expect(await res.json()).toEqual({ users: [{ id: B, username: "riley", display_name: "riley" }] });
     expect(await (await as(A, "/users/search?q=")).json()).toEqual({ users: [] });
+  });
+});
+
+describe("unverified accounts (EMAIL_VERIFICATION_REQUIRED)", () => {
+  it("can't be found, requested or marked close", async () => {
+    expect(await (await as(A, "/users/search?q=u")).json()).toEqual({ users: [] });
+    expect((await as(A, "/friends/requests", { method: "POST", body: { username: "uma" } })).status).toBe(404);
+    expect((await addClose(A, "uma")).status).toBe(404);
+  });
+
+  it("can send requests, but they stay hidden and unacceptable until they verify", async () => {
+    await request(U, "andy");
+    expect((await requests(A)).incoming).toEqual([]);
+    const id = mocks.rows[0]!.id as string;
+    expect((await as(A, `/friends/requests/${id}/accept`, { method: "POST" })).status).toBe(404);
+    users[2]!.emailVerifiedAt = new Date();
+    expect((await requests(A)).incoming).toMatchObject([{ user: { id: U, username: "uma" } }]);
+    expect((await as(A, `/friends/requests/${id}/accept`, { method: "POST" })).status).toBe(204);
+  });
+});
+
+describe("public profile", () => {
+  const profile = async (viewer: string, id: string) => as(viewer, `/users/${id}`);
+
+  it("shows name, bio and friendship from my side; never email or close-friend status", async () => {
+    expect(await (await profile(A, B)).json()).toEqual({ id: B, username: "riley", display_name: "riley", bio: null, friendship: "none", squads: [] });
+    await request(A, "riley");
+    expect((await (await profile(A, B)).json()).friendship).toBe("requested");
+    expect((await (await profile(B, A)).json()).friendship).toBe("incoming");
+    await request(B, "andy");
+    await addClose(B, "andy");
+    const body = await (await profile(A, B)).json();
+    expect(body.friendship).toBe("friends");
+    expect(JSON.stringify(body)).not.toMatch(/secret|close|mutual|added/i);
+  });
+
+  it("404s unverified accounts (except to themselves)", async () => {
+    expect((await profile(A, U)).status).toBe(404);
+    expect((await profile(U, U)).status).toBe(200);
   });
 });
