@@ -12,3 +12,6 @@ principles; the details live here.
 | [`mobile.md`](mobile.md) | Expo SDK 57 rules for `apps/mobile/` |
 | [`design.md`](design.md) | Design system (Primer, violet): tokens, components, event-card look |
 | [`setup.md`](setup.md) | Onboarding a teammate: tools, gh login, worktrees, Atlas, handoff |
+| [`status.md`](status.md) | Build status snapshot per module and demo step (goes stale; check `gh`) |
+| [`audit.md`](audit.md) | Verified bugs, demo blockers, plan mismatches |
+| [`reach_goals.md`](reach_goals.md) | Bloat and optimisation work for after the demo path works |
