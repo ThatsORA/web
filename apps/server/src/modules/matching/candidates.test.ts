@@ -8,7 +8,7 @@ const edge = (a: string, b: string, score = 0.5, lastHangoutAt: Date | null = nu
 const clique = (ids: string[]) => ids.flatMap((a, i) => ids.slice(i + 1).map(b => edge(a, b)));
 const explicit = (ids: string[], id = "squad") => ({ id, members: ids.map(userId => ({ userId })) });
 function candidate(ids: string[], start = 24, end = start + 2): GroupSlot {
-  return { group: { groupKey: groupKey(ids), memberIds: ids, timezone: "America/New_York", sourceGroupId: null }, slot: { start: at(start), end: at(end), starts_at: at(start), ends_at: at(end), vibe: "dinner", vibe_tag: "dinner", durationMinutes: (end - start) * 60 } };
+  return { group: { groupKey: groupKey(ids), memberIds: ids, timezone: "America/New_York", sourceGroupId: null }, slot: { start: at(start), end: at(end), vibe_tag: "dinner", durationMinutes: (end - start) * 60 } };
 }
 function event(ids: string[], status: MatchingEvent["status"] = "voting", start = 24, end = 26): MatchingEvent {
   return { groupKey: groupKey(ids), status, startsAt: at(start), endsAt: at(end), resolvedAt: at(-1), participants: ids.map(userId => ({ userId })) };
