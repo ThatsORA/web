@@ -8,24 +8,16 @@
     "scheme": "web",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.dozoh.web",
       "icon": "./assets/expo.icon"
     },
     "android": {
-      "package": "com.dozoh.web",
       "adaptiveIcon": {
         "backgroundColor": "#6A00F4",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "permissions": [
-        "android.permission.READ_CALENDAR",
-        "android.permission.WRITE_CALENDAR",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
-      ]
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
@@ -44,8 +36,7 @@
       [
         "expo-calendar",
         {
-          "calendarPermission": "Web reads your calendar to sync busy times. Event titles stay on your device.",
-          "writeOnlyAccess": false
+          "calendarPermission": "Web reads only when you are busy, never event titles."
         }
       ],
       [
@@ -61,13 +52,6 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "79b6f170-1247-40d7-8002-434e15eea0b4"
-      }
-    },
-    "owner": "dozoh"
+    }
   }
 }
