@@ -59,8 +59,24 @@ pipeline (Places, then route matrix, then Gemini curation and blurbs),
 anonymous voting over Socket.io, Ghost Pass, resolution, and
 "It's closed".
 
-**Stretch (only after the hour-20 checkpoint passes):** an expense ledger
-with equal splits and a manual "settled" toggle.
+**Stretch (only after the hour-20 checkpoint passes):**
+1. **MongoDB Atlas showcase** (for the MongoDB sponsor challenge). Pick
+   one option at the hour-8 checkpoint; build it in hours 20–28.
+   - **A. Geospatial venue cache (Riley):** store Places results in an
+     Atlas collection with a `2dsphere` index and a TTL index (e.g.
+     24 h). Nearby Search checks the cache with `$geoNear` before calling
+     Google. This cuts API calls and cost, gives `DEMO_MODE` real data to
+     fall back on, and is a visible "Atlas does real work" story. Indexes
+     are created with `prisma.$runCommandRaw` in a small setup script,
+     because Prisma can't declare them.
+   - **B. Change streams → sockets (Ojas):** the server watches the
+     `events` and `event_participants` collections, and each change emits
+     the matching socket event. The database becomes the source of every
+     live update, instead of each endpoint calling `emitToUsers()`.
+     Riskier: it rewires the realtime path late in the build, and change
+     streams must be confirmed to work on the free M0 tier first.
+   - **Leaning A:** lower risk, and it helps the Mobility pitch too.
+2. **Expense ledger:** equal splits and a manual "settled" toggle.
 
 **Cut (mention as future work in the pitch):**
 - Smart Match Ranking via Gemini, replaced by a weighted sort
@@ -600,7 +616,7 @@ fallback chat.
 | **8** | **Checkpoint:** seeded users → run matcher → card on 2 phones → vote → confirmed. Template blurbs and stubbed venues are fine. Backend deployed. | | |
 | 8–20 | Full onboarding flow, favorites, every card state, polish | Places plus route matrix live, report-closed, matcher triggers | Venue Intelligence (Gemini) plus fallback, expiry and chatted handling |
 | **20** | **Checkpoint:** full demo script on real phones against the deployed backend. Record fixtures. | | |
-| 20–28 | Fix what broke, then stretch: expenses (Ojas), if the hour-20 checkpoint passed cleanly | | |
+| 20–28 | Fix what broke, then stretch, if the hour-20 checkpoint passed cleanly: (1) the MongoDB Atlas showcase chosen at hour 8, then (2) expenses (Ojas) | | |
 | 28 | Feature freeze. Screen-record the demo. | | |
 | 28–32 | Rehearse the demo script, write the pitch | | |
 | 32–34 | Buffer | | |
@@ -620,6 +636,7 @@ fallback chat.
 | Date | Decision |
 | --- | --- |
 | 2026-09-26 | **Database: MongoDB Atlas** (Prisma 6, `provider = "mongodb"`). The MongoDB sponsor challenge requires Atlas as the database. No migrations; `db:push` syncs indexes. |
+| 2026-09-26 | **Reach goal: MongoDB Atlas showcase**, either (A) a geospatial venue cache or (B) change streams driving the sockets. Decide at the hour-8 checkpoint; build in hours 20–28. Ranked above expenses. |
 | 2026-09-26 | **Travel mode: DRIVE** (`routingPreference` TRAFFIC_AWARE). Matches the Waymo/autonomous-ride framing. |
 | 2026-09-26 | **Demo location: around FIU's Modesto A. Maidique Campus (Miami).** It's the hackathon venue, so the presenter's live device location is on campus. |
 
