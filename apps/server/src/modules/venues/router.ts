@@ -16,7 +16,7 @@ async function currentEventCard(eventId: string, userId: string) {
     where: { id: eventId, participants: { some: { userId } } },
     include: {
       participants: { include: { user: { select: { id: true, username: true } } } },
-      options: true,
+      options: true, creator: { select: { id: true, username: true } },
       votes: { select: { userId: true, optionId: true } },
     },
   });

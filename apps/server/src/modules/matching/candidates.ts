@@ -4,8 +4,8 @@ import type { EventStatus } from "@web/contract";
 import type { ClassifiedSlot } from "./timeMath";
 import { env } from "../../env";
 
-export type MatchingFriendship = Pick<Friendship, "userLowId" | "userHighId" | "lowAddedHigh" | "highAddedLow" | "interactionScore" | "lastHangoutAt">;
-export type MatchingGroup = Pick<ExplicitGroup, "id"> & { members: Pick<GroupMember, "userId">[] };
+export type MatchingFriendship = Pick<Friendship, "userLowId" | "userHighId" | "lowAddedHigh" | "highAddedLow" | "interactionScore" | "lastHangoutAt"> & { status?: string };
+export type MatchingGroup = Pick<ExplicitGroup, "id"> & { members: (Pick<GroupMember, "userId"> & { status?: string })[] };
 export type MatchingEvent = Pick<Event, "groupKey" | "startsAt" | "endsAt" | "resolvedAt"> & {
   status: EventStatus;
   participants: Pick<EventParticipant, "userId">[];
@@ -22,6 +22,7 @@ export interface GroupSlot {
 }
 export interface RankedGroupSlot extends GroupSlot {
   closeness: number;
+  daysSinceLastHangout: number | null;
   staleness: number;
   soonness: number;
   score: number;
@@ -40,6 +41,7 @@ export function candidateGroups(
   const neighbors = new Map(users.map(user => [user.id, new Set<string>()]));
   for (const edge of friendships) {
     if (!edge.lowAddedHigh || !edge.highAddedLow || edge.userLowId === edge.userHighId) continue;
+    if (edge.status !== undefined && edge.status !== "accepted") continue;
     if (!neighbors.has(edge.userLowId) || !neighbors.has(edge.userHighId)) continue;
     neighbors.get(edge.userLowId)!.add(edge.userHighId);
     neighbors.get(edge.userHighId)!.add(edge.userLowId);
@@ -62,10 +64,13 @@ export function candidateGroups(
   }
   // Explicit provenance wins deduplication; ID order makes it independent of DB order.
   for (const group of [...explicitGroups].sort((a, b) => lexical(a.id, b.id))) {
-    addFamily(group.members.map(member => member.userId), group.id);
+    const activeMembers = group.members.filter(member => member.status === undefined || member.status === "active");
+    if (activeMembers.length < 2) continue;
+    addFamily(activeMembers.map(member => member.userId), group.id);
   }
   for (const edge of friendships) {
     if (!edge.lowAddedHigh || !edge.highAddedLow || edge.userLowId === edge.userHighId) continue;
+    if (edge.status !== undefined && edge.status !== "accepted") continue;
     const memberIds = [edge.userLowId, edge.userHighId].sort(lexical);
     if (memberIds.some(id => !zones.has(id))) continue;
     const key = groupKey(memberIds);
@@ -111,21 +116,32 @@ export function rankCandidates(candidates: readonly GroupSlot[], friendships: re
         if (pair?.lastHangoutAt) lastHangout = Math.max(lastHangout ?? -Infinity, pair.lastHangoutAt.getTime());
       }
     }
-    const closeness = count ? total / count : 0;
+    const closeness = (count ? total / count : 0) + (candidate.group.sourceGroupId !== null ? 0.05 : 0);
     // Most recent pair hangout is the conservative group recency estimate.
-    const staleness = lastHangout === null ? 1 : Math.min(Math.max((now.getTime() - lastHangout) / (24 * HOUR), 0), 14) / 14;
+    const daysSinceLastHangout = lastHangout === null ? null : Math.max((now.getTime() - lastHangout) / (24 * HOUR), 0);
+    const staleness = daysSinceLastHangout === null ? 1 : Math.min(daysSinceLastHangout, 14) / 14;
     const soonness = 1 - (candidate.slot.start.getTime() - now.getTime()) / (168 * HOUR);
     const sizeFactor = ids.length === 2 ? 0.85 : 1;
     const score = (0.4 * closeness + 0.35 * staleness + 0.25 * soonness) * sizeFactor;
-    return { ...candidate, closeness, staleness, soonness, score };
+    return { ...candidate, closeness, daysSinceLastHangout, staleness, soonness, score };
   }).sort((a, b) => b.score - a.score || a.slot.start.getTime() - b.slot.start.getTime() || lexical(a.group.groupKey, b.group.groupKey));
 }
 
 /** Rank then reserve each selection, so candidates cannot conflict with each other. */
 export function selectCandidates(candidates: readonly GroupSlot[], friendships: readonly MatchingFriendship[], events: readonly MatchingEvent[], now: Date, cooldownHours = env.COOLDOWN_HOURS): RankedGroupSlot[] {
+  return selectRankedCandidates(rankCandidates(candidates, friendships, now), events, now, cooldownHours);
+}
+
+/** Apply skip rules in the supplied order, reserving members as candidates are selected. */
+export function selectRankedCandidates<T extends RankedGroupSlot>(
+  candidates: readonly T[],
+  events: readonly MatchingEvent[],
+  now: Date,
+  cooldownHours = env.COOLDOWN_HOURS,
+): T[] {
   const occupied = events.filter(event => event.status === "voting" || event.status === "confirmed");
-  const selected: RankedGroupSlot[] = [];
-  for (const candidate of rankCandidates(candidates, friendships, now)) {
+  const selected: T[] = [];
+  for (const candidate of candidates) {
     const { group, slot } = candidate;
     if (onCooldown(group.groupKey, events, now, cooldownHours)) continue;
     if (occupied.some(event => event.groupKey === group.groupKey ||

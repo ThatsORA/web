@@ -56,6 +56,18 @@ export function useEvents() {
     }
   }, []);
 
+  // `refreshing` tracks user-initiated reloads only (pull-to-refresh, "Try again"). The first load and
+  // socket reconnects call loadAll directly, so live updates never show the pull spinner (#138).
+  const [refreshing, setRefreshing] = useState(false);
+  const reload = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadAll();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadAll]);
+
   useEffect(() => {
     void Promise.resolve().then(loadAll);
   }, [loadAll]);
@@ -109,7 +121,8 @@ export function useEvents() {
     notice,
     loaded,
     error,
-    reload: loadAll,
+    refreshing,
+    reload,
     actionsFor,
   };
 }

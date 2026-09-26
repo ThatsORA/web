@@ -12,7 +12,7 @@ export const VibeTag = z.enum(["quick_coffee", "casual_hangout", "dinner", "nigh
 export const EventStatus = z.enum(["voting", "confirmed", "chatted", "expired", "completed"]);
 export const VoteStatus = z.enum(["invited", "voted", "ghost_passed", "confirmed"]);
 export const VenueStatus = z.enum(["open", "reported_closed"]);
-export const TravelMode = z.enum(["DRIVE"]); // decided 2026-09-26
+export const TravelMode = z.enum(["DRIVE", "TRANSIT", "WALK", "BICYCLE"]); // decided 2026-09-26
 
 export type VibeTag = z.infer<typeof VibeTag>;
 export type EventStatus = z.infer<typeof EventStatus>;
@@ -76,6 +76,14 @@ export const PutBusyBlocksRequest = z.object({
   blocks: z.array(BusyBlock).max(2000),
 });
 export const PutBusyBlocksResponse = z.object({ stored: z.number().int() });
+
+export const GoogleCalendarStatusResponse = z.object({ connected: z.boolean(), last_synced_at: z.string().nullable(), revoked: z.boolean().optional() });
+export const GoogleCalendarStartResponse = z.object({ url: z.string() });
+export const GoogleCalendarStartRequest = z.object({ redirect_uri: z.string().optional() });
+
+export type GoogleCalendarStatusResponse = z.infer<typeof GoogleCalendarStatusResponse>;
+export type GoogleCalendarStartResponse = z.infer<typeof GoogleCalendarStartResponse>;
+export type GoogleCalendarStartRequest = z.infer<typeof GoogleCalendarStartRequest>;
 
 // ---------- friends (Ojas) ----------
 export const UserSearchResult = PublicUser; // never reveals "added you"
@@ -190,13 +198,23 @@ export const CurateContext = z.object({
 });
 export type CurateContext = z.infer<typeof CurateContext>;
 
+export const CreateEventRequest = z.object({
+  invitee_ids: z.array(Id).min(1).max(5),
+  vibe_tag: VibeTag.optional(),
+  earliest: Instant.optional(),
+  latest: Instant.optional(),
+});
+export type CreateEventRequest = z.infer<typeof CreateEventRequest>;
+
 export const EventCardPayload = z.object({
+  created_by: z.object({ id: Id, username: z.string() }).nullable().optional(),
   id: Id,
   status: EventStatus,
   starts_at: Instant,
   ends_at: Instant,
   timezone: IanaTimezone,
   vibe_tag: VibeTag,
+  match_reason: z.string().max(90).nullable().optional(),
   participants: z.array(z.object({ id: Id, username: z.string() })),
   options: z.array(EventOption), // the 3 choices while voting
   progress: z.object({ responded: z.number().int(), total: z.number().int() }),

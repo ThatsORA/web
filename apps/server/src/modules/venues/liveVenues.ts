@@ -28,6 +28,7 @@ export interface VenueMember {
   homeLat: number | null;
   homeLng: number | null;
   favorites: readonly { category: string }[];
+  travelMode?: string;
 }
 
 interface GoogleTimePoint {
@@ -251,29 +252,59 @@ export function rankRouteMatrix(
   }).sort((a, b) => a.route_score - b.route_score || a.place_id.localeCompare(b.place_id)).slice(0, 5);
 }
 
-async function routeCandidates(
+export async function routeCandidates(
   slot: ClassifiedSlot,
   members: readonly VenueMember[],
   candidates: readonly VenueCandidate[],
 ): Promise<RankedVenue[]> {
   const departureTime = new Date(slot.start.getTime() - 30 * 60_000).toISOString();
-  const key = `${slot.vibe_tag}-${slot.start.toISOString().replaceAll(":", "-")}`;
-  const elements = await withFixture<RouteMatrixElement[]>("routes", key, () => googlePost(
-    ROUTES_URL,
-    ROUTES_FIELD_MASK,
-    {
-      origins: members.map((member) => ({
+  
+  const membersByMode = new Map<string, { member: VenueMember; index: number }[]>();
+  members.forEach((member, index) => {
+    const mode = member.travelMode || "DRIVE";
+    const list = membersByMode.get(mode) || [];
+    list.push({ member, index });
+    membersByMode.set(mode, list);
+  });
+
+  const destinations = candidates.map((candidate) => ({
+    waypoint: { location: { latLng: { latitude: candidate.lat, longitude: candidate.lng } } },
+  }));
+
+  const allElements: RouteMatrixElement[] = [];
+
+  for (const [mode, modeMembers] of membersByMode.entries()) {
+    const key = `${slot.vibe_tag}-${slot.start.toISOString().replaceAll(":", "-")}-${mode}`;
+    const payload: any = {
+      origins: modeMembers.map(({ member }) => ({
         waypoint: { location: { latLng: { latitude: member.homeLat, longitude: member.homeLng } } },
       })),
-      destinations: candidates.map((candidate) => ({
-        waypoint: { location: { latLng: { latitude: candidate.lat, longitude: candidate.lng } } },
-      })),
-      travelMode: "DRIVE",
-      routingPreference: "TRAFFIC_AWARE",
-      departureTime,
-    },
-  ));
-  return rankRouteMatrix(candidates, members, elements);
+      destinations,
+      travelMode: mode,
+    };
+    if (mode === "DRIVE") {
+      payload.routingPreference = "TRAFFIC_AWARE";
+      payload.departureTime = departureTime;
+    }
+    const elements = await withFixture<RouteMatrixElement[]>("routes", key, () => googlePost<RouteMatrixElement[]>(
+      ROUTES_URL,
+      ROUTES_FIELD_MASK,
+      payload
+    ));
+
+    for (const element of elements) {
+      if (element.originIndex !== undefined) {
+        allElements.push({
+          ...element,
+          originIndex: modeMembers[element.originIndex]!.index,
+        });
+      } else {
+        allElements.push(element);
+      }
+    }
+  }
+
+  return rankRouteMatrix(candidates, members, allElements);
 }
 
 export async function fetchCandidates(

@@ -5,6 +5,10 @@ const Env = z.object({
   DATABASE_URL: z.string().default("mongodb://localhost:27017/web"),
   JWT_SECRET: z.string().default("dev-only-secret"),
   INTERNAL_SECRET: z.string().default("dev-only-internal"),
+  GOOGLE_OAUTH_CLIENT_ID: z.string().default(""),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().default(""),
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().default("http://localhost:3000/calendar/google/callback"),
+  GOOGLE_TOKEN_ENC_KEY: z.string().default("00000000000000000000000000000000"), // 32 bytes
   GOOGLE_MAPS_API_KEY: z.string().default(""),
   GEMINI_API_KEY: z.string().default(""),
   VOTE_TIMEOUT_SEC: z.coerce.number().default(43200),
