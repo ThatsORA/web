@@ -93,7 +93,7 @@ spec, GitHub, logs, or a PR:
 | `DATABASE_URL` | Ojas's MongoDB Atlas URI from issue #1 |
 | `JWT_SECRET` | New random secret, shared only with this service |
 | `INTERNAL_SECRET` | Different random secret for internal endpoints |
-| `GOOGLE_MAPS_API_KEY` | Riley's restricted Places (New) and Routes key |
+| `GOOGLE_MAPS_API_KEY` | Riley's restricted Places (New) and Routes key, when available |
 | `GEMINI_API_KEY` | Ojas's Gemini key |
 
 The remaining demo values are in `.do/app.yaml` and mirror `.env.example`:
@@ -103,17 +103,30 @@ are needed. The spec sets `PNPM_SKIP_PRUNING=true` at build time because the
 start command needs the repo's `prisma` and `tsx` dev dependencies. Keep the
 runtime secrets when changing the app spec in the DigitalOcean console.
 
-After deployment, record the live URL here and set each phone's
-`EXPO_PUBLIC_API_URL` to `<live URL>/api/v1` before starting Expo:
+Set `EXPO_PUBLIC_API_URL` in each phone's local `apps/mobile/.env` to the
+backend **origin** before starting Expo. The client adds `/api/v1` itself.
+The Expo tunnel exposes Metro, not the backend, so a LAN API URL may time out
+from a phone. Restart `pnpm dev:mobile:tunnel` after changing the variable:
 
-**Backend URL:** pending first successful App Platform deployment.
+```dotenv
+EXPO_PUBLIC_API_URL=https://web-p3ljx.ondigitalocean.app
+```
+
+**Backend origin:** https://web-p3ljx.ondigitalocean.app
+
+This is an API service. `/` returns `{"error":"not_found"}` by design;
+`/health` returns `{"ok":true}`. The public health endpoint and authenticated
+Socket.io connection were verified on September 26, 2026. The Atlas-backed
+server is live on one $5/month container. Google Maps review snippets are
+unavailable until the restricted Maps key is added; venue curation falls back
+to options without snippets.
 
 Verify the public URL from the repo root:
 
 ```powershell
-Invoke-RestMethod '<live URL>/health'  # {"ok":true}
+Invoke-RestMethod 'https://web-p3ljx.ondigitalocean.app/health'  # {"ok":true}
 $env:WEB_CHECK_JWT = '<JWT from a demo account login>'
-node apps/mobile/src/lib/check-deploy.mjs '<live URL>'
+node apps/mobile/src/lib/check-deploy.mjs 'https://web-p3ljx.ondigitalocean.app'
 Remove-Item Env:WEB_CHECK_JWT
 ```
 

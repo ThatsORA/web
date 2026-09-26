@@ -1,4 +1,4 @@
-name: web-demo
+name: web
 region: nyc
 services:
   - name: server
