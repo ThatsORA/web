@@ -104,7 +104,7 @@ function buildPrompt(venues: (RankedVenue & { reviews: string[] })[], ctx: Curat
   ].join("\n");
 }
 
-// ponytail: in-process Map, unbounded and per-instance; fine for a demo-scale server.
+// ponytail: per-instance in-memory LRU, capped at 200 successful curations.
 const cache = new Map<string, EventOption[]>();
 
 export async function curateVenues(venues: RankedVenue[], ctx: CurateContext): Promise<EventOption[]> {
@@ -114,17 +114,15 @@ export async function curateVenues(venues: RankedVenue[], ctx: CurateContext): P
 
   const key = `${ctx.vibe_tag}|${top.map((v) => v.place_id).sort().join(",")}`;
   const hit = cache.get(key);
-  if (hit) return hit;
+  if (hit) {
+    cache.delete(key);
+    cache.set(key, hit);
+    return hit;
+  }
 
   try {
     const withReviews = await Promise.all(top.map(async (v) => ({ ...v, reviews: await reviewSnippets(v.place_id) })));
-    let timer: NodeJS.Timeout | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error("Gemini timeout")), env.GEMINI_TIMEOUT_MS);
-    });
-    const raw = await Promise.race([callGemini(buildPrompt(withReviews, ctx), ctx.vibe_tag), timeout]).finally(() =>
-      clearTimeout(timer),
-    );
+    const raw = await callGemini(buildPrompt(withReviews, ctx), ctx.vibe_tag);
 
     const parsed = GeminiResult.safeParse(raw);
     if (!parsed.success) return fallback;
@@ -137,6 +135,7 @@ export async function curateVenues(venues: RankedVenue[], ctx: CurateContext): P
       return { ...v, rank: i + 1, facts_line: factsLine(v), ai_blurb: o.blurb.trim() };
     });
     cache.set(key, options);
+    if (cache.size > 200) cache.delete(cache.keys().next().value!);
     return options;
   } catch {
     return fallback;
