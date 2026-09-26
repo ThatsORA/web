@@ -179,12 +179,12 @@ describe("close friends (accepted friends only)", () => {
     expect(await (await as(B, "/friends")).json()).toEqual({ friends: [{ id: A, username: "andy", display_name: "andy", close: false }] });
   });
 
-  it("B marks A back: mutual triggers the matcher once; GET /friends/close has no mutual signal", async () => {
+  it("B marks A back: mutual does not auto-run the matcher (#196); GET /friends/close has no mutual signal", async () => {
     await befriend();
     await addClose(A, "riley");
     await addClose(B, "andy");
     await addClose(B, "andy");
-    expect(mocks.trigger).toHaveBeenCalledOnce();
+    expect(mocks.trigger).not.toHaveBeenCalled();
     expect(await (await as(A, "/friends/close")).json()).toEqual({ friends: [{ id: B, username: "riley", display_name: "riley" }] });
   });
 

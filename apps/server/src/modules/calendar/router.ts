@@ -4,7 +4,6 @@ import { MyAvailabilityResponse, PutBusyBlocksRequest, PutBusyBlocksResponse, ro
 import { env } from "../../env";
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
-import { triggerMatcher } from "../matching/matcher";
 import { freeWindows } from "../matching/timeMath";
 import { syncGoogleCalendar } from "./googleSync";
 
@@ -39,8 +38,6 @@ calendarRouter.put(routes.busyBlocks, requireAuth, async (req, res) => {
     const data = [...tails, ...unique.map(block => ({ ...block, userId, source: "device_calendar" as const }))];
     if (data.length) await tx.busyBlock.createMany({ data });
   });
-  // The sync has committed. Matcher failure must not turn a successful upload into an error.
-  void triggerMatcher().catch(() => console.error("Matcher failed after busy-block sync"));
   return res.json(PutBusyBlocksResponse.parse({ stored: unique.length }));
 });
 
@@ -157,7 +154,7 @@ calendarRouter.get(routes.googleCalendarCallback, async (req, res) => {
       },
     });
 
-    void syncGoogleCalendar(userId).then(() => triggerMatcher()).catch(e => console.error("Sync failed:", e));
+    void syncGoogleCalendar(userId).catch(e => console.error("Sync failed:", e));
     return res.redirect(redirectUrlWith("ok=1"));
   } catch (e) {
     console.error("Google OAuth callback error:", e);
@@ -193,11 +190,7 @@ calendarRouter.delete(routes.googleCalendar, requireAuth, async (req, res) => {
 calendarRouter.post(routes.googleCalendarSync, requireAuth, async (req, res) => {
   const userId = (req as AuthedRequest).userId;
   try {
-    const result = await syncGoogleCalendar(userId);
-    if (result.success) {
-      void triggerMatcher().catch(() => console.error("Matcher failed after google sync"));
-    }
-    return res.json(result);
+    return res.json(await syncGoogleCalendar(userId));
   } catch (e) {
     console.error("Google sync route error:", e);
     return res.status(500).json({ error: "sync_failed" });
