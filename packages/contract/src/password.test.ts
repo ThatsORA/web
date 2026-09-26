@@ -7,7 +7,7 @@ const identity = { username: "ojas", email: "polakhare@example.com" };
 describe("checkPassword", () => {
   it.each([
     ["short", passwordReasons.length],
-    ["a".repeat(129), passwordReasons.length],
+    ["a".repeat(31), passwordReasons.length],
     ["basketball", passwordReasons.common],
     ["BASKETBALL", passwordReasons.common],
     ["hello-OJAS-world", passwordReasons.username],
@@ -25,7 +25,7 @@ describe("checkPassword", () => {
     expect(commonPasswords).toHaveLength(10001);
     expect(commonPasswords).toContain("basketball");
   });
-  it.each(["cedarharbor", "cedar harbor moon", "web-demo-2026", "c".repeat(127) + "z", "🌱".repeat(9) + "🌙"])("allows %s without composition rules", (password) => {
+  it.each(["aB3!xy", "cedar harbor moon", "web-demo-2026", "c".repeat(29) + "z", "🌱".repeat(5) + "🌙"])("allows %s without composition rules", (password) => {
     expect(checkPassword(password, identity)).toEqual({ ok: true });
   });
   it("ignores 1–2 character email local parts, which would block nearly everything", () => {

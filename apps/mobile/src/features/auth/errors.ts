@@ -8,7 +8,7 @@ export function authErrorMessage(status: number | null, mode: "signup" | "login"
   if (status === 429) return "Too many login attempts. Wait 15 minutes and try again.";
   if (status === 400) {
     return mode === "signup"
-      ? "Check your details: username is 3–24 lowercase letters, numbers or _, password is 10–128 characters and must pass the password check."
+      ? "Check your details: username is 3–24 lowercase letters, numbers or _, password is 6–30 characters and must pass the password check."
       : "Enter your email or username and password.";
   }
   return "Couldn't reach the server. Try again.";
