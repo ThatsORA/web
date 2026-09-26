@@ -2,9 +2,15 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BusyBlock } from "@prisma/client";
-const mocks = vi.hoisted(() => ({ findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn(), transaction: vi.fn(), trigger: vi.fn() }));
-vi.mock("../../lib/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
+const mocks = vi.hoisted(() => ({ findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn(), transaction: vi.fn(), trigger: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), googleCalendarDelete: vi.fn(), fetch: vi.fn(), signState: vi.fn(), verifyState: vi.fn(), encryptToken: vi.fn(), decryptToken: vi.fn() }));
+vi.mock("../../lib/prisma", () => ({ prisma: { $transaction: mocks.transaction, googleCalendarConnection: { findUnique: mocks.findUnique, upsert: mocks.upsert, delete: mocks.googleCalendarDelete } } }));
 vi.mock("../matching/matcher", () => ({ triggerMatcher: mocks.trigger }));
+vi.mock("./crypto", () => ({
+  signState: mocks.signState,
+  verifyState: mocks.verifyState,
+  encryptToken: mocks.encryptToken,
+  decryptToken: mocks.decryptToken
+}));
 import { calendarRouter } from "./router";
 import { signToken } from "../../lib/auth";
 let base: string;
@@ -26,7 +32,7 @@ beforeEach(() => {
   mocks.deleteMany.mockResolvedValue({ count: 0 });
   mocks.createMany.mockResolvedValue({ count: 1 });
   mocks.trigger.mockResolvedValue(undefined);
-  mocks.transaction.mockImplementation(async callback => callback({ busyBlock: { findMany: mocks.findMany, deleteMany: mocks.deleteMany, createMany: mocks.createMany } }));
+  mocks.transaction.mockImplementation(async callback => callback({ busyBlock: { findMany: mocks.findMany, deleteMany: mocks.deleteMany, createMany: mocks.createMany }, googleCalendarConnection: { delete: mocks.googleCalendarDelete } }));
 });
 const put = (payload: unknown, auth = true) => fetch(base, { method: "PUT", headers: { "content-type": "application/json", ...(auth ? { authorization: `Bearer ${signToken(userId)}` } : {}) }, body: JSON.stringify(payload) });
 describe("PUT busy-blocks", () => {
@@ -67,5 +73,79 @@ describe("PUT busy-blocks", () => {
     mocks.transaction.mockRejectedValueOnce(Error("rollback"));
     expect((await put(body)).status).toBe(500);
     expect(mocks.trigger).not.toHaveBeenCalled();
+  });
+});
+
+describe("Google Calendar routes", () => {
+  let googleBase: string;
+  const originalFetch = global.fetch;
+
+  beforeAll(() => {
+    googleBase = base.replace("/busy-blocks", "/calendar/google");
+    global.fetch = async (url: string | URL | globalThis.Request, init?: RequestInit) => {
+      const urlStr = url.toString();
+      if (urlStr.includes("googleapis.com")) {
+        return mocks.fetch(url, init);
+      }
+      return originalFetch(url, init);
+    };
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
+  });
+
+  beforeEach(() => {
+    mocks.findUnique.mockResolvedValue(null);
+  });
+
+  it("GET /calendar/google returns status", async () => {
+    mocks.findUnique.mockResolvedValue({ status: "active", lastSyncedAt: new Date("2026-09-26T00:00:00Z") });
+    const res = await fetch(googleBase, { headers: { authorization: `Bearer ${signToken(userId)}` } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ connected: true, last_synced_at: "2026-09-26T00:00:00.000Z" });
+  });
+
+  it("POST /calendar/google/start returns auth url", async () => {
+    const res = await fetch(`${googleBase}/start`, { 
+      method: "POST", 
+      headers: { authorization: `Bearer ${signToken(userId)}`, "content-type": "application/json" },
+      body: JSON.stringify({ redirect_uri: "myapp://cb" })
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json() as any;
+    expect(data.url).toContain("https://accounts.google.com/o/oauth2/v2/auth");
+    expect(data.url).toContain("prompt=consent");
+    expect(data.url).toContain("state=");
+  });
+
+  it("DELETE /calendar/google disconnects", async () => {
+    mocks.findUnique.mockResolvedValue({ refreshTokenEnc: "enc" });
+    mocks.fetch.mockResolvedValue({ ok: true });
+
+    const res = await fetch(googleBase, { 
+      method: "DELETE", 
+      headers: { authorization: `Bearer ${signToken(userId)}` }
+    });
+    expect(res.status).toBe(200);
+    expect(mocks.transaction).toHaveBeenCalled();
+  });
+
+  it("GET /calendar/google/callback handles success", async () => {
+    mocks.verifyState.mockReturnValue({ userId, redirectUri: "myapp://cb" });
+    mocks.fetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({ refresh_token: "ref", scope: "scope1 scope2" }) });
+    mocks.encryptToken.mockReturnValue("encrypted-ref");
+
+    const res = await fetch(`${googleBase}/callback?code=abc&state=xyz`, { redirect: "manual" });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("myapp://cb?ok=1");
+    expect(mocks.upsert).toHaveBeenCalled();
+  });
+
+  it("GET /calendar/google/callback handles invalid state", async () => {
+    mocks.verifyState.mockImplementation(() => { throw new Error("bad"); });
+    const res = await fetch(`${googleBase}/callback?code=abc&state=xyz`, { redirect: "manual" });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("error=invalid_state");
   });
 });

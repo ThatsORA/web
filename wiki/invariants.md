@@ -12,7 +12,8 @@ touches before you write code.
 
 **Privacy**
 - Calendar event titles, notes and attendees never leave the device.
-  Only `{starts_at, ends_at}` busy blocks are sent.
+  Only `{starts_at, ends_at}` busy blocks are sent. For server-side
+  Google sync, it only reads free/busy intervals.
 - Votes are anonymous. No API response or socket payload may reveal who
   voted for what. Progress is `responded/total`, and a ghost pass counts
   as responded. Tallies stay hidden until voting closes.
