@@ -1,5 +1,5 @@
 // Owner: Andy — event feed; renders the event card in every state.
-import { Link } from "expo-router";
+import { router } from "expo-router";
 import { EventCard, FindingCard, useEvents } from "../../features/event-card";
 import { Button, Callout, Screen } from "../../ui";
 
@@ -27,9 +27,7 @@ export default function Home() {
         />
       ))}
       {__DEV__ ? (
-        <Link href="/(main)/card-states" style={{ color: "#888", textAlign: "center" }}>
-          Card states (stub data)
-        </Link>
+        <Button label="Card states (stub data)" variant="ghost" onPress={() => router.push("/(main)/card-states")} />
       ) : null}
     </Screen>
   );

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import { z } from "zod";
 import { api } from "../../lib/api";
-import type { OnboardingStepProps } from "../../lib/onboarding";
+import { stepEyebrow, type OnboardingStepProps } from "../../lib/onboarding";
 import { Button, Callout, Chip, Screen, useTheme } from "../../ui";
 import { FAVORITE_CATEGORIES, toggleCategory } from "./categories";
 
@@ -33,6 +33,7 @@ export function FavoritesStep({ onDone }: OnboardingStepProps) {
 
   return (
     <Screen
+      eyebrow={stepEyebrow("favorites")}
       title="What do you like?"
       subtitle="Tap a few. We'll lean toward these when picking places."
       footer={
