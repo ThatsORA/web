@@ -162,8 +162,9 @@ export const EventCardPayload = z.object({
 export type EventCardPayload = z.infer<typeof EventCardPayload>;
 
 export const EventsListResponse = z.object({
-  events: z.array(EventCardPayload.pick({ id: true, status: true, starts_at: true, vibe_tag: true })),
+  events: z.array(EventCardPayload),
 });
+export type EventsListResponse = z.infer<typeof EventsListResponse>;
 
 export const VoteRequest = z.object({ option_id: Id });
 export const ReportClosedRequest = z.object({ current_place_id: z.string() });
