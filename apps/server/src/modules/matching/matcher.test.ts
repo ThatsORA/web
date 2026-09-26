@@ -190,7 +190,7 @@ describe("matcher pipeline", () => {
     });
     expect(mocks.fetchCandidates).toHaveBeenCalledWith(
       expect.objectContaining({ vibe_tag: "dinner" }),
-      users.map(({ id, timezone, homeLat, homeLng, favorites }) => ({ id, timezone, homeLat, homeLng, favorites })),
+      users.map(({ id, timezone, homeLat, homeLng, favorites, travelMode }) => ({ id, timezone, homeLat, homeLng, favorites, travelMode })),
     );
     expect(mocks.curateVenues).toHaveBeenCalledWith(
       rankedVenues,
