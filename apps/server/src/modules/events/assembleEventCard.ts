@@ -5,6 +5,7 @@ export type EventWithCardData = Prisma.EventGetPayload<{
   include: {
     participants: { include: { user: { select: { id: true; username: true } } } };
     options: true;
+    creator: { select: { id: true; username: true } };
     votes: { select: { userId: true; optionId: true } };
   };
 }>;
@@ -41,6 +42,7 @@ export function assembleEventCard(event: EventWithCardData, userId: string): Eve
     my_status: myStatus,
     my_option_id: mine.voteStatus === "ghost_passed" ? null : myVote?.optionId ?? null,
     vote_closes_at: event.voteClosesAt.toISOString(),
+    created_by: event.creator,
     outcome: resolved ? {
       venue,
       venue_status: event.venueStatus,

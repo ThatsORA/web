@@ -3,8 +3,15 @@ import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventCardPayload, EventsListResponse } from "@web/contract";
 
-const mocks = vi.hoisted(() => ({ findFirst: vi.fn(), findMany: vi.fn() }));
-vi.mock("../../lib/prisma", () => ({ prisma: { event: mocks } }));
+const mocks = vi.hoisted(() => ({ findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() }));
+vi.mock("../../lib/prisma", () => ({ prisma: { event: mocks, friendship: mocks } }));
+
+const matcherMocks = vi.hoisted(() => ({
+  withMatcherMutex: vi.fn(async (cb) => cb()),
+  createUserHangout: vi.fn(),
+}));
+vi.mock("../matching/matcher", () => matcherMocks);
+
 
 import { signToken } from "../../lib/auth";
 import { eventsRouter } from "./router";
@@ -23,10 +30,62 @@ const option = (id: string, rank: number) => ({
   rating: 4.6, userRatingCount: 100, travelMinutes: { [alice]: 10, [bob]: 12 },
   maxTravelMin: 12, routeScore: 14.2, factsLine: "★4.6 · $$ · max 12 min travel", aiBlurb: null,
 });
+
+  it("POST /events creates an event when validation passes", async () => {
+    // caller is alice, invite bob
+    mocks.findMany.mockResolvedValueOnce([{ userLowId: alice, userHighId: bob, lowAddedHigh: true, highAddedLow: false }]);
+    matcherMocks.createUserHangout.mockResolvedValueOnce(eventId);
+    mocks.findUnique = vi.fn().mockResolvedValueOnce(event());
+
+    const response = await fetch(`${base}/events`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${signToken(alice)}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ invitee_ids: [bob] }),
+    });
+    
+    expect(response.status).toBe(201);
+    expect(matcherMocks.createUserHangout).toHaveBeenCalledWith(alice, [bob], undefined, undefined, undefined);
+  });
+
+  it("POST /events rejects self invite", async () => {
+    const response = await fetch(`${base}/events`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${signToken(alice)}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ invitee_ids: [alice] }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_invitees" });
+  });
+
+  it("POST /events rejects non-friends", async () => {
+    mocks.findMany.mockResolvedValueOnce([{ userLowId: alice, userHighId: bob, lowAddedHigh: false, highAddedLow: true }]);
+
+    const response = await fetch(`${base}/events`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${signToken(alice)}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ invitee_ids: [bob] }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_invitees" });
+  });
+
+  it("POST /events returns 422 if no common time", async () => {
+    mocks.findMany.mockResolvedValueOnce([{ userLowId: alice, userHighId: bob, lowAddedHigh: true, highAddedLow: false }]);
+    matcherMocks.createUserHangout.mockResolvedValueOnce(null);
+
+    const response = await fetch(`${base}/events`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${signToken(alice)}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ invitee_ids: [bob] }),
+    });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "no_common_time" });
+  });
+
 const event = () => ({
   id: eventId, status: "voting", startsAt: instant, endsAt: new Date("2026-10-01T20:30:00Z"),
   timezone: "America/New_York", vibeTag: "dinner", voteClosesAt: new Date("2026-10-01T17:00:00Z"),
-  venuePlaceId: null, venueStatus: "open",
+  venuePlaceId: null, venueStatus: "open", creator: { id: alice, username: "alice" },
   participants: [
     { userId: alice, voteStatus: "voted", user: { id: alice, username: "alice" } },
     { userId: bob, voteStatus: "voted", user: { id: bob, username: "bob" } },
@@ -63,6 +122,7 @@ describe("events router", () => {
       where: expect.objectContaining({ participants: { some: { userId: alice } } }),
       include: {
         participants: { include: { user: { select: { id: true, username: true } } } },
+        creator: { select: { id: true, username: true } },
         options: true,
         votes: { select: { userId: true, optionId: true } },
       },

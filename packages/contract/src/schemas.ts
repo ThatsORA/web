@@ -150,7 +150,16 @@ export const CurateContext = z.object({
 });
 export type CurateContext = z.infer<typeof CurateContext>;
 
+export const CreateEventRequest = z.object({
+  invitee_ids: z.array(Id).min(1).max(5),
+  vibe_tag: VibeTag.optional(),
+  earliest: Instant.optional(),
+  latest: Instant.optional(),
+});
+export type CreateEventRequest = z.infer<typeof CreateEventRequest>;
+
 export const EventCardPayload = z.object({
+  created_by: z.object({ id: Id, username: z.string() }).nullable().optional(),
   id: Id,
   status: EventStatus,
   starts_at: Instant,
