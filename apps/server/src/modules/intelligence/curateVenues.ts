@@ -87,7 +87,7 @@ function buildPrompt(venues: (RankedVenue & { reviews: string[] })[], ctx: Curat
     place_id: v.place_id,
     name: v.name,
     primary_type: v.primary_type,
-    price_level: v.price_level,
+    price: v.price_level != null ? PRICE[v.price_level] : null,
     rating: v.rating,
     user_rating_count: v.user_rating_count,
     max_travel_min: Math.round(v.max_travel_min),
@@ -101,7 +101,7 @@ function buildPrompt(venues: (RankedVenue & { reviews: string[] })[], ctx: Curat
     JSON.stringify(input),
     "1) Drop venues whose reviews contradict the vibe (e.g. a steakhouse for a casual hangout).",
     "2) Pick exactly 3 of the remaining venues, using their exact place_id.",
-    "3) Write one blurb per venue, at most 90 characters, using ONLY facts from the input above.",
+    "3) Write one blurb per venue, at most 90 characters, using ONLY facts from the input above. Write price as $–$$$$, never as a number.",
   ].join("\n");
 }
 
