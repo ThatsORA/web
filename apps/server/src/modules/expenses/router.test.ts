@@ -12,7 +12,7 @@ vi.mock("../../lib/prisma", () => ({
 import { expensesRouter } from "./router";
 import { signToken } from "../../lib/auth";
 
-const me = "a-me", bob = "b-bob", cat = "c-cat", ghost = "d-ghost";
+const [me, bob, cat, ghost] = ["1", "2", "3", "4"].map((d) => `${d}f48fb35-1518-481d-ab60-cfd2dcc28acf`) as [string, string, string, string];
 const confirmedEvent = () => ({
   id: "e1",
   status: "confirmed",
@@ -62,6 +62,19 @@ describe("expenses router", () => {
     mocks.findEvent.mockResolvedValueOnce({ ...confirmedEvent(), status: "voting" });
     expect((await call("POST", "/events/e1/expenses", { total_cents: 100, description: "x" })).status).toBe(409);
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("stores a valid custom split as given and 422s an invalid one (#81)", async () => {
+    const splits = [{ user_id: me, amount_cents: 200 }, { user_id: cat, amount_cents: 800 }];
+    expect((await call("POST", "/events/e1/expenses", { total_cents: 1000, description: "Tacos", splits })).status).toBe(201);
+    expect(mocks.create.mock.calls[0]![0].data.splits.create).toEqual([
+      { userId: me, amountOwedCents: 200, settled: true },
+      { userId: cat, amountOwedCents: 800, settled: false },
+    ]);
+    const bad = await call("POST", "/events/e1/expenses", { total_cents: 1000, description: "x", splits: [{ user_id: ghost, amount_cents: 1000 }] });
+    expect(bad.status).toBe(422);
+    expect(await bad.json()).toEqual({ error: "not_attendee" });
+    expect((await call("POST", "/events/e1/expenses", { total_cents: 1000, description: "x", splits: [{ user_id: bob, amount_cents: 999 }] })).status).toBe(422);
+    expect(mocks.create).toHaveBeenCalledOnce();
   });
   it("lists expenses for participants", async () => {
     const res = await call("GET", "/events/e1/expenses");

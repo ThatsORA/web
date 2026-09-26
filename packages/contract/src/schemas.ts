@@ -179,6 +179,8 @@ export const ReportClosedRequest = z.object({ current_place_id: z.string() });
 export const CreateExpenseRequest = z.object({
   total_cents: z.number().int().positive(),
   description: z.string().max(120),
+  // Custom split (#81); omitted → equal split. Must sum exactly to total_cents.
+  splits: z.array(z.object({ user_id: Id, amount_cents: z.number().int().nonnegative() })).optional(),
 });
 export const PatchExpenseSplitRequest = z.object({ settled: z.boolean() });
 
