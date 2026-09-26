@@ -33,7 +33,7 @@ function AuthStep({ onDone, initialMode }: OnboardingStepProps & { initialMode: 
     try {
       const body = signup
         ? SignupRequest.safeParse({ email: email.trim(), username: username.trim(), password, timezone: deviceTimezone() })
-        : LoginRequest.safeParse({ email: email.trim(), password });
+        : LoginRequest.safeParse({ identifier: email, password });
       if (!body.success) return setError(authErrorMessage(400, mode));
       const res = await api(signup ? routes.signup : routes.login, AuthResponse, { method: "POST", body: body.data });
       await session.save(res.token);
@@ -49,7 +49,7 @@ function AuthStep({ onDone, initialMode }: OnboardingStepProps & { initialMode: 
     <Screen
       eyebrow={signup ? stepEyebrow("signup") : undefined}
       title={signup ? "Create your account" : "Welcome back"}
-      subtitle={signup ? "Your timezone comes from this phone." : "Log in with your email."}
+      subtitle={signup ? "Your timezone comes from this phone." : "Log in with your email or username."}
       footer={
         <>
           <Button label={signup ? "Create account" : "Log in"} onPress={submit} loading={busy} />
@@ -64,7 +64,14 @@ function AuthStep({ onDone, initialMode }: OnboardingStepProps & { initialMode: 
         </>
       }
     >
-      <TextField label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" {...noAutofill} />
+      <TextField
+        label={signup ? "Email" : "Email or username"}
+        value={email}
+        onChangeText={setEmail}
+        keyboardType={signup ? "email-address" : "default"}
+        autoCorrect={false}
+        {...noAutofill}
+      />
       {signup ? <TextField label="Username" value={username} onChangeText={(v) => setUsername(v.toLowerCase())} {...noAutofill} /> : null}
       <TextField
         label="Password"

@@ -38,24 +38,36 @@ describe("auth router", () => {
   });
   it("rejects invalid bodies with 400 before touching the DB", async () => {
     expect((await call("POST", "/auth/signup", { ...signup, password: "short" })).status).toBe(400);
-    expect((await call("POST", "/auth/login", { email: "nope" })).status).toBe(400);
+    expect((await call("POST", "/auth/login", { password: "correct-horse" })).status).toBe(400);
+    expect((await call("POST", "/auth/login", { identifier: "   ", password: "correct-horse" })).status).toBe(400);
+    expect((await call("POST", "/auth/login", { identifier: "ojas" })).status).toBe(400);
     expect((await call("PATCH", "/me", { home_lat: 91 }, true)).status).toBe(400);
     expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.findUnique).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
   });
-  it("returns the same 401 for a wrong password and an unknown email", async () => {
+  it("returns the same 401 for a wrong password, an unknown email and an unknown username", async () => {
     mocks.findUnique.mockResolvedValueOnce(user);
-    const wrong = await call("POST", "/auth/login", { email: user.email, password: "wrong-horse" });
+    const wrong = await call("POST", "/auth/login", { identifier: user.email, password: "wrong-horse" });
     mocks.findUnique.mockResolvedValueOnce(null);
-    const unknown = await call("POST", "/auth/login", { email: "ghost@example.com", password: "whatever" });
-    expect(wrong.status).toBe(401);
-    expect(unknown.status).toBe(401);
-    expect(await wrong.json()).toEqual(await unknown.json());
+    const unknownEmail = await call("POST", "/auth/login", { identifier: "ghost@example.com", password: "whatever" });
+    mocks.findUnique.mockResolvedValueOnce(null);
+    const unknownUsername = await call("POST", "/auth/login", { identifier: "ghost", password: "whatever" });
+    const bodies = await Promise.all([wrong, unknownEmail, unknownUsername].map((r) => r.json()));
+    expect([wrong.status, unknownEmail.status, unknownUsername.status]).toEqual([401, 401, 401]);
+    expect(bodies[1]).toEqual(bodies[0]);
+    expect(bodies[2]).toEqual(bodies[0]);
   });
-  it("logs in with the right password", async () => {
+  it.each([
+    ["email", "ojas@example.com", { email: "ojas@example.com" }],
+    ["username", "ojas", { username: "ojas" }],
+    ["mixed-case email with spaces", "  Ojas@Example.COM ", { email: "ojas@example.com" }],
+    ["mixed-case username with spaces", " OJAS  ", { username: "ojas" }],
+  ])("logs in with the %s", async (_, identifier, where) => {
     mocks.findUnique.mockResolvedValueOnce(user);
-    const res = await call("POST", "/auth/login", { email: user.email, password: "correct-horse" });
+    const res = await call("POST", "/auth/login", { identifier, password: "correct-horse" });
     expect(await res.json()).toMatchObject({ user_id: user.id });
+    expect(mocks.findUnique).toHaveBeenCalledWith({ where });
   });
   it("GET /me requires auth and never returns the hash", async () => {
     expect((await call("GET", "/me")).status).toBe(401);
