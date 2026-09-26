@@ -3,17 +3,18 @@
 import type { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
 import { userRoom, type ServerToClientEvents } from "@web/contract";
-import { verifyToken } from "../lib/auth";
+import { verifySessionToken } from "../lib/auth";
 
 let io: Server<Record<string, never>, ServerToClientEvents> | null = null;
 
 export function attachRealtime(server: HttpServer) {
   io = new Server(server, { cors: { origin: "*" } });
   io.use((socket, next) => {
-    const userId = verifyToken(String(socket.handshake.auth?.token ?? ""));
-    if (!userId) return next(new Error("unauthorized"));
-    socket.data.userId = userId;
-    next();
+    void verifySessionToken(String(socket.handshake.auth?.token ?? "")).then((userId) => {
+      if (!userId) return next(new Error("unauthorized"));
+      socket.data.userId = userId;
+      next();
+    }).catch(() => next(new Error("unauthorized")));
   });
   io.on("connection", (socket) => {
     void socket.join(userRoom(socket.data.userId as string));
@@ -33,3 +34,7 @@ export function emitToUsers<E extends keyof ServerToClientEvents>(
 
 export * from "./push";
 
+/** Close existing sessions after a committed password reset. */
+export function disconnectUser(userId: string): void {
+  io?.in(userRoom(userId)).disconnectSockets(true);
+}

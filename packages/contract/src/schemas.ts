@@ -36,6 +36,11 @@ export const SignupRequest = z.object({
   if (!result.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["password"], message: result.reason, params: { error: "weak_password" } });
 });
 export const WeakPasswordResponse = z.object({ error: z.literal("weak_password"), reason: z.string() });
+// Emails are stored lowercased (see SignupRequest), so reset lookups normalize the same way.
+export const PasswordResetRequest = z.object({ email: z.string().trim().toLowerCase().email() });
+export const PasswordResetConfirmRequest = z.object({ email: z.string().trim().toLowerCase().email(), code: z.string().regex(/^\d{6}$/), new_password: z.string() });
+export const PasswordResetAccepted = z.object({ accepted: z.literal(true) });
+export const PasswordResetSuccess = z.object({ reset: z.literal(true) });
 // Usernames can't contain "@" (see Username), so the server reads an identifier with "@" as an email, otherwise a username.
 export const LoginRequest = z.object({ identifier: z.string().trim().toLowerCase().min(1), password: z.string() });
 export const AuthResponse = z.object({ token: z.string(), user_id: Id });

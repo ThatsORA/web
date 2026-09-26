@@ -21,12 +21,14 @@ import { sendCodeEmail, sendEmail } from "./email";
 import { consumeCode, issueCode } from "./emailCode";
 import { isUniqueViolation, roundCoord, toMe, usernameRetryAt } from "./helpers";
 import { hashPassword, verifyPassword } from "./passwordHash";
+import { passwordResetRouter } from "./passwordReset";
 import { loginLimiter } from "./loginLimiter";
 
 // Compared against when the email is unknown, so login timing doesn't reveal which accounts exist.
 const DUMMY_HASH = hashPassword("not-a-real-password");
 
 export const authRouter = Router();
+authRouter.use(passwordResetRouter);
 
 authRouter.post(routes.signup, async (req, res) => {
   const parsed = SignupRequest.safeParse(req.body);

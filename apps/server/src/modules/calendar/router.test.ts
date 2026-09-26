@@ -3,7 +3,7 @@ import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BusyBlock } from "@prisma/client";
 const mocks = vi.hoisted(() => ({ findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn(), transaction: vi.fn(), trigger: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), googleCalendarDelete: vi.fn(), fetch: vi.fn(), signState: vi.fn(), verifyState: vi.fn(), encryptToken: vi.fn(), decryptToken: vi.fn() }));
-vi.mock("../../lib/prisma", () => ({ prisma: { $transaction: mocks.transaction, googleCalendarConnection: { findUnique: mocks.findUnique, upsert: mocks.upsert, delete: mocks.googleCalendarDelete } } }));
+vi.mock("../../lib/prisma", () => ({ prisma: { user: { findUnique: async () => ({ passwordChangedAt: null }) }, $transaction: mocks.transaction, googleCalendarConnection: { findUnique: mocks.findUnique, upsert: mocks.upsert, delete: mocks.googleCalendarDelete } } }));
 vi.mock("../matching/matcher", () => ({ triggerMatcher: mocks.trigger }));
 vi.mock("./crypto", () => ({
   signState: mocks.signState,
