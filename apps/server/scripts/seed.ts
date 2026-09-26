@@ -22,6 +22,7 @@ async function seed() {
         where: { username: demoUser.username },
         update: {
           email: demoUser.email,
+          emailVerifiedAt: new Date(),
           passwordHash,
           timezone: DEMO_TIMEZONE,
           homeLat: demoUser.homeLat,
@@ -31,6 +32,7 @@ async function seed() {
         create: {
           username: demoUser.username,
           email: demoUser.email,
+          emailVerifiedAt: new Date(),
           passwordHash,
           timezone: DEMO_TIMEZONE,
           homeLat: demoUser.homeLat,

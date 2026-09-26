@@ -1,29 +1,30 @@
 // Owner: Ojas — username search, friend requests (visible to both) and close friends (silent).
 // Never reveal whether the other person marked you close (invariants.md Privacy).
 import { Router, type Request, type Response } from "express";
-import { AddCloseFriendRequest, SendFriendRequest, routes } from "@web/contract";
+import { AddCloseFriendRequest, PublicProfile, SendFriendRequest, routes } from "@web/contract";
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { emitToUsers } from "../../realtime";
-import { isUniqueViolation } from "../auth/helpers";
+import { findableWhere, isUniqueViolation, publicUserSelect, toPublicUser } from "../auth/helpers";
 import { triggerMatcher } from "../matching/matcher";
 import { isMutual, pair } from "./handshake";
-import { MAX_PENDING_OUTGOING, canAccept, onDelete, onSend, requestView } from "./requests";
+import { MAX_PENDING_OUTGOING, canAccept, friendshipState, onDelete, onSend, requestView } from "./requests";
 
 export const friendsRouter = Router();
 friendsRouter.use(requireAuth);
 
 const meOf = (req: Request) => (req as AuthedRequest).userId;
-const withUsers = { userLow: { select: { id: true, username: true } }, userHigh: { select: { id: true, username: true } } };
+const withUsers = { userLow: { select: publicUserSelect }, userHigh: { select: publicUserSelect } };
 const mine = (me: string) => ({ OR: [{ userLowId: me }, { userHighId: me }] });
-type Pair<U> = { userLowId: string; userLow: U; userHigh: U };
-const otherOf = <U>(row: Pair<U>, me: string) => (row.userLowId === me ? row.userHigh : row.userLow);
+type Pair<T> = { userLowId: string; userLow: T; userHigh: T };
+type U = { id: string; username: string; displayName: string | null };
+const otherOf = (row: Pair<U>, me: string) => toPublicUser(row.userLowId === me ? row.userHigh : row.userLow);
 
 /** Resolve `{ username }` to the other user, or send the 400/404 and return null. */
 async function target(req: Request, res: Response, schema: typeof SendFriendRequest) {
   const body = schema.safeParse(req.body);
   const other = body.success
-    ? await prisma.user.findUnique({ where: { username: body.data.username.toLowerCase() }, select: { id: true } })
+    ? await prisma.user.findFirst({ where: { username: body.data.username.toLowerCase(), ...findableWhere() }, select: { id: true } })
     : null;
   if (!body.success) res.status(400).json({ error: "invalid_body", message: body.error.message });
   else if (!other) res.status(404).json({ error: "not_found" });
@@ -37,13 +38,29 @@ friendsRouter.get(routes.userSearch, async (req, res) => {
   const q = String(req.query.q ?? "").trim().toLowerCase();
   const users = q
     ? await prisma.user.findMany({
-        where: { username: { startsWith: q }, id: { not: me } },
-        select: { id: true, username: true },
+        where: { username: { startsWith: q }, id: { not: me }, ...findableWhere() },
+        select: publicUserSelect,
         orderBy: { username: "asc" },
         take: 10,
       })
     : [];
-  res.json({ users });
+  res.json({ users: users.map(toPublicUser) });
+});
+
+// Public profile. PublicProfile.parse strips anything else, so email and close-friend flags can't leak.
+friendsRouter.get(routes.user(":id"), async (req, res) => {
+  const me = meOf(req);
+  const id = String(req.params.id);
+  const user = await prisma.user.findFirst({ where: { id, ...(id === me ? {} : findableWhere()) }, select: { ...publicUserSelect, bio: true } });
+  if (!user) return res.status(404).json({ error: "not_found" });
+  const { userLowId, userHighId } = pair(me, id);
+  const row = id === me ? null : await prisma.friendship.findUnique({ where: { userLowId_userHighId: { userLowId, userHighId } } });
+  const squads = await prisma.explicitGroup.findMany({
+    where: { AND: [{ members: { some: { userId: me, status: "active" } } }, { members: { some: { userId: id, status: "active" } } }] },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+  res.json(PublicProfile.parse({ ...toPublicUser(user), bio: user.bio, friendship: friendshipState(row, me), squads }));
 });
 
 // ---------- friends (visible layer) ----------
@@ -82,9 +99,15 @@ friendsRouter.get(routes.friendRequests, async (req, res) => {
     include: withUsers,
     orderBy: { requestedAt: "desc" },
   });
+  // Requests from unverified accounts wait, unseen, until they verify.
+  const requesters = rows.flatMap((r) => (r.requestedById && r.requestedById !== me ? [r.requestedById] : []));
+  const findable = new Set(
+    (await prisma.user.findMany({ where: { id: { in: requesters }, ...findableWhere() }, select: { id: true } })).map((u) => u.id),
+  );
   const out = { incoming: [] as unknown[], outgoing: [] as unknown[] };
   for (const r of rows) {
     const view = requestView(r, me);
+    if (view === "incoming" && !findable.has(r.requestedById ?? "")) continue;
     if (view) out[view].push({ id: r.id, user: otherOf(r, me), requested_at: r.requestedAt.toISOString() });
   }
   res.json(out);
@@ -93,7 +116,10 @@ friendsRouter.get(routes.friendRequests, async (req, res) => {
 friendsRouter.post(routes.acceptFriendRequest(":id"), async (req, res) => {
   const me = meOf(req);
   const row = await prisma.friendship.findFirst({ where: { id: String(req.params.id), ...mine(me) } });
-  if (!row || !canAccept(row, me)) return res.status(404).json({ error: "not_found" });
+  const requester = row?.requestedById
+    ? await prisma.user.findFirst({ where: { id: row.requestedById, ...findableWhere() }, select: { id: true } })
+    : null;
+  if (!row || !canAccept(row, me) || !requester) return res.status(404).json({ error: "not_found" });
   await prisma.friendship.update({ where: { id: row.id }, data: { status: "accepted", acceptedAt: new Date(), declinedAt: null } });
   if (row.requestedById) emitToUsers([row.requestedById], "friend:accepted", { user_id: me });
   res.status(204).end();

@@ -10,6 +10,7 @@ import { votingRouter } from "./modules/voting/router";
 import { expensesRouter } from "./modules/expenses/router";
 import { eventsRouter } from "./modules/events/router";
 import { favoritesRouter } from "./modules/favorites/router";
+import { squadsRouter } from "./modules/groups/router";
 import { chatRouter } from "./modules/chat/router";
 
 export function createApp() {
@@ -30,6 +31,7 @@ export function createApp() {
   api.use(venuesRouter);
   api.use(matchingRouter);
   api.use(expensesRouter);
+  api.use(squadsRouter);
   api.use(chatRouter);
   api.use(friendsRouter); // uses router-level requireAuth, keep last
   app.use(API_PREFIX, api);

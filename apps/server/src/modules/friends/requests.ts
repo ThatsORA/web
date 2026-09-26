@@ -23,6 +23,14 @@ export const onDelete = (row: RequestRow, me: string): "cancel" | "decline" => (
 /** Only the recipient accepts. */
 export const canAccept = (row: RequestRow, me: string) => row.status === "pending" && row.requestedById !== me;
 
+/** The friendship field on a public profile. A request I declined reads "none"; one they declined still reads "requested". */
+export function friendshipState(row: RequestRow | null, me: string): "none" | "requested" | "incoming" | "friends" {
+  if (!row) return "none";
+  if (row.status === "accepted") return "friends";
+  const view = requestView(row, me);
+  return view === "outgoing" ? "requested" : view === "incoming" ? "incoming" : "none";
+}
+
 /**
  * Where a row shows up for me. A declined request leaves the recipient's inbox but stays "outgoing" to the
  * requester, so a decline is never announced; they only lose it by cancelling.
