@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RankedVenue } from "@web/contract";
 
 const mocks = vi.hoisted(() => ({
@@ -308,12 +308,18 @@ describe("matcher mutex", () => {
 });
 
 describe("createUserHangout", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+
   it("creates an event with createdById set to callerId", async () => {
     const callerId = IDS[0]!;
     const inviteeIds = [IDS[1]!, IDS[2]!];
-    const eventId = await createUserHangout(callerId, inviteeIds);
+    const result = await createUserHangout(callerId, inviteeIds);
 
-    expect(eventId).toBe("event-1");
+    expect(result).toEqual({ eventId: "event-1" });
     expect(mocks.transaction).toHaveBeenCalledOnce();
     const createCall = mocks.eventCreate.mock.calls[0]![0];
     expect(createCall.data).toMatchObject({
@@ -323,5 +329,44 @@ describe("createUserHangout", () => {
     });
     expect(mocks.openVoting).toHaveBeenCalledWith("event-1");
   });
-});
 
+  // The mocked user lookup returns all three users, so invite the other two.
+  const INVITEES = [IDS[1]!, IDS[2]!];
+  const slotOf = () => {
+    const { startsAt, endsAt, vibeTag } = mocks.eventCreate.mock.calls[0]![0].data;
+    return { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), vibeTag };
+  };
+
+  it("matches a requested vibe that is feasible even when another vibe ranks higher", async () => {
+    // Thu 18:30–20:45 EDT (after busy padding): dinner is the default pick, but casual_hangout fits too.
+    expect(await createUserHangout(IDS[0]!, INVITEES, "casual_hangout")).toEqual({ eventId: "event-1" });
+    expect(slotOf()).toEqual({ startsAt: "2026-10-01T22:30:00.000Z", endsAt: "2026-10-02T00:30:00.000Z", vibeTag: "casual_hangout" });
+  });
+
+  it("returns no_common_time when no window fits, without searching venues", async () => {
+    // Thu 18:30–20:45 EDT is too short for a night out (20:00 start, 2 h minimum).
+    expect(await createUserHangout(IDS[0]!, INVITEES, "night_out")).toEqual({ error: "no_common_time" });
+    expect(mocks.fetchCandidates).not.toHaveBeenCalled();
+  });
+
+  it("returns no_venues when fewer than 3 venues come back", async () => {
+    mocks.fetchCandidates.mockResolvedValueOnce([]);
+    expect(await createUserHangout(IDS[0]!, INVITEES)).toEqual({ error: "no_venues" });
+    expect(mocks.eventCreate).not.toHaveBeenCalled();
+  });
+
+  it("searches all of next week, past the default 7-day horizon", async () => {
+    mocks.userFindMany.mockResolvedValue(users.map((user) => ({ ...user, busyBlocks: [] })));
+    // Next week in New York: Mon Oct 5 00:00 to Mon Oct 12 00:00 EDT (9–16 days from NOW).
+    const result = await createUserHangout(IDS[0]!, INVITEES, undefined, "2026-10-05T04:00:00.000Z", "2026-10-12T04:00:00.000Z");
+    expect(result).toEqual({ eventId: "event-1" });
+    expect(slotOf()).toEqual({ startsAt: "2026-10-05T21:30:00.000Z", endsAt: "2026-10-05T23:30:00.000Z", vibeTag: "dinner" });
+  });
+
+  it("clips free windows to [earliest, latest]", async () => {
+    mocks.userFindMany.mockResolvedValue(users.map((user) => ({ ...user, busyBlocks: [] })));
+    // Tue is free all day; only 16:00–16:50 EDT is asked for.
+    await createUserHangout(IDS[0]!, INVITEES, "quick_coffee", "2026-09-29T20:00:00.000Z", "2026-09-29T20:50:00.000Z");
+    expect(slotOf()).toEqual({ startsAt: "2026-09-29T20:00:00.000Z", endsAt: "2026-09-29T20:50:00.000Z", vibeTag: "quick_coffee" });
+  });
+});

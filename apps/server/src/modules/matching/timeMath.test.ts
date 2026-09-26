@@ -161,6 +161,16 @@ describe("classifySlot — plan §4 required unit tests verbatim", () => {
     );
     expect(slot?.vibe_tag).toBe("casual_hangout");
   });
+
+  it("a requested vibe wins whenever its template is feasible (#190)", () => {
+    const start = localToUtc(2026, 9, 29, 8, 0, TZ);
+    const end = localToUtc(2026, 9, 30, 0, 0, TZ);
+    expect(formatSlot(classifySlot({ start, end }, TZ))).toBe("dinner 17:30–19:30");
+    expect(formatSlot(classifySlot({ start, end }, TZ, "quick_coffee"))).toBe("quick_coffee 08:00–09:00");
+    expect(formatSlot(classifySlot({ start, end }, TZ, "casual_hangout"))).toBe("casual_hangout 10:00–12:00");
+    const evening = { start: localToUtc(2026, 9, 29, 21, 0, TZ), end };
+    expect(classifySlot(evening, TZ, "quick_coffee")).toBeNull();
+  });
 });
 
 describe("freeWindows — plan §3", () => {

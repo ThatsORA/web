@@ -34,7 +34,7 @@ const option = (id: string, rank: number) => ({
   it("POST /events creates an event when validation passes", async () => {
     // caller is alice, invite bob
     mocks.findMany.mockResolvedValueOnce([{ userLowId: alice, userHighId: bob, lowAddedHigh: true, highAddedLow: false }]);
-    matcherMocks.createUserHangout.mockResolvedValueOnce(eventId);
+    matcherMocks.createUserHangout.mockResolvedValueOnce({ eventId });
     mocks.findUnique.mockResolvedValueOnce(event());
 
     const response = await fetch(`${base}/events`, {
@@ -89,7 +89,7 @@ const option = (id: string, rank: number) => ({
 
   it("POST /events returns 422 if no common time", async () => {
     mocks.findMany.mockResolvedValueOnce([{ userLowId: alice, userHighId: bob, lowAddedHigh: true, highAddedLow: false }]);
-    matcherMocks.createUserHangout.mockResolvedValueOnce(null);
+    matcherMocks.createUserHangout.mockResolvedValueOnce({ error: "no_common_time" });
 
     const response = await fetch(`${base}/events`, {
       method: "POST",
@@ -98,6 +98,19 @@ const option = (id: string, rank: number) => ({
     });
     expect(response.status).toBe(422);
     expect(await response.json()).toEqual({ error: "no_common_time" });
+  });
+
+  it("POST /events returns 422 no_venues when venues can't be found", async () => {
+    mocks.findMany.mockResolvedValueOnce([{ userLowId: alice, userHighId: bob, lowAddedHigh: true, highAddedLow: false }]);
+    matcherMocks.createUserHangout.mockResolvedValueOnce({ error: "no_venues" });
+
+    const response = await fetch(`${base}/events`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${signToken(alice)}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ invitee_ids: [bob] }),
+    });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "no_venues" });
   });
 
 const event = () => ({

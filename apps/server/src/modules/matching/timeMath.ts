@@ -428,10 +428,12 @@ export function freeWindows(
  *   - Fri/Sat: night_out > dinner > casual_hangout > quick_coffee
  *   - Sun–Thu: dinner > night_out > casual_hangout > quick_coffee
  * - Returns the slot [s, s + len] or null if discarded.
+ * - With `vibe`, only that template counts: its slot is returned whenever it is feasible.
  */
 export function classifySlot(
   window: TimeWindowInput,
   timezone: string | readonly string[] = "America/New_York",
+  vibe?: VibeTag,
 ): ClassifiedSlot | null {
   const start = new Date(window.start);
   const end = new Date(window.end);
@@ -484,7 +486,7 @@ export function classifySlot(
 
   // Priority is chosen by the local weekday of s
   const isWeekend = weekday === "Fri" || weekday === "Sat";
-  const priority = isWeekend ? WEEKEND_PRIORITY : WEEKDAY_PRIORITY;
+  const priority = vibe ? [vibe] : isWeekend ? WEEKEND_PRIORITY : WEEKDAY_PRIORITY;
 
   for (const tag of priority) {
     const slot = feasible[tag];

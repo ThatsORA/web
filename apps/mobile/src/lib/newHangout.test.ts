@@ -1,7 +1,7 @@
 import { CreateEventRequest } from "@web/contract";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { MAX_INVITEES, buildCreateEventRequest, isNoCommonTime, otherWeek, toggleInvitee, weekRange } from "./newHangout";
+import { MAX_INVITEES, buildCreateEventRequest, noMatchReason, otherWeek, toggleInvitee, weekRange } from "./newHangout";
 
 const ids = Array.from({ length: 6 }, (_, i) => `00000000-0000-4000-8000-00000000000${i}`);
 
@@ -69,10 +69,11 @@ describe("buildCreateEventRequest", () => {
   });
 });
 
-describe("isNoCommonTime", () => {
-  it("is only the 422 no_common_time error", () => {
-    expect(isNoCommonTime(new ApiError(422, { error: "no_common_time" }))).toBe(true);
-    expect(isNoCommonTime(new ApiError(400, { error: "invalid_invitees" }))).toBe(false);
-    expect(isNoCommonTime(new Error("network"))).toBe(false);
+describe("noMatchReason", () => {
+  it("tells no_common_time and no_venues apart, and ignores other errors", () => {
+    expect(noMatchReason(new ApiError(422, { error: "no_common_time" }))).toBe("no_common_time");
+    expect(noMatchReason(new ApiError(422, { error: "no_venues" }))).toBe("no_venues");
+    expect(noMatchReason(new ApiError(400, { error: "invalid_invitees" }))).toBeNull();
+    expect(noMatchReason(new Error("network"))).toBeNull();
   });
 });

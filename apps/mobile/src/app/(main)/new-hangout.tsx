@@ -12,7 +12,7 @@ import { api } from "../../lib/api";
 import {
   MAX_INVITEES,
   buildCreateEventRequest,
-  isNoCommonTime,
+  noMatchReason,
   otherWeek,
   toggleInvitee,
   type Week,
@@ -25,7 +25,7 @@ const WEEKS: { week: Week; label: string }[] = [
   { week: "next", label: "Next week" },
 ];
 
-type Phase = "form" | "finding" | "no_time";
+type Phase = "form" | "finding" | "no_common_time" | "no_venues";
 
 export default function NewHangout() {
   const t = useTheme();
@@ -58,7 +58,8 @@ export default function NewHangout() {
       setPhase("form");
       router.back();
     } catch (e) {
-      if (isNoCommonTime(e)) return setPhase("no_time");
+      const reason = noMatchReason(e);
+      if (reason) return setPhase(reason);
       setPhase("form");
       setSubmitError("Couldn't start the hangout. Try again.");
     }
@@ -78,7 +79,20 @@ export default function NewHangout() {
     );
   }
 
-  if (phase === "no_time") {
+  if (phase === "no_venues") {
+    return (
+      <Screen title="New hangout">
+        <Card tint>
+          <Txt variant="headline">Couldn’t find places nearby</Txt>
+          <Txt variant="small">Make sure everyone has a home location set, then try again.</Txt>
+          <Button label="Try again" onPress={() => void submit(week)} />
+          <Button label="Change who’s coming" variant="ghost" onPress={() => setPhase("form")} />
+        </Card>
+      </Screen>
+    );
+  }
+
+  if (phase === "no_common_time") {
     return (
       <Screen title="New hangout">
         <Card tint>
