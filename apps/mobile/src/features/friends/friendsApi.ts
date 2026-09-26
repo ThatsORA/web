@@ -2,6 +2,8 @@
 // Invariant: privacy — close-friend star status is never revealed to the other user.
 import {
   AddCloseFriendRequest,
+  CloseFriendsResponse,
+  type CloseFriend,
   Friend as FriendSchema,
   FriendRequest as FriendRequestSchema,
   FriendRequestsResponse as FriendRequestsResponseSchema,
@@ -64,6 +66,12 @@ export async function deleteFriendRequest(requestId: string): Promise<void> {
 /** Unfriend an accepted friend. Clears both close-friend flags. */
 export async function unfriend(userId: string): Promise<void> {
   await api(routes.friend(userId), z.unknown(), { method: "DELETE" });
+}
+
+/** Friends I starred. Never reveals whether they starred me back. */
+export async function getCloseFriends(): Promise<CloseFriend[]> {
+  const res = await api(routes.closeFriends, CloseFriendsResponse);
+  return res.friends;
 }
 
 /**
