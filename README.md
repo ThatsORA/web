@@ -10,8 +10,9 @@ Built in 36 hours at the FIU hackathon (Google/Waymo Mobility Challenge).
 
 1. **Plan:** [`wiki/plan.md`](wiki/plan.md) is the source of truth: demo
    script, scope, schema, API contract, pipeline and timeline.
-2. **Agent rules:** [`AGENTS.md`](AGENTS.md). `CLAUDE.md` and `GEMINI.md`
-   point to it, so every vendor follows the same rules.
+2. **Agent rules:** [`AGENTS.md`](AGENTS.md) holds the principles (YAGNI,
+   stay in your lane, contract first). `CLAUDE.md` and `GEMINI.md` point
+   to it. The details are in [`wiki/`](wiki/README.md).
 3. **Ownership:** [`CODEOWNERS`](CODEOWNERS). Riley = @rileyh6,
    Ojas = @TheRealOP, Andy = @andydo4.
 4. **Work:** every agent session starts from a GitHub Issue that uses the
@@ -23,7 +24,7 @@ Built in 36 hours at the FIU hackathon (Google/Waymo Mobility Challenge).
 packages/contract   zod schemas + types shared by server and mobile (API Contract v2)
 apps/server         Express 5 + Socket.io + Prisma 6 (MongoDB Atlas)
 apps/mobile         Expo SDK 57 + Expo Router (routes in src/app/)
-wiki/plan.md        the plan
+wiki/               the plan and team docs
 ```
 
 ## Setup
