@@ -12,7 +12,7 @@ describe("toggleCategory", () => {
 
   it("does not mutate its input", () => {
     const s = ["bar"];
-    toggleCategory(s, "bakery");
+    toggleCategory(s, "dessert_shop");
     expect(s).toEqual(["bar"]);
   });
 
@@ -21,9 +21,31 @@ describe("toggleCategory", () => {
     expect(toggleCategory(full, "extra")).toHaveLength(MAX_FAVORITES);
     expect(PutFavoritesRequest.safeParse({ categories: full }).success).toBe(true);
   });
+});
 
-  it("offers the demo picks: coffee, tacos, casual dining", () => {
-    const labels = FAVORITE_CATEGORIES.map((c) => c.label);
-    expect(labels).toEqual(expect.arrayContaining(["Coffee", "Tacos", "Casual dining"]));
+describe("FAVORITE_CATEGORIES", () => {
+  it("offers the issue #13 chips, demo picks (coffee, tacos, casual dining) first", () => {
+    expect(FAVORITE_CATEGORIES.map((c) => c.label)).toEqual([
+      "Coffee", "Tacos", "Casual dining", "Sushi", "Pizza", "Bars", "Boba", "Dessert",
+    ]);
+  });
+
+  it("maps each chip to a Places API (New) Table A type", () => {
+    expect(Object.fromEntries(FAVORITE_CATEGORIES.map((c) => [c.label, c.value]))).toEqual({
+      Coffee: "coffee_shop",
+      Tacos: "mexican_restaurant",
+      "Casual dining": "restaurant", // closest match: no casual-dining type
+      Sushi: "sushi_restaurant",
+      Pizza: "pizza_restaurant",
+      Bars: "bar",
+      Boba: "tea_house", // closest match: no bubble tea type
+      Dessert: "dessert_shop",
+    });
+  });
+
+  it("has unique values that fit in one PutFavoritesRequest", () => {
+    const values = FAVORITE_CATEGORIES.map((c) => c.value);
+    expect(new Set(values).size).toBe(values.length);
+    expect(PutFavoritesRequest.safeParse({ categories: values }).success).toBe(true);
   });
 });
