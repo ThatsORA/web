@@ -211,11 +211,6 @@ export const TEXT_PAIRS: ReadonlyArray<readonly [keyof Palette, keyof Palette]> 
   ["onPrimary", "primaryStrong"],
   ["primary", "onPrimary"], // Button onBrand: violet label on white, over a violet band
   ["heading", "primarySoft"],
-  ["heading", "primarySofter"], // event card: my voted option row
-  ["text", "primarySofter"],
-  ["textMuted", "primarySofter"],
-  ["link", "surfaceCard"], // event card: Open in Maps
-  ["link", "primarySoft"],
   ["onLime", "lime"],
   ["info", "infoSurface"],
   ["success", "successSurface"],

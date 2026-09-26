@@ -1,6 +1,7 @@
 // Owner: Andy — the event card in every state (plan demo steps 6–9). Presentational: data in, callbacks out.
-// Look follows wiki/design.md "The event card".
+// Styled per wiki/design.md "The event card": Primer components + tokens only.
 import type { EventCardPayload, EventOption } from "@web/contract";
+import type { ReactNode } from "react";
 import { ActivityIndicator, Linking, Pressable, Share, View } from "react-native";
 import { Badge, Button, Callout, Card, Txt, useTheme } from "../../ui";
 import { canReportClosed, cardKind, freePeople, travelRows } from "./cardState";
@@ -35,16 +36,44 @@ export function FindingCard() {
   );
 }
 
-export function EventCard({ card, actions, swapped, busy, notice }: Props) {
+export function EventCard(props: Props) {
+  const { card } = props;
   const kind = cardKind(card);
+  if ((kind === "confirmed" || kind === "completed") && card.outcome?.venue) {
+    return <ConfirmedCard {...props} venue={card.outcome.venue} />;
+  }
+  return <OpenCard {...props} />;
+}
 
+/** Eyebrow (vibe) + Playfair time headline + who's invited, with an optional badge on the right. */
+function Header({ card, eyebrow, badge, onBrand }: { card: EventCardPayload; eyebrow: string; badge?: ReactNode; onBrand?: boolean }) {
+  const t = useTheme();
+  const color = onBrand ? "onPrimary" : undefined;
+  return (
+    <View style={{ gap: t.spacing.xs }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: t.spacing.sm }}>
+        <Txt variant="eyebrow" color={color}>
+          {eyebrow}
+        </Txt>
+        {badge}
+      </View>
+      {onBrand ? null : (
+        <>
+          <Txt variant="headline" accessibilityRole="header">
+            {timeLabel(card)}
+          </Txt>
+          <Txt variant="small">{card.participants.map((p) => p.username).join(" · ")}</Txt>
+        </>
+      )}
+    </View>
+  );
+}
+
+function OpenCard({ card, actions, busy, notice }: Props) {
+  const kind = cardKind(card);
   return (
     <Card>
-      <Txt variant="eyebrow">{vibeLabel(card.vibe_tag)}</Txt>
-      <Txt variant="headline" accessibilityRole="header">
-        {timeLabel(card)}
-      </Txt>
-      <Txt variant="small">{card.participants.map((p) => p.username).join(" · ")}</Txt>
+      <Header card={card} eyebrow={vibeLabel(card.vibe_tag)} badge={kind === "voting" ? <Badge tone="new" label="New" /> : null} />
 
       {kind === "voting" || kind === "waiting" ? (
         <>
@@ -66,18 +95,10 @@ export function EventCard({ card, actions, swapped, busy, notice }: Props) {
         </>
       ) : null}
 
-      {(kind === "confirmed" || kind === "completed") && card.outcome?.venue ? (
-        <Confirmed card={card} venue={card.outcome.venue} swapped={swapped} />
-      ) : null}
-      {kind === "confirmed" && canReportClosed(card) ? (
-        <Button label="It's closed" variant="outline" onPress={actions.reportClosed} loading={busy} />
-      ) : null}
-
       {kind === "chatted" ? (
         <>
-          <Txt variant="body">
-            Not enough votes to pick a place. Free: {freePeople(card).map((p) => p.username).join(", ")}
-          </Txt>
+          <Badge tone="warning" label="Not enough votes" />
+          <Txt>Everyone's free, you just need a place. Free: {freePeople(card).map((p) => p.username).join(", ")}</Txt>
           <Button
             label="Plan it yourselves"
             onPress={() => void Share.share({ message: shareMessage(card, freePeople(card)) })}
@@ -85,7 +106,12 @@ export function EventCard({ card, actions, swapped, busy, notice }: Props) {
         </>
       ) : null}
 
-      {kind === "expired" ? <Txt variant="small">Not enough people could make it this time.</Txt> : null}
+      {kind === "expired" ? (
+        <>
+          <Badge label="Expired" />
+          <Txt variant="small">Not enough people could make it this time.</Txt>
+        </>
+      ) : null}
 
       {notice ? <Callout tone="danger">{notice}</Callout> : null}
     </Card>
@@ -99,9 +125,8 @@ function OptionRow({ option, mine, disabled, onVote }: { option: EventOption; mi
       style={{
         borderWidth: 1,
         borderColor: mine ? t.colors.primary : t.colors.border,
-        backgroundColor: mine ? t.colors.primarySofter : t.colors.surface,
         borderRadius: t.radius.sm,
-        padding: t.spacing.md,
+        padding: t.spacing.ms,
         gap: t.spacing.xs,
       }}
     >
@@ -111,52 +136,72 @@ function OptionRow({ option, mine, disabled, onVote }: { option: EventOption; mi
       <Txt variant="small" numeric>
         {option.facts_line}
       </Txt>
-      {option.ai_blurb ? <Txt variant="body">{option.ai_blurb}</Txt> : null}
-      {mine ? <Badge tone="info" label="✓ Your vote" /> : <Button label="Vote" onPress={onVote} disabled={disabled} />}
+      {option.ai_blurb ? <Txt>{option.ai_blurb}</Txt> : null}
+      {mine ? <Badge tone="info" label="Your vote" /> : <Button label="Vote" onPress={onVote} disabled={disabled} />}
     </View>
   );
 }
 
-function Confirmed({ card, venue, swapped }: { card: EventCardPayload; venue: EventOption; swapped?: boolean }) {
+/** Violet `Card brand` header with the venue, then travel times, map pin and "It's closed". */
+function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & { venue: EventOption }) {
   const t = useTheme();
+  const status = card.status === "completed" ? "Done" : "Confirmed";
   return (
-    <>
+    <View>
       <Card brand>
-        {swapped ? <Badge tone="new" label="Swapped" /> : <Txt variant="eyebrow" color="onPrimary">Confirmed</Txt>}
-        <Txt variant="headline" color="onPrimary">
+        <Header
+          card={card}
+          onBrand
+          eyebrow={`${status} · ${vibeLabel(card.vibe_tag)}`}
+          badge={swapped ? <Badge tone="new" label="Swapped" /> : null}
+        />
+        <Txt variant="headline" color="onPrimary" accessibilityRole="header">
           {venue.name}
         </Txt>
         <Txt variant="small" color="onPrimary" numeric>
-          {swapped ? swapLabel(venue) : venue.facts_line}
+          {timeLabel(card)}
         </Txt>
-      </Card>
-      {travelRows(card).map((r) => (
-        <View key={r.id} style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <Txt variant="body">{r.username}</Txt>
-          <Txt variant="body" color="heading" numeric>
-            {r.minutes === null ? "—" : `${Math.round(r.minutes)} min`}
+        {swapped ? (
+          <Txt variant="small" color="onPrimary" numeric>
+            {swapLabel(venue)}
           </Txt>
-        </View>
-      ))}
-      <Pressable
-        accessibilityRole="link"
-        accessibilityLabel={`Open ${venue.name} in Maps`}
-        onPress={() => void Linking.openURL(mapsUrl(venue))}
-        style={({ pressed }) => ({
-          backgroundColor: pressed ? t.colors.primarySoft : t.colors.surfaceCard,
-          borderColor: t.colors.border,
-          borderWidth: 1,
-          borderRadius: t.radius.sm,
-          padding: t.spacing.md,
-          alignItems: "center",
-          gap: t.spacing.xs,
-        })}
-      >
-        <Txt variant="stat">📍</Txt>
-        <Txt variant="label" color="link">
-          Open in Maps
+        ) : null}
+      </Card>
+      <Card>
+        <Txt variant="small" numeric>
+          {venue.facts_line}
         </Txt>
-      </Pressable>
-    </>
+        {travelRows(card).map((r) => (
+          <View key={r.id} style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <Txt>{r.username}</Txt>
+            <Txt numeric color="heading">
+              {r.minutes === null ? "—" : `${Math.round(r.minutes)} min`}
+            </Txt>
+          </View>
+        ))}
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={`Open ${venue.name} in Maps`}
+          onPress={() => void Linking.openURL(mapsUrl(venue))}
+          style={({ pressed }) => ({
+            backgroundColor: t.colors.surfaceCard,
+            opacity: pressed ? 0.8 : 1,
+            borderColor: t.colors.border,
+            borderWidth: 1,
+            borderRadius: t.radius.sm,
+            padding: t.spacing.md,
+            alignItems: "center",
+            gap: t.spacing.xs,
+          })}
+        >
+          <Txt variant="headline">📍</Txt>
+          <Txt variant="label">Open in Maps</Txt>
+        </Pressable>
+        {canReportClosed(card) ? (
+          <Button label="It's closed" variant="outline" onPress={actions.reportClosed} loading={busy} />
+        ) : null}
+        {notice ? <Callout tone="danger">{notice}</Callout> : null}
+      </Card>
+    </View>
   );
 }

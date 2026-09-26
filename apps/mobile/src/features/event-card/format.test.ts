@@ -9,6 +9,10 @@ describe("slotLabel", () => {
     expect(slotLabel(card)).toBe("Thu · 6:30–8:30pm · Dinner");
   });
 
+  it("timeLabel is the headline without the vibe", () => {
+    expect(timeLabel(card)).toBe("Thu · 6:30–8:30pm");
+  });
+
   it("uses the event timezone, not UTC", () => {
     // 22:30Z is 6:30pm in New York but 3:30pm in Los Angeles.
     const utc = { ...card, starts_at: "2026-10-01T22:30:00Z", ends_at: "2026-10-02T00:30:00Z" };
@@ -24,12 +28,6 @@ describe("slotLabel", () => {
       ends_at: "2026-10-03T12:00:00-04:00",
     };
     expect(slotLabel(brunch)).toBe("Sat · 11am–12pm · Coffee");
-  });
-});
-
-describe("timeLabel", () => {
-  it("is the slot without the vibe (the card's headline)", () => {
-    expect(timeLabel(card)).toBe("Thu · 6:30–8:30pm");
   });
 });
 

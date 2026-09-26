@@ -6,14 +6,13 @@ import { Screen, Txt } from "../../ui";
 const noop: CardActions = { vote: () => {}, ghostPass: () => {}, reportClosed: () => {} };
 
 export default function CardStates() {
-  const label = (s: string) => <Txt variant="eyebrow">{s}</Txt>;
   return (
-    <Screen title="Card states">
-      {label("Finding a time")}
+    <Screen eyebrow="Dev" title="Card states">
+      <Txt variant="eyebrow">Finding a time</Txt>
       <FindingCard />
       {FIXTURES.map((f) => (
         <Fragment key={f.label}>
-          {label(f.label)}
+          <Txt variant="eyebrow">{f.label}</Txt>
           <EventCard card={f.card} actions={noop} swapped={f.swapped} />
         </Fragment>
       ))}
