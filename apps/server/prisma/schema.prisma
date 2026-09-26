@@ -77,6 +77,9 @@ model User {
   // null = unverified (sign-up writes it explicitly). Accounts made outside sign-up (seed, legacy)
   // lack the field and scripts/backfill.ts marks them verified.
   emailVerifiedAt DateTime? @map("email_verified_at")
+  displayName       String?   @map("display_name") // 1–40 chars; others see display_name ?? username
+  bio               String? // ≤ 160 chars
+  usernameChangedAt DateTime? @map("username_changed_at") // once per 30 days
 
   busyBlocks      BusyBlock[]
   friendshipsLow  Friendship[]       @relation("FriendshipLow")

@@ -19,6 +19,9 @@ touches before you write code.
 - Friend status (pending/accepted) is visible to both people. Close-friend
   status never is: no endpoint or socket payload reveals whether someone
   marked you close, and a declined friend request is never announced.
+- Other users only ever leave the server as `PublicUser` (id, username,
+  display_name) or `PublicProfile`, which are zod-parsed so extra fields
+  (email, close-friend flags) are stripped.
 
 **Money**
 - Money is always integer cents. Split evenly, then give the leftover

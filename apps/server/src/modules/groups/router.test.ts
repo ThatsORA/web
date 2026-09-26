@@ -45,7 +45,7 @@ vi.mock("../../lib/prisma", () => ({
         db.groups.filter((g) => db.members.some((m) => m.groupId === g.id && m.userId === where.members.some.userId)).map((g) => ({ id: g.id })),
       findUniqueOrThrow: async ({ where }: any) => ({
         ...db.groups.find((g) => g.id === where.id)!,
-        members: db.members.filter((m) => m.groupId === where.id).map((m) => ({ ...m, user: { id: m.userId, username: username(m.userId) } })),
+        members: db.members.filter((m) => m.groupId === where.id).map((m) => ({ ...m, user: { id: m.userId, username: username(m.userId), displayName: null } })),
       }),
       update: async ({ where, data }: any) => Object.assign(db.groups.find((g) => g.id === where.id)!, data),
       delete: async ({ where }: any) => {

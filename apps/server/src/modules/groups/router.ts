@@ -4,13 +4,14 @@ import { Router, type Request } from "express";
 import { CreateSquadRequest, InviteToSquadRequest, RenameSquadRequest, RespondToSquadRequest, Squad, SquadsResponse, routes } from "@web/contract";
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
+import { publicUserSelect, toPublicUser } from "../auth/helpers";
 import { pair } from "../friends/handshake";
 import { hasRoom, isDue, onAccept, visibleJoinsAt } from "./squads";
 
 export const squadsRouter = Router();
 
 const meOf = (req: Request) => (req as AuthedRequest).userId;
-const withMembers = { members: { include: { user: { select: { id: true, username: true } } } } } as const;
+const withMembers = { members: { include: { user: { select: publicUserSelect } } } } as const;
 const membership = (groupId: string, userId: string) =>
   prisma.groupMember.findUnique({ where: { groupId_userId: { groupId, userId } } });
 
@@ -23,11 +24,10 @@ async function toSquad(groupId: string, me: string) {
     members: [...g.members]
       .sort((a, b) => (a.status === b.status ? a.user.username.localeCompare(b.user.username) : a.status === "active" ? -1 : 1))
       .map((m) => ({
-      id: m.user.id,
-      username: m.user.username,
-      status: m.status,
-      joins_at: visibleJoinsAt(m)?.toISOString() ?? null,
-    })),
+        ...toPublicUser(m.user),
+        status: m.status,
+        joins_at: visibleJoinsAt(m)?.toISOString() ?? null,
+      })),
   });
 }
 

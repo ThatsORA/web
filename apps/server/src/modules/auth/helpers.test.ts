@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
-import { isUniqueViolation, roundCoord, toMe } from "./helpers";
+import { USERNAME_COOLDOWN_MS, isUniqueViolation, roundCoord, toMe, toPublicUser, usernameRetryAt } from "./helpers";
 
 describe("roundCoord", () => {
   it("rounds to 3 decimals, including negatives", () => {
@@ -21,8 +21,25 @@ describe("isUniqueViolation", () => {
 
 describe("toMe", () => {
   it("never exposes the password hash", () => {
-    const me = toMe({ id: "u1", username: "ojas", email: "o@x.io", passwordHash: "secret", timezone: "UTC", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: null });
+    const me = toMe({ id: "u1", username: "ojas", email: "o@x.io", passwordHash: "secret", timezone: "UTC", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: null, displayName: null, bio: null, usernameChangedAt: null });
     expect(JSON.stringify(me)).not.toContain("secret");
     expect(me).not.toHaveProperty("passwordHash");
+  });
+});
+
+describe("usernameRetryAt", () => {
+  const now = new Date("2026-09-26T12:00:00Z");
+  it("allows a first change and one every 30 days", () => {
+    expect(usernameRetryAt(null, now)).toBeNull();
+    expect(usernameRetryAt(new Date(now.getTime() - USERNAME_COOLDOWN_MS), now)).toBeNull();
+    expect(usernameRetryAt(new Date(now.getTime() - 1000), now)).toEqual(new Date(now.getTime() - 1000 + USERNAME_COOLDOWN_MS));
+  });
+});
+
+describe("toPublicUser", () => {
+  it("falls back to the username and carries nothing but id, username, display_name", () => {
+    const u = { id: "u1", username: "ojas", displayName: null, email: "o@x.io", lowAddedHigh: true } as never;
+    expect(toPublicUser(u)).toEqual({ id: "u1", username: "ojas", display_name: "ojas" });
+    expect(toPublicUser({ id: "u1", username: "ojas", displayName: "Ojas P" })).toEqual({ id: "u1", username: "ojas", display_name: "Ojas P" });
   });
 });
