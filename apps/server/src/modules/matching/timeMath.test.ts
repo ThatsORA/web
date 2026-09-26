@@ -1,16 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   classifySlot,
-  formatSlot,
   formatTimeHHMM,
   freeWindows,
   getLocalParts,
   localToUtc,
   mergeIntervals,
   subtractIntervals,
+  type ClassifiedSlot,
 } from "./timeMath";
 
 const TZ = "America/New_York";
+
+function formatSlot(slot: ClassifiedSlot | null, timezone = TZ): string {
+  if (!slot) return "discarded";
+  return `${slot.vibe_tag} ${formatTimeHHMM(slot.start, timezone)}–${formatTimeHHMM(slot.end, timezone)}`;
+}
 
 describe("classifySlot — plan §4 required unit tests verbatim", () => {
   // Base reference week: September 29, 2026 to October 4, 2026
@@ -145,18 +150,15 @@ describe("classifySlot — plan §4 required unit tests verbatim", () => {
     expect(slot?.end.toISOString()).toBe("2026-11-02T01:00:00.000Z"); // 20:00 EST
   });
 
-  it("handles string input and property aliases (starts_at/ends_at)", () => {
+  it("handles string input", () => {
     const slot = classifySlot(
       {
-        starts_at: "2026-09-29T18:00:00-04:00",
-        ends_at: "2026-09-29T19:15:00-04:00",
+        start: "2026-09-29T18:00:00-04:00",
+        end: "2026-09-29T19:15:00-04:00",
       },
       TZ
     );
     expect(slot?.vibe_tag).toBe("casual_hangout");
-    expect(slot?.vibe).toBe("casual_hangout");
-    expect(slot?.starts_at).toEqual(slot?.start);
-    expect(slot?.ends_at).toEqual(slot?.end);
   });
 });
 
@@ -173,8 +175,8 @@ describe("freeWindows — plan §3", () => {
         timezone: TZ,
         busyBlocks: [
           {
-            starts_at: localToUtc(2026, 9, 29, 13, 0, TZ),
-            ends_at: localToUtc(2026, 9, 29, 14, 0, TZ),
+            start: localToUtc(2026, 9, 29, 13, 0, TZ),
+            end: localToUtc(2026, 9, 29, 14, 0, TZ),
           },
         ],
       },
@@ -203,8 +205,8 @@ describe("freeWindows — plan §3", () => {
         busyBlocks: [],
         openEvents: [
           {
-            starts_at: localToUtc(2026, 9, 29, 18, 0, TZ),
-            ends_at: localToUtc(2026, 9, 29, 20, 0, TZ),
+            start: localToUtc(2026, 9, 29, 18, 0, TZ),
+            end: localToUtc(2026, 9, 29, 20, 0, TZ),
           },
         ],
       },
@@ -268,8 +270,8 @@ describe("freeWindows — plan §3", () => {
         timezone: TZ,
         busyBlocks: [
           {
-            starts_at: localToUtc(2026, 9, 29, 14, 0, TZ),
-            ends_at: localToUtc(2026, 9, 29, 16, 0, TZ),
+            start: localToUtc(2026, 9, 29, 14, 0, TZ),
+            end: localToUtc(2026, 9, 29, 16, 0, TZ),
           },
         ],
       },
@@ -278,8 +280,8 @@ describe("freeWindows — plan §3", () => {
         timezone: TZ,
         busyBlocks: [
           {
-            starts_at: localToUtc(2026, 9, 29, 17, 0, TZ),
-            ends_at: localToUtc(2026, 9, 29, 19, 0, TZ),
+            start: localToUtc(2026, 9, 29, 17, 0, TZ),
+            end: localToUtc(2026, 9, 29, 19, 0, TZ),
           },
         ],
       },

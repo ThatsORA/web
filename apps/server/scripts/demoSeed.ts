@@ -68,8 +68,6 @@ export function buildDemoSeedSchedule(nowInput: Date): DemoSeedSchedule {
   const availableWindow: TimeWindow = {
     start: windowStart,
     end: windowEnd,
-    starts_at: windowStart,
-    ends_at: windowEnd,
   };
 
   return {
