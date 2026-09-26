@@ -56,9 +56,21 @@ block it. Here's my 5-line plan…"*
 
 ## How we build
 
-- **YAGNI.** Build only what your issue's acceptance criteria and the demo
-  script need. No speculative options, abstractions or "while I'm here"
-  features.
+- **YAGNI.** Before you write anything, ask whether an acceptance criterion
+  or a step in the demo script needs it. If neither does, don't build it;
+  list it in the PR as a follow-up instead.
+  - Reuse before you write: check `@web/contract`, the scaffold and the
+    existing helpers first.
+  - No config, flags or parameters for values that never change. Hardcode
+    them, and add a parameter when a second caller needs one.
+  - No interface, wrapper or generic helper with only one user.
+  - No handling for edge cases the demo can't hit. Trust boundaries are the
+    exception: auth, input parsing, money and the AI fallback are required
+    by the invariants.
+  - Stretch work (the Atlas showcase, expenses) waits for the hour-20
+    checkpoint, even when it looks quick.
+  - Tests follow the same rule: cover the logic you wrote, not hypothetical
+    inputs.
 - **KISS.** Take the simplest thing that works. Plain functions over
   frameworks, and a small amount of duplication over the wrong abstraction.
 - **Demo first.** Every task serves the demo script in the plan. If it
