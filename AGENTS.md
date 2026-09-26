@@ -37,6 +37,10 @@ in your PR.
 
 ## Read before coding
 
+**Opened in the main `web` folder and asked to set someone up?** Follow
+[`wiki/setup.md`](wiki/setup.md) and don't write feature code.
+
+
 | Page | What's in it |
 | --- | --- |
 | [`wiki/plan.md`](wiki/plan.md) | Demo script, scope, schema, API contract, pipeline |
@@ -44,3 +48,4 @@ in your PR.
 | [`wiki/codebase.md`](wiki/codebase.md) | Scaffold map and the lanes table |
 | [`wiki/invariants.md`](wiki/invariants.md) | Hard invariants, pinned versions and gotchas |
 | [`wiki/mobile.md`](wiki/mobile.md) | Expo SDK 57 rules for `apps/mobile/` |
+| [`wiki/setup.md`](wiki/setup.md) | Onboarding a teammate: tools, gh login, worktrees, Atlas, handoff |
