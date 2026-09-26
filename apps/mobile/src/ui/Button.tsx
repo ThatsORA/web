@@ -6,8 +6,8 @@ import { useTheme } from "./useTheme";
 type Props = {
   label: string;
   onPress: () => void;
-  /** primary = brand; secondary = muted fill; outline = bordered; ghost = link-style */
-  variant?: "primary" | "secondary" | "outline" | "ghost";
+  /** primary = brand; secondary = muted fill; outline = bordered; ghost = link-style; onBrand = white, for violet bands */
+  variant?: "primary" | "secondary" | "outline" | "ghost" | "onBrand";
   disabled?: boolean;
   loading?: boolean;
 };
@@ -16,7 +16,7 @@ export function Button({ label, onPress, variant = "primary", disabled, loading 
   const t = useTheme();
   const c = t.colors;
   const inactive = !!disabled || !!loading;
-  const fg = variant === "primary" ? "onPrimary" : variant === "secondary" ? "heading" : variant === "outline" ? "heading" : "link";
+  const fg = variant === "onBrand" ? "primary" : variant === "primary" ? "onPrimary" : variant === "secondary" ? "heading" : variant === "outline" ? "heading" : "link";
   return (
     <Pressable
       accessibilityRole="button"
@@ -33,7 +33,9 @@ export function Button({ label, onPress, variant = "primary", disabled, loading 
         borderWidth: variant === "outline" ? 1 : 0,
         borderColor: c.borderStrong,
         backgroundColor:
-          variant === "primary"
+          variant === "onBrand"
+            ? c.onPrimary // stays white when pressed: primarySoft is too dark for violet text in dark mode
+            : variant === "primary"
             ? pressed
               ? c.primaryStrong
               : c.primary

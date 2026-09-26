@@ -124,6 +124,7 @@ export type TextPreset = { fontFamily: string; fontSize: number; lineHeight: num
  * (screen headlines, the event card's hero line). Everything else is Geist Mono.
  */
 export const type = {
+  hero: { fontFamily: fonts.display, fontSize: 64, lineHeight: 68, letterSpacing: -1 }, // welcome screen wordmark only
   display: { fontFamily: fonts.display, fontSize: font.display, lineHeight: 40, letterSpacing: -0.5 },
   headline: { fontFamily: fonts.displaySemi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3 },
   title: { fontFamily: fonts.monoBold, fontSize: font.title, lineHeight: 36 },
@@ -208,7 +209,13 @@ export const TEXT_PAIRS: ReadonlyArray<readonly [keyof Palette, keyof Palette]> 
   ["link", "surface"],
   ["onPrimary", "primary"],
   ["onPrimary", "primaryStrong"],
+  ["primary", "onPrimary"], // Button onBrand: violet label on white, over a violet band
   ["heading", "primarySoft"],
+  ["heading", "primarySofter"], // event card: my voted option row
+  ["text", "primarySofter"],
+  ["textMuted", "primarySofter"],
+  ["link", "surfaceCard"], // event card: Open in Maps
+  ["link", "primarySoft"],
   ["onLime", "lime"],
   ["info", "infoSurface"],
   ["success", "successSurface"],
