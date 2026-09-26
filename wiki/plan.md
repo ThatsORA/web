@@ -188,8 +188,13 @@ users
   created_at
 
 busy_blocks
-  id, user_id fk, starts_at, ends_at, source ('device_calendar'|'seed'), synced_at
+  id, user_id fk, starts_at, ends_at,
+  source ('device_calendar'|'google_calendar'|'seed'), synced_at
   index (user_id, starts_at)
+
+google_calendar_connections
+  id, user_id fk unique, refresh_token_enc text,
+  status enum(active, revoked, error), created_at, updated_at
 
 friendships                -- exactly one row per pair
   id, user_low_id, user_high_id          -- CHECK user_low_id < user_high_id, unique pair
@@ -215,7 +220,7 @@ events
   venue_status enum(open, reported_closed) default 'open'
   venue_snapshot jsonb null        -- full EventOption of the current venue; the swap copies backup_venues[0] here
   backup_venues jsonb default '[]' -- ordered array of EventOption snapshots
-  vote_closes_at, created_at, resolved_at
+  vote_closes_at, created_at, resolved_at, match_reason text null
   UNIQUE (group_key) WHERE status IN ('voting','confirmed')   -- raw SQL in migration
 
 event_participants

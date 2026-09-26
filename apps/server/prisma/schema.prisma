@@ -45,7 +45,14 @@ enum VenueStatus {
 
 enum BusySource {
   device_calendar
+  google_calendar
   seed
+}
+
+enum GoogleCalendarConnectionStatus {
+  active
+  revoked
+  error
 }
 
 model User {
@@ -69,8 +76,22 @@ model User {
   votes           Vote[]
   expensesPaid    Expense[]
   expenseSplits   ExpenseSplit[]
+  googleCalendarConnection GoogleCalendarConnection?
 
   @@map("users")
+}
+
+model GoogleCalendarConnection {
+  id              String                         @id @default(uuid()) @map("_id")
+  userId          String                         @unique @map("user_id")
+  refreshTokenEnc String                         @map("refresh_token_enc") // ciphertext only
+  status          GoogleCalendarConnectionStatus @default(active)
+  createdAt       DateTime                       @default(now()) @map("created_at")
+  updatedAt       DateTime                       @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("google_calendar_connections")
 }
 
 model BusyBlock {
@@ -163,6 +184,7 @@ model Event {
   voteClosesAt  DateTime    @map("vote_closes_at")
   createdAt     DateTime    @default(now()) @map("created_at")
   resolvedAt    DateTime?   @map("resolved_at")
+  matchReason   String?     @map("match_reason")
 
   sourceGroup  ExplicitGroup?     @relation(fields: [sourceGroupId], references: [id], onDelete: SetNull)
   participants EventParticipant[]
