@@ -87,6 +87,7 @@ model User {
   displayName       String?   @map("display_name") // 1–40 chars; others see display_name ?? username
   bio               String? // ≤ 160 chars
   usernameChangedAt DateTime? @map("username_changed_at") // once per 30 days
+  passwordChangedAt DateTime? @map("password_changed_at")
 
   busyBlocks               BusyBlock[]
   friendshipsLow           Friendship[]              @relation("FriendshipLow")

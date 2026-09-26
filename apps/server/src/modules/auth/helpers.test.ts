@@ -21,7 +21,7 @@ describe("isUniqueViolation", () => {
 
 describe("toMe", () => {
   it("never exposes the password hash", () => {
-    const me = toMe({ id: "u1", username: "ojas", email: "o@x.io", passwordHash: "secret", timezone: "UTC", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: null, displayName: null, bio: null, usernameChangedAt: null });
+    const me = toMe({ id: "u1", username: "ojas", email: "o@x.io", passwordHash: "secret", timezone: "UTC", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: null, displayName: null, bio: null, usernameChangedAt: null, passwordChangedAt: null });
     expect(JSON.stringify(me)).not.toContain("secret");
     expect(me).not.toHaveProperty("passwordHash");
   });

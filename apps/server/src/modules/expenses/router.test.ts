@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 const mocks = vi.hoisted(() => ({ findEvent: vi.fn(), create: vi.fn(), findMany: vi.fn(), findSplit: vi.fn(), updateSplit: vi.fn() }));
 vi.mock("../../lib/prisma", () => ({
   prisma: {
+    user: { findUnique: async () => ({ passwordChangedAt: null }) },
     event: { findUnique: mocks.findEvent },
     expense: { create: mocks.create, findMany: mocks.findMany },
     expenseSplit: { findUnique: mocks.findSplit, update: mocks.updateSplit },

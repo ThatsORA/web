@@ -38,6 +38,7 @@ const pick = (u: (typeof users)[number]) => ({ id: u.id, username: u.username, d
 vi.mock("../../lib/prisma", () => ({
   prisma: {
     user: {
+      findUnique: async ({ where }: { where: { id: string } }) => users.some((u) => u.id === where.id) ? { passwordChangedAt: null } : null,
       findFirst: async ({ where }: { where: UserWhere }) => {
         const u = users.find((x) => userMatches(x, where));
         return u ? pick(u) : null;

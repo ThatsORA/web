@@ -36,6 +36,10 @@ export const SignupRequest = z.object({
   if (!result.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["password"], message: result.reason, params: { error: "weak_password" } });
 });
 export const WeakPasswordResponse = z.object({ error: z.literal("weak_password"), reason: z.string() });
+export const PasswordResetRequest = z.object({ email: z.string().email() });
+export const PasswordResetConfirmRequest = z.object({ email: z.string().email(), code: z.string().regex(/^\d{6}$/), new_password: z.string() });
+export const PasswordResetAccepted = z.object({ accepted: z.literal(true) });
+export const PasswordResetSuccess = z.object({ reset: z.literal(true) });
 export const LoginRequest = z.object({ email: z.string().email(), password: z.string() });
 export const AuthResponse = z.object({ token: z.string(), user_id: Id });
 

@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   assembleEventCard: vi.fn(),
 }));
 vi.mock("../../lib/prisma", () => ({
-  prisma: { $transaction: mocks.transaction, event: { findFirst: mocks.findFirst } },
+  prisma: { user: { findUnique: async () => ({ passwordChangedAt: null }) }, $transaction: mocks.transaction, event: { findFirst: mocks.findFirst } },
 }));
 vi.mock("../../realtime", () => ({ emitToUsers: mocks.emitToUsers, pushVenueChanged: mocks.pushVenueChanged }));
 vi.mock("../events/assembleEventCard", () => ({ assembleEventCard: mocks.assembleEventCard }));

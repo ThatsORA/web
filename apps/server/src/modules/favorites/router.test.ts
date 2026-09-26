@@ -3,7 +3,7 @@ import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ deleteMany: vi.fn(), createMany: vi.fn(), transaction: vi.fn() }));
-vi.mock("../../lib/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
+vi.mock("../../lib/prisma", () => ({ prisma: { user: { findUnique: async () => ({ passwordChangedAt: null }) }, $transaction: mocks.transaction } }));
 
 import { signToken } from "../../lib/auth";
 import { favoritesRouter } from "./router";
