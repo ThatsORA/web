@@ -30,8 +30,8 @@ export function TextField({ label, error, onFocus, onBlur, ...input }: Props) {
         style={{
           ...t.type.body,
           minHeight: t.touch,
-          color: t.colors.heading,
-          backgroundColor: t.colors.surface,
+          color: input.editable === false ? t.colors.textMuted : t.colors.heading,
+          backgroundColor: input.editable === false ? t.colors.surfaceMuted : t.colors.surface,
           borderColor: error ? t.colors.danger : focused ? t.colors.primary : t.colors.borderStrong,
           borderWidth: focused || error ? 2 : 1,
           borderRadius: t.radius.sm,

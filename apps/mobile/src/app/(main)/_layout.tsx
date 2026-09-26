@@ -48,6 +48,8 @@ export default function MainLayout() {
       ))}
       {/* Dev gallery: still a route (linked from the feed in __DEV__ only), never a tab. */}
       <Tabs.Screen name="card-states" options={{ href: null }} />
+      {/* Settings screen: linked from Hangouts header, never a bottom tab. */}
+      <Tabs.Screen name="settings" options={{ href: null }} />
     </Tabs>
   </>;
 }

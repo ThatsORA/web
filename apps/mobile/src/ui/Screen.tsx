@@ -15,9 +15,11 @@ type Props = {
   footer?: ReactNode;
   /** Passed to the ScrollView for pull-to-refresh, e.g. <RefreshControl />. */
   refreshControl?: ReactElement<RefreshControlProps>;
+  /** Optional action/element displayed on the right of the header title. */
+  headerRight?: ReactNode;
 };
 
-export function Screen({ eyebrow, title, subtitle, children, footer, refreshControl }: Props) {
+export function Screen({ eyebrow, title, subtitle, children, footer, refreshControl, headerRight }: Props) {
   const t = useTheme();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.colors.background }}>
@@ -27,10 +29,17 @@ export function Screen({ eyebrow, title, subtitle, children, footer, refreshCont
         refreshControl={refreshControl}
       >
         {eyebrow ? <Txt variant="eyebrow">{eyebrow}</Txt> : null}
-        {title ? (
-          <Txt variant="display" accessibilityRole="header">
-            {title}
-          </Txt>
+        {title || headerRight ? (
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            {title ? (
+              <Txt variant="display" accessibilityRole="header">
+                {title}
+              </Txt>
+            ) : (
+              <View />
+            )}
+            {headerRight}
+          </View>
         ) : null}
         {subtitle ? <Txt variant="body" color="textMuted">{subtitle}</Txt> : null}
         {children}
