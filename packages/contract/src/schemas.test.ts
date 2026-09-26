@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { optionFromRow, type OptionRowLike } from "./schemas";
+import { EventCardPayload, optionFromRow, type OptionRowLike } from "./schemas";
+
+describe("EventCardPayload match reason", () => {
+  it("accepts null or a reason up to 90 characters", () => {
+    expect(EventCardPayload.shape.match_reason.safeParse(null).success).toBe(true);
+    expect(EventCardPayload.shape.match_reason.safeParse("A shared restaurant favorite fits Thursday dinner.").success).toBe(true);
+    expect(EventCardPayload.shape.match_reason.safeParse("x".repeat(91)).success).toBe(false);
+  });
+});
 
 describe("optionFromRow", () => {
   it("maps a DB row to a validated EventOption with id", () => {

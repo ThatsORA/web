@@ -32,13 +32,15 @@ touches before you write code.
 - Travel mode is `DRIVE` with `routingPreference: TRAFFIC_AWARE`.
 
 **AI boundary**
-- Gemini is called in exactly one place:
-  `apps/server/src/modules/intelligence/curateVenues`.
-- Everything else is deterministic TypeScript: free windows, groups,
-  vibe/slot, ranking, venue filtering, route scoring and backups.
-- The Gemini call uses a JSON `responseSchema`, is validated (every
-  place ID must come from the input), has an 8-second timeout, and falls
-  back to a non-AI result.
+- Gemini is called in two places:
+  `apps/server/src/modules/matching/rankWithGemini` re-ranks the
+  deterministic top-10 shortlist from aggregate facts, and
+  `apps/server/src/modules/intelligence/curateVenues` curates venues.
+- Free windows, groups, vibe/slot, shortlist scoring, venue filtering,
+  route scoring and backups stay deterministic TypeScript.
+- Both Gemini calls use a JSON `responseSchema`, validate output IDs,
+  have an 8-second timeout, and fall back to deterministic results.
+- Match ranking sends no names, emails or calendar data.
 
 **Keys and data**
 - API keys come only from env vars. Never commit `.env`.

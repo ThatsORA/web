@@ -7,7 +7,7 @@ import { env } from "../env";
 
 const FIXTURES_DIR = join(import.meta.dirname, "..", "..", "fixtures");
 
-export type FixtureApi = "places" | "place-details" | "routes" | "gemini";
+export type FixtureApi = "places" | "place-details" | "routes" | "gemini" | "gemini-rank";
 
 export async function withFixture<T>(api: FixtureApi, key: string, live: () => Promise<T>): Promise<T> {
   if (!env.DEMO_MODE) return live();

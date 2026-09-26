@@ -149,6 +149,7 @@ export const EventCardPayload = z.object({
   ends_at: Instant,
   timezone: IanaTimezone,
   vibe_tag: VibeTag,
+  match_reason: z.string().max(90).nullable().optional(),
   participants: z.array(z.object({ id: Id, username: z.string() })),
   options: z.array(EventOption), // the 3 choices while voting
   progress: z.object({ responded: z.number().int(), total: z.number().int() }),
