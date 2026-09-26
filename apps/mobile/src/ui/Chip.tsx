@@ -1,5 +1,6 @@
-// Owner: Andy — toggleable pill (favorites quick-tap, filters).
-import { Pressable, Text } from "react-native";
+// Owner: Andy — toggleable tag (favorites quick-tap, filters). 1px corners, 44pt tall.
+import { Pressable } from "react-native";
+import { Txt } from "./Txt";
 import { useTheme } from "./useTheme";
 
 type Props = { label: string; selected?: boolean; onPress?: () => void };
@@ -12,16 +13,19 @@ export function Chip({ label, selected = false, onPress }: Props) {
       accessibilityLabel={label}
       accessibilityState={{ checked: selected }}
       onPress={onPress}
-      style={{
-        borderRadius: t.radius.pill,
+      style={({ pressed }) => ({
+        minHeight: t.touch,
+        justifyContent: "center",
+        borderRadius: t.radius.md,
         borderWidth: 1,
-        borderColor: selected ? t.colors.primary : t.colors.border,
-        backgroundColor: selected ? t.colors.primary : "transparent",
-        paddingVertical: t.spacing.sm,
+        borderColor: selected ? t.colors.primary : t.colors.borderStrong,
+        backgroundColor: selected ? t.colors.primary : pressed ? t.colors.primarySofter : t.colors.surface,
         paddingHorizontal: t.spacing.md,
-      }}
+      })}
     >
-      <Text style={{ color: selected ? t.colors.onPrimary : t.colors.text, fontSize: t.font.small }}>{label}</Text>
+      <Txt variant="label" color={selected ? "onPrimary" : "heading"}>
+        {label}
+      </Txt>
     </Pressable>
   );
 }

@@ -1,20 +1,22 @@
-// Owner: Andy — primary / secondary / ghost button with a loading state.
-import { ActivityIndicator, Pressable, Text } from "react-native";
+// Owner: Andy — Primer button: 44pt tall, 1px corners, Geist Mono label.
+import { ActivityIndicator, Pressable } from "react-native";
+import { Txt } from "./Txt";
 import { useTheme } from "./useTheme";
 
 type Props = {
   label: string;
   onPress: () => void;
-  variant?: "primary" | "secondary" | "ghost";
+  /** primary = brand; secondary = muted fill; outline = bordered; ghost = link-style */
+  variant?: "primary" | "secondary" | "outline" | "ghost";
   disabled?: boolean;
   loading?: boolean;
 };
 
 export function Button({ label, onPress, variant = "primary", disabled, loading }: Props) {
   const t = useTheme();
+  const c = t.colors;
   const inactive = !!disabled || !!loading;
-  const bg = variant === "primary" ? t.colors.primary : variant === "secondary" ? t.colors.surface : "transparent";
-  const fg = variant === "primary" ? t.colors.onPrimary : t.colors.primary;
+  const fg = variant === "primary" ? "onPrimary" : variant === "secondary" ? "heading" : variant === "outline" ? "heading" : "link";
   return (
     <Pressable
       accessibilityRole="button"
@@ -23,19 +25,31 @@ export function Button({ label, onPress, variant = "primary", disabled, loading 
       disabled={inactive}
       onPress={onPress}
       style={({ pressed }) => ({
-        backgroundColor: bg,
-        borderRadius: t.radius.md,
-        paddingVertical: 14,
-        paddingHorizontal: t.spacing.md,
+        minHeight: t.touch,
+        justifyContent: "center",
         alignItems: "center",
-        opacity: inactive ? 0.5 : pressed ? 0.8 : 1,
+        paddingHorizontal: t.spacing.md,
+        borderRadius: t.radius.md,
+        borderWidth: variant === "outline" ? 1 : 0,
+        borderColor: c.borderStrong,
+        backgroundColor:
+          variant === "primary"
+            ? pressed
+              ? c.primaryStrong
+              : c.primary
+            : variant === "secondary"
+              ? c.surfaceMuted
+              : variant === "outline"
+                ? pressed
+                  ? c.primarySofter
+                  : c.surface
+                : pressed
+                  ? c.primarySofter
+                  : "transparent",
+        opacity: inactive ? 0.5 : 1,
       })}
     >
-      {loading ? (
-        <ActivityIndicator color={fg} />
-      ) : (
-        <Text style={{ color: fg, fontSize: t.font.body, fontWeight: "600" }}>{label}</Text>
-      )}
+      {loading ? <ActivityIndicator color={c[fg]} /> : <Txt variant="label" color={fg}>{label}</Txt>}
     </Pressable>
   );
 }

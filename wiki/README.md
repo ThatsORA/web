@@ -10,4 +10,5 @@ principles; the details live here.
 | [`codebase.md`](codebase.md) | Scaffold map and the lanes table |
 | [`invariants.md`](invariants.md) | Hard invariants, pinned versions and gotchas |
 | [`mobile.md`](mobile.md) | Expo SDK 57 rules for `apps/mobile/` |
+| [`design.md`](design.md) | Design system (Primer, violet): tokens, components, event-card look |
 | [`setup.md`](setup.md) | Onboarding a teammate: tools, gh login, worktrees, Atlas, handoff |

@@ -80,6 +80,9 @@ block it. Here's my 5-line plan…"*
   `pnpm -r typecheck && pnpm -r test` must pass before you push.
 - **Verify, don't recall.** Versions are pinned and APIs move fast. Check
   the pinned docs instead of trusting memory, and don't upgrade anything.
+- **On-system UI.** Screens use `src/ui` components and theme tokens only:
+  no raw hex, pixel sizes, font names or plain `<Text>`. See
+  [`wiki/design.md`](wiki/design.md).
 - **Invariants are hard rules.** Time, privacy, money, Google APIs, the AI
   boundary and keys all have rules, and breaking one fails review.
 
@@ -93,4 +96,5 @@ block it. Here's my 5-line plan…"*
 | [`wiki/codebase.md`](wiki/codebase.md) | Scaffold map and the lanes table |
 | [`wiki/invariants.md`](wiki/invariants.md) | Hard invariants, pinned versions and gotchas |
 | [`wiki/mobile.md`](wiki/mobile.md) | Expo SDK 57 rules for `apps/mobile/` |
+| [`wiki/design.md`](wiki/design.md) | Design system (Primer, violet): tokens, components, event-card look |
 | [`wiki/setup.md`](wiki/setup.md) | Onboarding a teammate: tools, gh login, worktrees, Atlas, handoff |
