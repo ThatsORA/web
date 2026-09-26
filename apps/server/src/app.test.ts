@@ -24,8 +24,8 @@ describe("app skeleton", () => {
     expect(res.status).toBe(401);
   });
 
-  it("stubs public routes with 501 until implemented", async () => {
+  it("leaves signup public (validates the body, no 401)", async () => {
     const res = await fetch(`${base}/api/v1/auth/signup`, { method: "POST" });
-    expect(res.status).toBe(501);
+    expect(res.status).toBe(400);
   });
 });
