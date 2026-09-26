@@ -1,5 +1,5 @@
 // Owner: Andy — moves the onboarding stack forward, then hands off to (main).
-import { CloseFriendsResponse, Me, routes } from "@web/contract";
+import { FriendRequestsResponse, FriendsResponse, Me, routes } from "@web/contract";
 import { router } from "expo-router";
 import { useCallback, useRef } from "react";
 import { api } from "./api";
@@ -32,10 +32,17 @@ export function useOnboardingNav(step: OnboardingStep): () => void {
   }, [step]);
 }
 
-/** GET /me + GET /friends/close → where this signed-in account picks up. Throws ApiError (e.g. 401). */
+/**
+ * GET /me + GET /friends + GET /friends/requests → where this signed-in account picks up.
+ * Accepted friends or my outgoing requests mean the friends step is done. Throws ApiError (e.g. 401).
+ */
 export async function fetchResumeStep(): Promise<ResumeStep> {
-  const [me, close] = await Promise.all([api(routes.me, Me), api(routes.closeFriends, CloseFriendsResponse)]);
-  return resumeAfterLogin(me, close.friends.length);
+  const [me, friends, requests] = await Promise.all([
+    api(routes.me, Me),
+    api(routes.friends, FriendsResponse),
+    api(routes.friendRequests, FriendRequestsResponse),
+  ]);
+  return resumeAfterLogin(me, friends.friends.length + requests.outgoing.length);
 }
 
 /**
