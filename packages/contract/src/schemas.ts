@@ -2,6 +2,7 @@
 // Server parses request bodies with these; mobile parses responses with these.
 // Changing this file needs the `contract` label + the other two approvals.
 import { z } from "zod";
+import { checkPassword } from "./password";
 
 // ---------- primitives ----------
 export const Id = z.string().uuid();
@@ -28,9 +29,13 @@ export const PublicUser = z.object({ id: Id, username: z.string(), display_name:
 export const SignupRequest = z.object({
   email: z.string().email(),
   username: Username,
-  password: z.string().min(8),
+  password: z.string(),
   timezone: IanaTimezone,
+}).superRefine((data, ctx) => {
+  const result = checkPassword(data.password, data);
+  if (!result.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["password"], message: result.reason, params: { error: "weak_password" } });
 });
+export const WeakPasswordResponse = z.object({ error: z.literal("weak_password"), reason: z.string() });
 export const LoginRequest = z.object({ email: z.string().email(), password: z.string() });
 export const AuthResponse = z.object({ token: z.string(), user_id: Id });
 
