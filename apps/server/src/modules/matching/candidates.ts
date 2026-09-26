@@ -13,7 +13,7 @@ export type MatchingEvent = Pick<Event, "groupKey" | "startsAt" | "endsAt" | "re
 export interface CandidateGroup {
   groupKey: string;
   memberIds: string[];
-  timezone: string;
+  memberTimezones: Record<string, string>;
   sourceGroupId: string | null;
 }
 export interface GroupSlot {
@@ -48,10 +48,10 @@ export function candidateGroups(
   function add(ids: string[], sourceGroupId: string | null) {
     const memberIds = [...new Set(ids)].sort(lexical);
     if (memberIds.length < 3 || memberIds.length > 6) return;
-    const timezone = zones.get(memberIds[0]!);
-    if (!timezone || memberIds.some(id => zones.get(id) !== timezone)) return;
+    if (memberIds.some(id => !zones.has(id))) return;
     const key = groupKey(memberIds);
-    if (!groups.has(key)) groups.set(key, { groupKey: key, memberIds, timezone, sourceGroupId });
+    const memberTimezones = Object.fromEntries(memberIds.map(id => [id, zones.get(id)!]));
+    if (!groups.has(key)) groups.set(key, { groupKey: key, memberIds, memberTimezones, sourceGroupId });
   }
   function addFamily(ids: string[], sourceGroupId: string | null) {
     const unique = [...new Set(ids)];
@@ -67,10 +67,10 @@ export function candidateGroups(
   for (const edge of friendships) {
     if (!edge.lowAddedHigh || !edge.highAddedLow || edge.userLowId === edge.userHighId) continue;
     const memberIds = [edge.userLowId, edge.userHighId].sort(lexical);
-    const timezone = zones.get(memberIds[0]!);
-    if (!timezone || zones.get(memberIds[1]!) !== timezone) continue;
+    if (memberIds.some(id => !zones.has(id))) continue;
     const key = groupKey(memberIds);
-    groups.set(key, { groupKey: key, memberIds, timezone, sourceGroupId: null });
+    const memberTimezones = Object.fromEntries(memberIds.map(id => [id, zones.get(id)!]));
+    groups.set(key, { groupKey: key, memberIds, memberTimezones, sourceGroupId: null });
   }
   function bronKerbosch(r: string[], p: Set<string>, x: Set<string>) {
     if (!p.size && !x.size) { addFamily(r, null); return; }

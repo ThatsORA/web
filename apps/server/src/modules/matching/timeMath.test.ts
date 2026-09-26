@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   classifySlot,
+  earliestTimezone,
   formatTimeHHMM,
   freeWindows,
   getLocalParts,
@@ -163,6 +164,43 @@ describe("classifySlot — plan §4 required unit tests verbatim", () => {
 });
 
 describe("freeWindows — plan §3", () => {
+  it("uses the weekday in the timezone with the earliest local wall clock", () => {
+    const timezones = ["Pacific/Kiritimati", "Pacific/Honolulu"];
+    const start = new Date("2026-10-02T05:00:00Z");
+    const slot = classifySlot({ start, end: new Date("2026-10-02T08:00:00Z") }, timezones);
+
+    expect(earliestTimezone(start, timezones)).toBe("Pacific/Honolulu");
+    expect(slot?.vibe_tag).toBe("dinner");
+  });
+
+  it("finds a dinner valid in both New York and Chicago local time", () => {
+    const timezones = ["America/New_York", "America/Chicago"];
+    const windows = freeWindows(
+      timezones.map((timezone, index) => ({ id: `user${index}`, timezone, busyBlocks: [] })),
+      new Date("2026-09-29T19:00:00Z"),
+      { busyPaddingMin: 0, minLeadHours: 2, horizonDays: 1 },
+    );
+    const dinner = windows.map(window => classifySlot(window, timezones)).find(slot => slot?.vibe_tag === "dinner");
+
+    expect(dinner?.start).toEqual(new Date("2026-09-29T22:30:00Z"));
+    expect(formatSlot(dinner ?? null, "America/New_York")).toBe("dinner 18:30–20:30");
+    expect(formatSlot(dinner ?? null, "America/Chicago")).toBe("dinner 17:30–19:30");
+  });
+
+  it("discards a New York and Los Angeles late window with no shared valid template", () => {
+    const timezones = ["America/New_York", "America/Los_Angeles"];
+    const blocked = { start: new Date("2026-09-29T21:00:00Z"), end: new Date("2026-09-30T01:00:00Z") };
+    const windows = freeWindows(
+      timezones.map((timezone, index) => ({ id: `user${index}`, timezone, busyBlocks: [blocked] })),
+      new Date("2026-09-29T19:00:00Z"),
+      { busyPaddingMin: 0, minLeadHours: 2, horizonDays: 1 },
+    );
+
+    expect(windows[0]).toEqual({ start: new Date("2026-09-30T01:00:00Z"), end: new Date("2026-09-30T04:00:00Z") });
+    expect(classifySlot(windows[0]!, timezones)).toBeNull();
+    expect(earliestTimezone(windows[0]!.start, timezones)).toBe("America/Los_Angeles");
+  });
+
   it("pads busy blocks by BUSY_PADDING_MIN on each side", () => {
     // Tuesday 10:00 local
     const now = localToUtc(2026, 9, 29, 10, 0, TZ);

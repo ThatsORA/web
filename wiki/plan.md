@@ -215,7 +215,7 @@ events
   source_group_id uuid null        -- set if formed from an explicit group
   status enum(voting, confirmed, chatted, expired, completed)
   starts_at, ends_at, vibe_tag enum(quick_coffee, casual_hangout, dinner, night_out)
-  timezone text                    -- group's shared tz
+  timezone text                    -- timezone of member closest to venue centroid
   venue_place_id, venue_name, venue_lat, venue_lng   -- null until confirmed
   venue_status enum(open, reported_closed) default 'open'
   venue_snapshot jsonb null        -- full EventOption of the current venue; the swap copies backup_venues[0] here
@@ -310,9 +310,9 @@ A candidate group has 2–6 members and comes from one of four sources:
 - **Quorum subsets:** for any group with 4 or more members, each subset
   with one member dropped.
 
-Groups are deduplicated by `group_key`. Members must share a timezone; v1
-skips groups that span timezones. At equal base score, pairs get a 0.85
-size factor so groups of 3 or more rank first.
+Groups are deduplicated by `group_key`. Members may span timezones; each
+candidate retains every member's IANA timezone. At equal base score, pairs
+get a 0.85 size factor so groups of 3 or more rank first.
 
 **Cooldown:** a `group_key` isn't re-proposed within `COOLDOWN_HOURS`
 after an event for it ends as `expired` or `chatted`.
@@ -322,13 +322,16 @@ after an event for it ends as `expired` or `chatted`.
 1. For each member, pad every busy block by 15 minutes on each side.
 2. Add the slot of every open event (`voting` or `confirmed`) the member
    belongs to. This prevents double-booking.
-3. Free = waking hours (08:00–24:00 local) minus the merged busy set,
-   within the range `[now + 2h, now + 7d]`.
+3. Free = each member's waking hours (08:00–24:00 in their local time)
+   minus the merged busy set, within `[now + 2h, now + 7d]`.
 4. The group's free windows are the intersection across all members.
 
 ### 4. Vibe tag + slot (Riley, pure function, one step)
 
-Each vibe has a template, and templates are evaluated in local time:
+Each vibe has a template, and templates are evaluated in every member's
+local time. A slot is feasible only when its start and duration fit the
+same template for every member. Priority uses the weekday in the timezone
+whose local wall clock is earliest at the start of the free window.
 
 | vibe_tag | Duration (min–max) | Allowed start (local) | Places types (verify vs. Places New Table A) | Price |
 | --- | --- | --- | --- | --- |
@@ -340,18 +343,18 @@ Each vibe has a template, and templates are evaluated in local time:
 **How a window becomes a slot.** Let W be a free window.
 
 - For each template:
-  - Set `s` = the later of W.start and the template's earliest start,
-    rounded up to the next 15 minutes.
+  - Set `s` = the latest of W.start and the template's earliest start in
+    every member's local timezone, rounded up to the next 15 minutes.
   - Set `len` = the smaller of the template's max duration and
     W.end − s.
-  - The template is feasible if `s` is no later than its latest start and
-    `len` is at least its minimum duration.
+  - The template is feasible if `s` is no later than its latest start in
+    every member's timezone and `len` is at least its minimum duration.
 - Among feasible templates, choose by priority:
   - **Fri/Sat:** night_out > dinner > casual_hangout > quick_coffee
   - **Sun–Thu:** dinner > night_out > casual_hangout > quick_coffee
 - The slot is `[s, s + len]`. If nothing is feasible, discard W.
-- The weekday is the local weekday of `s`, so slots that cross midnight
-  are handled correctly.
+- The weekday is taken from the member timezone whose local wall clock is
+  earliest at W.start.
 - Every template's latest start + minimum duration ends by 24:00, so no
   template can be cut off by the waking-hours limit.
 

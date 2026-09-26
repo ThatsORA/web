@@ -32,7 +32,7 @@ vi.mock("../voting/lifecycle", () => ({ openVoting: mocks.openVoting }));
 
 import { env } from "../../env";
 import type { MatchingEvent } from "./candidates";
-import { openEventsByParticipant, runPipeline, triggerMatcher, unusedVenueSnapshots } from "./matcher";
+import { openEventsByParticipant, runPipeline, timezoneClosestToVenueCentroid, triggerMatcher, unusedVenueSnapshots } from "./matcher";
 
 const NOW = new Date("2026-09-26T12:00:00Z");
 const IDS = [
@@ -107,6 +107,17 @@ beforeEach(() => {
 });
 
 describe("venue snapshots", () => {
+  it("uses the timezone of the member closest to the curated venue centroid", () => {
+    expect(timezoneClosestToVenueCentroid([
+      { id: "new-york", timezone: "America/New_York", homeLat: 40.7128, homeLng: -74.006 },
+      { id: "chicago", timezone: "America/Chicago", homeLat: 41.8781, homeLng: -87.6298 },
+    ], [
+      { lat: 41.88, lng: -87.63 },
+      { lat: 41.89, lng: -87.62 },
+      { lat: 41.87, lng: -87.64 },
+    ])).toBe("America/Chicago");
+  });
+
   it("snapshots unselected venues in route order with their top-five ranks", () => {
     const options = [rankedVenues[3]!, rankedVenues[0]!, rankedVenues[4]!];
     const snapshots = unusedVenueSnapshots(rankedVenues, options);
