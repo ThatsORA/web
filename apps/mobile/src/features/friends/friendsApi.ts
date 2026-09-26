@@ -37,12 +37,6 @@ export async function getFriends(): Promise<Friend[]> {
   return res.friends;
 }
 
-/** Filter accepted friends to only close friends. */
-export async function getCloseFriends(): Promise<Friend[]> {
-  const friends = await getFriends();
-  return friends.filter((f) => f.close);
-}
-
 /** Incoming and outgoing friend requests. */
 export async function getFriendRequests(): Promise<FriendRequestsResponse> {
   const res = await api(routes.friendRequests, FriendRequestsResponseSchema);

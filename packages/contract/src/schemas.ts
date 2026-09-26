@@ -23,8 +23,6 @@ export type VoteStatus = z.infer<typeof VoteStatus>;
 export const Username = z.string().min(3).max(24).regex(/^[a-z0-9_]+$/);
 export const DisplayName = z.string().trim().min(1).max(40);
 export const Bio = z.string().trim().max(160);
-/** How any user appears to others: display_name falls back to username. Never email or close-friend status. */
-export const PublicUser = z.object({ id: Id, username: z.string(), display_name: z.string() });
 
 export const SignupRequest = z.object({
   email: z.string().email(),
