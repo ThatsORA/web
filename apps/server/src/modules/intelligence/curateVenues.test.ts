@@ -121,12 +121,12 @@ describe("curateVenues", () => {
     const options = [1, 2, 3].map((n) => ({ place_id: `fixture${n}`, blurb: `Fixture ${n}` }));
     vi.mocked(fs.existsSync).mockReturnValue(true);
     const read = vi.mocked(fs.readFileSync).mockImplementation((path) =>
-      JSON.stringify(String(path).includes("/gemini/") ? { options } : { reviews: [] }),
+      JSON.stringify(String(path).replace(/\\/g, "/").includes("/gemini/") ? { options } : { reviews: [] }),
     );
 
     const out = await curateVenues(five("fixture"), ctx);
     expect(out.map((o) => ({ place_id: o.place_id, blurb: o.ai_blurb }))).toEqual(options);
-    expect(read).toHaveBeenCalledWith(expect.stringContaining("/gemini/casual_hangout.json"), "utf8");
+    expect(read).toHaveBeenCalledWith(expect.stringMatching(/[/\\]gemini[/\\]casual_hangout\.json$/), "utf8");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
