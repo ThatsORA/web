@@ -8,8 +8,9 @@ Built in 36 hours at the FIU hackathon (Google/Waymo Mobility Challenge).
 
 ## Start here
 
-0. **New teammate?** Open your agent in this folder and say: *"I'm
-   <name>. Read wiki/setup.md and set me up."*
+0. **Just open an agent and say "go".** In the main `web` folder, it sets
+   you up and creates your next issue's worktree. Inside a worktree like
+   `web-6`, it works on that issue. See `AGENTS.md` → "Start here".
 1. **Plan:** [`wiki/plan.md`](wiki/plan.md) is the source of truth: demo
    script, scope, schema, API contract, pipeline and timeline.
 2. **Agent rules:** [`AGENTS.md`](AGENTS.md) holds the principles (YAGNI,

@@ -1,21 +1,17 @@
 # Setup: onboarding a teammate (instructions for agents)
 
-Your human just cloned the repo and asked you to set them up. Follow these
-steps in order. **Don't write any feature code in this session.** The goal
+You're in the main clone on `main`: [`AGENTS.md`](../AGENTS.md) "Start
+here" sent you to setup mode. Follow these steps in order. **Don't write any feature code in this session.** The goal
 is to get their machine ready and hand them off to a fresh agent inside a
 worktree.
 
-## 0. Ask two things first
+## 0. Who and what machine
 
-1. **Who are they?** (Andy, Riley or Ojas)
-2. **What OS and shell?** On Windows PowerShell, chain commands with `;`,
-   not `&&`.
-
-| Person | GitHub handle | Starts with |
-| --- | --- | --- |
-| Andy | `andydo4` | #12, then #15 |
-| Riley | `rileyh6` | #6, then #7 |
-| Ojas | `TheRealOP` | #1, then #2 |
+- **Who:** you already worked this out in AGENTS.md "Start here" step 1.
+  Only ask if that failed.
+- **OS and shell:** detect them. On Windows PowerShell, chain commands
+  with `;`, not `&&`, and use backslash paths when you tell the human
+  where to go.
 
 ## 1. Tools
 
@@ -53,13 +49,25 @@ pnpm install
 
 ## 3. Their issues
 
-List their open issues:
+List their open issues, and see what's already in flight:
 
 ```
 gh issue list --repo ThatsORA/web --assignee <handle> --state open
+gh pr list --repo ThatsORA/web --author <handle>
+git worktree list
 ```
 
-Confirm the first one or two from the table above with them.
+Pick their **next issue** with this rule:
+
+1. It's open and assigned to them.
+2. It has no open PR yet, and no worktree already exists for it.
+3. Prefer an issue whose "Depends on" items are all closed. If none
+   qualify, prefer one that can be stubbed (pure logic, or UI on stub
+   data).
+4. Among those, take the lowest number.
+
+Propose it (and a second one, if they want two agents), then confirm with
+them.
 
 ## 4. One worktree per agent
 
@@ -94,16 +102,11 @@ time:
 
 ## 6. Hand off
 
-Stop here. Tell the human to open a **new** agent session **inside
-`../web-<n>`** (not in `web`) and paste this, with their issue number in
-both places:
+Stop here. Tell the human, using their actual path:
 
-> Work on GitHub issue #<n> in ThatsORA/web. First read AGENTS.md and
-> wiki/workflow.md and follow the session steps exactly. Then read the
-> wiki/plan.md sections the issue links to. Tell me your plan in 5 lines or fewer, then build
-> it. Stay in your lane, write the tests, and make
-> `pnpm -r typecheck && pnpm -r test` pass. When you're done, push the
-> branch and open a PR with "Closes #<n>".
+> Open a **new** agent session inside `..\web-<n>` (not in `web`) and
+> just say **"go"**. It will read the branch name, pull issue #<n> from
+> GitHub, and show you a 5-line plan before building.
 
 Finish with a short summary: what's installed, which worktrees exist, and
 what the human does next.

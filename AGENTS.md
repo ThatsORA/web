@@ -6,6 +6,54 @@ hackathon. This file is only the principles. Everything else is in
 of truth: if anything disagrees with it, the plan wins. Flag the mismatch
 in your PR.
 
+## Start here: work out where you are (every session, before anything else)
+
+Your human may just say "hi" or "go". Don't wait for instructions. Work
+out the situation yourself, tell them in two or three lines what you
+found, then act.
+
+**1. Who is your human?** Run `gh api user --jq .login` (fallback:
+`git config user.email`) and map the result:
+
+| Handle | Person | Lane |
+| --- | --- | --- |
+| `andydo4` | Andy | shell, onboarding, event card, demo |
+| `rileyh6` | Riley | availability, matching, venues, mobility |
+| `TheRealOP` | Ojas | identity, social graph, voting, AI, schema |
+
+If `gh` is missing or not logged in, or the handle isn't listed, ask
+which of the three they are and continue. [`wiki/setup.md`](wiki/setup.md)
+§1 covers the `gh` fix.
+
+**2. Where are you?** Run `git branch --show-current` and
+`git worktree list`.
+
+- **Branch like `riley/6-vibe-slot`** → your issue is **#6**. Run
+  `gh issue view 6 --repo ThatsORA/web` and follow
+  [`wiki/workflow.md`](wiki/workflow.md). If that issue is already
+  closed, or its PR is merged, say so and offer to set up their next
+  issue instead.
+- **`main`, in the main clone** → **setup mode**. Follow
+  [`wiki/setup.md`](wiki/setup.md): get their tools ready, pick their next
+  issue, create its worktree, and hand off. Don't write feature code
+  here.
+- **Any other branch** → ask what it's for before touching anything.
+
+**3. What's the team's state?** Check it live; don't trust anything
+written down, because it goes stale within the hour.
+
+- `gh issue view <n>`: read the issue's "Depends on" list, then run
+  `gh issue view <dep> --json state` for each dependency. If a dependency
+  isn't closed, stub it behind the contract type and say so.
+- `gh pr list --repo ThatsORA/web`: open PRs (don't duplicate work in
+  flight).
+- `gh issue view 16 --repo ThatsORA/web`: the hour-8 checkpoint and what
+  it's waiting on.
+
+Then report, for example: *"You're Riley, on issue #6 (free windows +
+vibe/slot). It doesn't need the database, so #1 not being merged doesn't
+block it. Here's my 5-line plan…"*
+
 ## How we build
 
 - **YAGNI.** Build only what your issue's acceptance criteria and the demo
@@ -36,9 +84,6 @@ in your PR.
   boundary and keys all have rules, and breaking one fails review.
 
 ## Read before coding
-
-**Opened in the main `web` folder and asked to set someone up?** Follow
-[`wiki/setup.md`](wiki/setup.md) and don't write feature code.
 
 
 | Page | What's in it |
