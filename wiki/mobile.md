@@ -44,3 +44,25 @@ Docs: https://docs.expo.dev/eas/index.md
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
 - Expo Go only includes its bundled native modules. SDK 57 `expo-calendar` requires a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+
+## Demo iPhones without a paid Apple Developer membership
+
+Use the team's Mac with Xcode. A free Apple Account supports local on-device
+testing through Xcode; it does not support EAS ad hoc distribution. In Xcode,
+sign in under Settings → Accounts and select the Personal Team for signing.
+Then, for each of the three iPhones:
+
+1. Connect the phone to the Mac, trust the computer, and enable iOS Developer
+   Mode if prompted.
+2. From `apps/mobile`, run `pnpm exec expo run:ios --device` and select that
+   phone. Expo generates `ios/` and installs the development build. If signing
+   needs attention, open the generated project in Xcode and select the Personal
+   Team under Signing & Capabilities, then retry.
+3. Start Metro with the reachable backend URL, for example
+   `EXPO_PUBLIC_API_URL=https://api.example.com pnpm exec expo start --dev-client --tunnel`
+   (replace the example URL with the deployed backend).
+   The phone cannot use `localhost` to reach the server on the Mac.
+
+Repeat installation for each phone. Check granted and denied calendar
+permission, the synced-count callout, and foreground resync after 15 minutes.
+Do not commit the generated `ios/` directory.
