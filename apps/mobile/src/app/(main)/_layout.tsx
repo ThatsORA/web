@@ -52,6 +52,8 @@ export default function MainLayout() {
       <Tabs.Screen name="card-states" options={{ href: null }} />
       {/* Settings screen: linked from Hangouts header, never a bottom tab. */}
       <Tabs.Screen name="settings" options={{ href: null }} />
+      {/* "+ New hangout" (#70): opened from the Hangouts feed, never a bottom tab. */}
+      <Tabs.Screen name="new-hangout" options={{ href: null }} />
     </Tabs>
   </>;
 }

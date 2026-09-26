@@ -11,6 +11,10 @@ import { authErrorMessage } from "./errors";
 
 type Mode = "signup" | "login";
 
+// Don't mark fields as credentials, so password managers (iOS Keychain, Android autofill)
+// don't pop "Save password?" over demo step 1 (#126).
+const noAutofill = { autoComplete: "off", textContentType: "none", importantForAutofill: "no" } as const;
+
 const deviceTimezone = () =>
   getCalendars()[0]?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
 
@@ -63,15 +67,14 @@ function AuthStep({ onDone, initialMode }: OnboardingStepProps & { initialMode: 
         </>
       }
     >
-      <TextField label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" textContentType="emailAddress" />
-      {signup ? <TextField label="Username" value={username} onChangeText={(v) => setUsername(v.toLowerCase())} autoComplete="username" /> : null}
+      <TextField label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" {...noAutofill} />
+      {signup ? <TextField label="Username" value={username} onChangeText={(v) => setUsername(v.toLowerCase())} {...noAutofill} /> : null}
       <TextField
         label="Password"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        autoComplete={signup ? "new-password" : "current-password"}
-        textContentType={signup ? "newPassword" : "password"}
+        {...noAutofill}
         onSubmitEditing={submit}
       />
       {signup ? (
