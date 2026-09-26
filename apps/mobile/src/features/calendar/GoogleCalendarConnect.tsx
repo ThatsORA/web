@@ -1,18 +1,18 @@
 import { useState, useCallback, useEffect } from "react";
-import * as WebBrowser from "expo-web-browser";
-import * as Linking from "expo-linking";
 import { View, Alert, ActivityIndicator } from "react-native";
 import { Button, Txt, useTheme } from "../../ui";
 import { GoogleCalendarStatusResponse, GoogleCalendarStartResponse } from "@web/contract";
 import { api } from "../../lib/api";
 import { z } from "zod";
 
-WebBrowser.maybeCompleteAuthSession();
-
 export function GoogleCalendarConnect() {
   const [status, setStatus] = useState<GoogleCalendarStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const theme = useTheme();
+
+  useEffect(() => {
+    void import("expo-web-browser").then(wb => wb.maybeCompleteAuthSession()).catch(() => {});
+  }, []);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -30,12 +30,14 @@ export function GoogleCalendarConnect() {
   const handleConnect = async () => {
     setLoading(true);
     try {
+      const Linking = await import("expo-linking");
       const redirectUri = Linking.createURL("google-connected");
       const res = await api("/calendar/google/start", GoogleCalendarStartResponse, {
         method: "POST",
         body: { redirect_uri: redirectUri }
       });
       
+      const WebBrowser = await import("expo-web-browser");
       const result = await WebBrowser.openAuthSessionAsync(res.url, redirectUri);
       
       if (result.type === "success" && result.url) {
