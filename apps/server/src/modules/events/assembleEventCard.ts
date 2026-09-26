@@ -7,7 +7,10 @@ export type EventWithCardData = Prisma.EventGetPayload<{
     options: true;
     votes: { select: { userId: true; optionId: true } };
   };
-}>;
+}> & {
+  created_by?: { id: string; username: string } | null;
+  creator?: { id: string; username: string } | null;
+};
 
 /** Only the caller's option is exposed while voting. Every field is allowlisted by the contract. */
 export function assembleEventCard(event: EventWithCardData, userId: string): EventCardPayload {
@@ -41,6 +44,7 @@ export function assembleEventCard(event: EventWithCardData, userId: string): Eve
     my_status: myStatus,
     my_option_id: mine.voteStatus === "ghost_passed" ? null : myVote?.optionId ?? null,
     vote_closes_at: event.voteClosesAt.toISOString(),
+    created_by: event.created_by ?? event.creator ?? null,
     outcome: resolved ? {
       venue,
       venue_status: event.venueStatus,

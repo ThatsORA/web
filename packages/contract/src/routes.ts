@@ -19,4 +19,8 @@ export const routes = {
   expenses: (id: string) => `/events/${id}/expenses`,
   expenseSplit: (id: string) => `/expense-splits/${id}`,
   eventMessages: (id: string) => `/events/${id}/messages`,
+  googleCalendar: "/calendar/google",
+  googleCalendarStart: "/calendar/google/start",
+  googleCalendarCallback: "/calendar/google/callback",
+  googleCalendarSync: "/calendar/google/sync",
 } as const;
