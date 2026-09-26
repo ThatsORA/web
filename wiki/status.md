@@ -18,7 +18,7 @@ What's built vs the demo script. This page goes stale fast: check
 | events | Done: `GET /events`, `GET /events/:id` via `assembleEventCard` | yes |
 | realtime | Done: `created`, `progress`, `resolved`. No `venue_changed` yet | no |
 | favorites | **501**: `PUT /favorites` (Andy, #13) | no |
-| venues | **501**: `report-closed` (Riley, #50) | no |
+| venues | **501**: `report-closed` (Riley). Snapshot schema landed in #50 | no |
 | expenses | **501**: stretch (Ojas, #20) | no |
 | groups | No API (seed only) | n/a |
 
@@ -32,7 +32,7 @@ Scripts: `seed.ts` done; `demo-reset.ts` is still a TODO (Andy).
 | Welcome, sign up / log in, location | Done |
 | Calendar sync (+ foreground re-sync) | Done |
 | Favorites | UI done; server route is 501 |
-| Close friends | `FriendsStep` built, **route still renders `StepPlaceholder`** (#42) |
+| Close friends | `FriendsStep` built, **route still renders `StepPlaceholder`** (#42, fix in PR #55) |
 | Event card: finding / voting / confirmed / ghost pass | Done |
 | "It's closed" | UI done; server route is 501 |
 | Main feed + dev `card-states` gallery | Done |
@@ -47,6 +47,7 @@ code rather than by an index (see [`invariants.md`](invariants.md)).
 
 ## GitHub (at audit time)
 
-- Open: Andy #11 (deploy, PR #49), #13, #42 · Riley #50 (`schema`, needs
-  Ojas) · Ojas #20 (stretch) · unassigned #16 (checkpoint), #17 (stretch).
-- Hour-8 checkpoint #16 is waiting only on #11 (PR #49).
+- Closed since the snapshot: #11 (deploy, PR #49), #50 (venue snapshot schema).
+- Open: Andy #13, #42 (PR #55), #54 (log out, PR #56) · Ojas #20 (stretch)
+  · unassigned #16 (checkpoint), #17 (stretch).
+- Hour-8 checkpoint #16 has nothing blocking it now: test it on two phones.

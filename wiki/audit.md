@@ -9,11 +9,11 @@ owner's issue, and don't fix one outside your own lane. For build status see
 
 1. **Friends step not mounted.** `apps/mobile/src/app/(onboarding)/friends.tsx`
    still renders `StepPlaceholder`, though `features/friends` exports
-   `FriendsStep`. The fix is a one-line import (Andy, #42).
+   `FriendsStep`. The fix is a one-line import (Andy, #42, PR #55).
 2. **`PUT /favorites` is a 501.** `apps/server/src/modules/favorites/router.ts:8`.
    Demo step 3 fails, and `curateVenues` gets empty favourite counts (Andy, #13).
 3. **"It's closed" is a 501.** `apps/server/src/modules/venues/router.ts:8`.
-   There's no backup swap, and `event:venue_changed` is never emitted (Riley, #50).
+   There's no backup swap, and `event:venue_changed` is never emitted. The snapshot schema landed in #50, but the route is still Riley's to build.
 4. **`demo-reset.ts` is a TODO.** The plan says to run it before every
    rehearsal (Andy).
 
