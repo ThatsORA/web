@@ -5,9 +5,11 @@ import {
   AuthResponse,
   ChangeEmailRequest,
   ConfirmEmailChangeRequest,
+  DeletePushTokenRequest,
   LoginRequest,
   Me,
   PatchMeRequest,
+  SavePushTokenRequest,
   SignupRequest,
   VerifyEmailRequest,
   routes,
@@ -155,4 +157,28 @@ authRouter.post(routes.meEmailConfirm, requireAuth, async (req, res) => {
     if (isUniqueViolation(err)) return res.status(409).json({ error: "email_taken" });
     throw err;
   }
+});
+
+authRouter.put(["/me/push-token", routes.pushToken], requireAuth, async (req, res) => {
+  const parsed = SavePushTokenRequest.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
+  const userId = (req as AuthedRequest).userId;
+  const { token, platform } = parsed.data;
+  await prisma.pushToken.upsert({
+    where: { token },
+    create: { userId, token, platform },
+    update: { userId, platform },
+  });
+  return res.status(204).send();
+});
+
+authRouter.delete(["/me/push-token", routes.pushToken], requireAuth, async (req, res) => {
+  const parsed = DeletePushTokenRequest.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
+  const userId = (req as AuthedRequest).userId;
+  const { token } = parsed.data;
+  await prisma.pushToken.deleteMany({
+    where: { userId, token },
+  });
+  return res.status(204).send();
 });

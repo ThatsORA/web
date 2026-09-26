@@ -7,6 +7,7 @@ export const routes = {
   me: "/me",
   verifyEmailSend: "/auth/verify-email/send", // 204, or 429 + Retry-After during the 60 s cooldown
   verifyEmail: "/auth/verify-email", // { code } → Me
+  pushToken: `${API_PREFIX}/me/push-token`,
   busyBlocks: "/busy-blocks",
   userSearch: "/users/search", // ?q=
   user: (id: string) => `/users/${id}`, // public profile

@@ -98,8 +98,10 @@ model User {
   votes                    Vote[]
   expensesPaid             Expense[]
   expenseSplits            ExpenseSplit[]
+  eventsCreated            Event[]                   @relation("UserCreatedEvents")
   googleCalendarConnection GoogleCalendarConnection?
   emailCodes               EmailCode[]
+  pushTokens               PushToken[]
 
   @@map("users")
 }
@@ -119,6 +121,19 @@ model EmailCode {
 
   @@index([userId, purpose])
   @@map("email_codes")
+}
+
+model PushToken {
+  id        String   @id @default(uuid()) @map("_id")
+  userId    String   @map("user_id")
+  token     String   @unique
+  platform  String   // 'ios' | 'android' | 'web'
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
 }
 
 model GoogleCalendarConnection {
@@ -223,6 +238,7 @@ model Event {
   id            String      @id @default(uuid()) @map("_id")
   groupKey      String      @map("group_key") // sorted member ids joined
   sourceGroupId String?     @map("source_group_id")
+  createdById   String?     @map("created_by_id")
   status        EventStatus @default(voting)
   startsAt      DateTime    @map("starts_at")
   endsAt        DateTime    @map("ends_at")
@@ -241,6 +257,7 @@ model Event {
   matchReason   String?     @map("match_reason") // Null for the deterministic fallback.
 
   sourceGroup  ExplicitGroup?     @relation(fields: [sourceGroupId], references: [id], onDelete: SetNull)
+  creator      User?              @relation("UserCreatedEvents", fields: [createdById], references: [id], onDelete: SetNull)
   participants EventParticipant[]
   options      EventOption[]
   votes        Vote[]

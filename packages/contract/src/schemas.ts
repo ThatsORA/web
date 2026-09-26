@@ -68,6 +68,17 @@ export const PublicProfile = PublicUser.extend({
   squads: z.array(z.object({ id: Id, name: z.string() })), // squads we're both active in
 });
 
+export const SavePushTokenRequest = z.object({
+  token: z.string().min(1),
+  platform: z.enum(["ios", "android", "web"]).default("ios"),
+});
+export type SavePushTokenRequest = z.infer<typeof SavePushTokenRequest>;
+
+export const DeletePushTokenRequest = z.object({
+  token: z.string().min(1),
+});
+export type DeletePushTokenRequest = z.infer<typeof DeletePushTokenRequest>;
+
 // ---------- busy blocks (Riley) ----------
 export const BusyBlock = z.object({ starts_at: Instant, ends_at: Instant });
 export const PutBusyBlocksRequest = z.object({

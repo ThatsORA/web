@@ -226,6 +226,7 @@ user_favorites
 events
   id uuid, group_key text          -- sorted member ids joined, for cooldown/dedupe
   source_group_id uuid null        -- set if formed from an explicit group
+  created_by_id text null
   status enum(voting, confirmed, chatted, expired, completed)
   starts_at, ends_at, vibe_tag enum(quick_coffee, casual_hangout, dinner, night_out)
   timezone text                    -- timezone of member closest to venue centroid

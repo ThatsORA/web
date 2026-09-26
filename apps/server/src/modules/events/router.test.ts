@@ -35,7 +35,7 @@ const option = (id: string, rank: number) => ({
     // caller is alice, invite bob
     mocks.findMany.mockResolvedValueOnce([{ userLowId: alice, userHighId: bob, lowAddedHigh: true, highAddedLow: false }]);
     matcherMocks.createUserHangout.mockResolvedValueOnce(eventId);
-    mocks.findUnique.mockResolvedValueOnce(event()).mockResolvedValueOnce({ id: alice, username: "alice" });
+    mocks.findUnique.mockResolvedValueOnce(event());
 
     const response = await fetch(`${base}/events`, {
       method: "POST",
@@ -45,6 +45,14 @@ const option = (id: string, rank: number) => ({
     
     expect(response.status).toBe(201);
     expect(matcherMocks.createUserHangout).toHaveBeenCalledWith(alice, [bob], undefined, undefined, undefined);
+    expect(mocks.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: eventId },
+      include: expect.objectContaining({
+        creator: { select: { id: true, username: true } },
+      }),
+    }));
+    const body = await response.json();
+    expect(body.created_by).toEqual({ id: alice, username: "alice" });
   });
 
   it("POST /events rejects self invite", async () => {
