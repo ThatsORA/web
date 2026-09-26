@@ -3,11 +3,12 @@
 import type { EventCardPayload, EventOption } from "@web/contract";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { ActivityIndicator, Linking, Pressable, Share, View } from "react-native";
+import { ActionSheetIOS, ActivityIndicator, Linking, Platform, Share, View } from "react-native";
 import { Badge, Button, Callout, Card, Txt, useTheme } from "../../ui";
 import { ExpenseForm } from "../expenses";
 import { canReportClosed, cardKind, freePeople, travelRows } from "./cardState";
-import { mapsUrl, progressLabel, shareMessage, swapLabel, timeLabel, vibeLabel } from "./format";
+import { directionsUrl, googleDirectionsUrl } from "./directions";
+import { progressLabel, shareMessage, swapLabel, timeLabel, vibeLabel } from "./format";
 
 export type CardActions = {
   vote: (optionId: string) => void;
@@ -155,12 +156,40 @@ function OptionRow({ option, mine, disabled, onVote }: { option: EventOption; mi
   );
 }
 
-/** Violet `Card brand` header with the venue, then travel times, map pin and "It's closed". */
+/** Violet `Card brand` header with the venue, then travel times, directions button and "It's closed". */
 function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & { venue: EventOption }) {
   const t = useTheme();
   const [showExpense, setShowExpense] = useState(false);
   const status = card.status === "completed" ? "Done" : "Confirmed";
   const attendees = card.outcome?.attendees ?? [];
+
+  const handleGetDirections = () => {
+    const venueLoc = {
+      lat: venue.lat,
+      lng: venue.lng,
+      placeId: venue.place_id,
+      name: venue.name,
+    };
+    if (Platform.OS === "ios" && ActionSheetIOS?.showActionSheetWithOptions) {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Apple Maps", "Google Maps", "Cancel"],
+          cancelButtonIndex: 2,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) {
+            void Linking.openURL(directionsUrl(venueLoc, "ios"));
+          } else if (buttonIndex === 1) {
+            void Linking.openURL(googleDirectionsUrl(venueLoc));
+          }
+        }
+      );
+    } else {
+      const url = directionsUrl(venueLoc, Platform.OS);
+      void Linking.openURL(url);
+    }
+  };
+
   return (
     <View>
       <Card brand>
@@ -194,24 +223,7 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
             </Txt>
           </View>
         ))}
-        <Pressable
-          accessibilityRole="link"
-          accessibilityLabel={`Open ${venue.name} in Maps`}
-          onPress={() => void Linking.openURL(mapsUrl(venue))}
-          style={({ pressed }) => ({
-            backgroundColor: t.colors.surfaceCard,
-            opacity: pressed ? 0.8 : 1,
-            borderColor: t.colors.border,
-            borderWidth: 1,
-            borderRadius: t.radius.sm,
-            padding: t.spacing.md,
-            alignItems: "center",
-            gap: t.spacing.xs,
-          })}
-        >
-          <Txt variant="headline">📍</Txt>
-          <Txt variant="label">Open in Maps</Txt>
-        </Pressable>
+        <Button label="Get directions" variant="outline" onPress={handleGetDirections} />
         {canReportClosed(card) ? (
           <Button label="It's closed" variant="outline" onPress={actions.reportClosed} loading={busy} />
         ) : null}
@@ -230,3 +242,4 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
     </View>
   );
 }
+
