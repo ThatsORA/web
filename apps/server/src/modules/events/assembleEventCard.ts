@@ -40,7 +40,10 @@ export function assembleEventCard(event: EventWithCardData, userId: string): Eve
   const responded = event.participants.filter((participant) =>
     participant.voteStatus === "voted" || participant.voteStatus === "ghost_passed" || participant.voteStatus === "confirmed"
   ).length;
-  const venue = event.venuePlaceId ? options.find((option) => option.place_id === event.venuePlaceId) ?? null : null;
+  // The snapshot survives a swap to a backup that was never a vote option; the lookup covers events confirmed before it existed.
+  const venue = event.venueSnapshot
+    ? EventOption.parse(event.venueSnapshot)
+    : event.venuePlaceId ? options.find((option) => option.place_id === event.venuePlaceId) ?? null : null;
   const tallies = resolved
     ? Object.fromEntries(options.map((option) => [option.id!, event.votes.filter((vote) => vote.optionId === option.id).length]))
     : null;

@@ -77,6 +77,7 @@ export async function closeVoting(eventId: string): Promise<void> {
               venueName: r.winner.name,
               venueLat: r.winner.lat,
               venueLng: r.winner.lng,
+              venueSnapshot: r.winner,
               venueStatus: "open",
               backupVenues: r.backups,
             }

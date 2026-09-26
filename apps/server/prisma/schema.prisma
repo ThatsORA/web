@@ -158,6 +158,7 @@ model Event {
   venueLat      Float?      @map("venue_lat")
   venueLng      Float?      @map("venue_lng")
   venueStatus   VenueStatus @default(open) @map("venue_status")
+  venueSnapshot Json?       @map("venue_snapshot") // EventOption of the current venue; survives backup swaps
   backupVenues  Json        @default("[]") @map("backup_venues") // EventOption[] snapshots
   voteClosesAt  DateTime    @map("vote_closes_at")
   createdAt     DateTime    @default(now()) @map("created_at")
