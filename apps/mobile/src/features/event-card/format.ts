@@ -28,12 +28,17 @@ function localParts(iso: string, timeZone: string) {
   };
 }
 
-/** "Thu · 6:30–8:30pm · Dinner" */
-export function slotLabel(card: Pick<EventCardPayload, "starts_at" | "ends_at" | "timezone" | "vibe_tag">): string {
+/** "Thu · 6:30–8:30pm" (the card's headline; the vibe is its eyebrow) */
+export function timeLabel(card: Pick<EventCardPayload, "starts_at" | "ends_at" | "timezone">): string {
   const s = localParts(card.starts_at, card.timezone);
   const e = localParts(card.ends_at, card.timezone);
   const range = s.period === e.period ? `${s.time}–${e.time}${e.period}` : `${s.time}${s.period}–${e.time}${e.period}`;
-  return `${s.day} · ${range} · ${vibeLabel(card.vibe_tag)}`;
+  return `${s.day} · ${range}`;
+}
+
+/** "Thu · 6:30–8:30pm · Dinner" */
+export function slotLabel(card: Pick<EventCardPayload, "starts_at" | "ends_at" | "timezone" | "vibe_tag">): string {
+  return `${timeLabel(card)} · ${vibeLabel(card.vibe_tag)}`;
 }
 
 /** "2 of 3 responded". A ghost pass counts as responded (invariants: Privacy). */

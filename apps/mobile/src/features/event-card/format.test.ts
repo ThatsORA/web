@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FIXTURES } from "./fixtures";
-import { mapsUrl, progressLabel, shareMessage, slotLabel, swapLabel } from "./format";
+import { mapsUrl, progressLabel, shareMessage, slotLabel, swapLabel, timeLabel } from "./format";
 
 const card = FIXTURES[0]!.card;
 
@@ -24,6 +24,12 @@ describe("slotLabel", () => {
       ends_at: "2026-10-03T12:00:00-04:00",
     };
     expect(slotLabel(brunch)).toBe("Sat · 11am–12pm · Coffee");
+  });
+});
+
+describe("timeLabel", () => {
+  it("is the slot without the vibe (the card's headline)", () => {
+    expect(timeLabel(card)).toBe("Thu · 6:30–8:30pm");
   });
 });
 
