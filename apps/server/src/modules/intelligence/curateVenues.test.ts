@@ -121,7 +121,7 @@ describe("curateVenues", () => {
     const options = [1, 2, 3].map((n) => ({ place_id: `fixture${n}`, blurb: `Fixture ${n}` }));
     vi.mocked(fs.existsSync).mockReturnValue(true);
     const read = vi.mocked(fs.readFileSync).mockImplementation((path) =>
-      JSON.stringify(String(path).replace(/\\/g, "/").includes("/gemini/") ? { options } : { reviews: [] }),
+      JSON.stringify(/[/\\]gemini[/\\]/.test(String(path)) ? { options } : { reviews: [] }),
     );
 
     const out = await curateVenues(five("fixture"), ctx);
