@@ -6,11 +6,16 @@ import { attachRealtime } from "./realtime";
 import { triggerMatcher } from "./modules/matching/matcher";
 import { sweepVoting } from "./modules/voting/lifecycle";
 import { promoteDueInvites } from "./modules/groups/router";
+import { syncAllGoogleCalendars } from "./modules/calendar/googleSync";
 
 const server = createServer(createApp());
 attachRealtime(server);
 
 cron.schedule("*/5 * * * *", () => void triggerMatcher());
+cron.schedule("*/15 * * * *", async () => {
+  await syncAllGoogleCalendars();
+  await triggerMatcher();
+});
 setInterval(() => void sweepVoting(), 15_000);
 setInterval(() => void promoteDueInvites().catch((e: unknown) => console.error("promoteDueInvites", e)), 60_000);
 

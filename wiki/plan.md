@@ -79,7 +79,6 @@ anonymous voting over Socket.io, Ghost Pass, resolution, and
 2. **Expense ledger:** equal splits and a manual "settled" toggle.
 
 **Cut (mention as future work in the pitch):**
-- Smart Match Ranking via Gemini, replaced by a weighted sort
 - Server-side Google or Apple calendar OAuth
 - Gemini closure-risk ordering of backups
 - Fallback group chat
@@ -95,7 +94,7 @@ anonymous voting over Socket.io, Ghost Pass, resolution, and
 | 2 | Server OAuth was the riskiest item and sat on the critical path, and Apple has no server calendar API. | `expo-calendar` reads every calendar synced to the phone (Google and iCloud included). The client computes busy blocks and PUTs them. There's no OAuth, and event text never leaves the device. The hour-8 checkpoint runs on seeded data. |
 | 3 | Distance Matrix is Legacy and can't be enabled in new Cloud projects. The plan also had no origin locations, and "combined travel time" rewards unfair outcomes. | Use Routes API `computeRouteMatrix` and Places API (New). Origins are the home locations set at onboarding. Cost = worst commute + 0.1 × total commute. |
 | 4 | The slices weren't really vertical: Andy owned every screen, several screens had no owner, Riley was overloaded, and Venue Intelligence was split across two owners. | Andy owns the shell, navigation, components, onboarding flow and event card. Riley and Ojas each build their own feature screens. Venue Intelligence moves entirely to Ojas, and the seam is a typed `RankedVenue[]`. Auth and profile go to Ojas. |
-| 5 | Smart Match Ranking used an LLM on purely numeric (and at a hackathon, seeded) inputs, and its effect was invisible in the demo. | Cut. Replaced by a deterministic weighted score. |
+| 5 | Smart Match Ranking used an LLM on purely numeric (and at a hackathon, seeded) inputs, and its effect was invisible in the demo. | The deterministic score now builds the shortlist. Gemini re-ranks it with vibe, favorites, recency and local-time context, then writes a visible match reason. |
 | 6 | The vibe table had gaps and overlaps, and it classified raw windows instead of hangout slots. | One template-based step now classifies the window *and* carves the slot. Priority order resolves overlaps, and unit test cases are listed below. |
 | 7 | Group formation, consensus, timeout and anonymity weren't defined. | Groups are explicit groups, mutual close-friend pairs and maximal mutual cliques, with 2–6 members. Resolution uses plurality with a deterministic tie-break. Tallies stay hidden until close, and ghost passes count as "responded". |
 | 8 | Gemini closure-risk ordering of backups used an LLM on a structured field. | Business status is filtered in code. Backups are the losing vote options, then the unused top-5 venues. The "It's closed" button stays. |
@@ -402,7 +401,7 @@ whose local wall clock is earliest at the start of the free window.
 | Tue 22:10–23:59 | discarded (after every latest start) |
 | Tue 17:10–19:00 | dinner 17:30–19:00 |
 
-### 5. Ranking (Riley, deterministic; replaces Gemini Smart Match Ranking)
+### 5. Ranking (Riley, deterministic shortlist + Gemini re-rank)
 
 Each (group, slot) candidate gets a score:
 
@@ -413,15 +412,20 @@ base_score = 0.40 · closeness   (mean interaction_score over member pairs, 0..1
 score = base_score × 0.85 for pairs; base_score for groups of 3 or more
 ```
 
-Ties go to the earlier start, then to `group_key` in lexical order.
+Ties go to the earlier start, then to `group_key` in lexical order. This
+deterministic score builds a top-10 shortlist.
 
-Candidates are processed greedily in score order. A candidate is skipped
-if its group already has an open event, or if any member already belongs
-to an open event whose slot overlaps.
+Gemini Flash re-ranks that shortlist using only aggregate facts: member
+count, mean closeness, days since the last hangout, vibe, local day/time,
+and favorite-category overlap. It returns a non-empty subset of candidate
+IDs in best-first order plus a reason of at most 90 characters. IDs must
+be unique and come from the shortlist. Invalid output, timeout, a missing
+key, or a missing demo fixture preserves deterministic order and stores a
+null reason. Results are cached by a hash of the candidate facts.
 
-This is the lighter replacement for the cut Gemini ranking. It's
-explainable in one sentence during the pitch, and it gives the same
-answer every time.
+Candidates are processed greedily after the optional re-rank. A candidate
+is skipped if its group already has an open event, or if any member already
+belongs to an open event whose slot overlaps.
 
 ### 6. Venue candidates (Riley)
 
@@ -466,7 +470,7 @@ answer every time.
 - Pitch line: "We optimize for the worst commute, not the average one.
   Nobody gets stuck with the 50-minute trip."
 
-### 8. Venue Intelligence (Ojas; the one Gemini call)
+### 8. Venue Intelligence (Ojas; venue Gemini call)
 
 **Called as** `curateVenues(RankedVenue[], context) → EventOption[3]`.
 
@@ -569,19 +573,17 @@ backstop if they ever do.
 ## Where AI Is and Isn't Used
 
 **Deterministic code:** busy-to-free math, group formation, vibe and slot,
-ranking, Places filtering, route-matrix scoring, and backup ordering.
-Each of these takes structured input and has one correct answer, so an
-LLM would only add latency, cost and nondeterminism.
+shortlist scoring, Places filtering, route-matrix scoring, and backup
+ordering. These form the complete fallback path.
 
-**Gemini, one call:** Venue Intelligence. It reads unstructured review
-text to catch mismatches between a venue and the vibe, then writes the
-vote blurbs. This is the only step where the input is messy language and
-judgment actually adds something. It consumes the deterministic ranking
-rather than replacing it, and it has a fallback that doesn't need AI.
+**Gemini, two calls:** Smart Match Ranking reorders the deterministic
+top-10 shortlist from aggregate matching facts and writes the card's match
+reason. Venue Intelligence reads unstructured review text to catch vibe
+mismatches and writes vote blurbs. Both validate IDs against their inputs
+and fall back to deterministic results.
 
-**Future work (pitch only):** learned match ranking once real hangout
-history exists, natural-language expense entry, and summaries of the
-fallback chat.
+**Future work (pitch only):** learned ranking once real hangout history
+exists, natural-language expense entry, and summaries of the fallback chat.
 
 ## Config (env)
 

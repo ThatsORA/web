@@ -190,7 +190,7 @@ describe("matcher pipeline", () => {
     });
     expect(mocks.fetchCandidates).toHaveBeenCalledWith(
       expect.objectContaining({ vibe_tag: "dinner" }),
-      users.map(({ id, timezone, homeLat, homeLng, favorites }) => ({ id, timezone, homeLat, homeLng, favorites })),
+      users.map(({ id, timezone, homeLat, homeLng, favorites, travelMode }) => ({ id, timezone, homeLat, homeLng, favorites, travelMode })),
     );
     expect(mocks.curateVenues).toHaveBeenCalledWith(
       rankedVenues,
@@ -216,6 +216,7 @@ describe("matcher pipeline", () => {
       endsAt: new Date("2026-10-02T00:30:00Z"),
       vibeTag: "dinner",
       timezone: "America/New_York",
+      matchReason: null,
       voteClosesAt: new Date(NOW.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
     });
     expect(create.data.backupVenues).toEqual([

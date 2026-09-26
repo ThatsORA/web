@@ -7,13 +7,21 @@ import { prisma } from "../../lib/prisma";
 import { curateVenues, factsLine } from "../intelligence/curateVenues";
 import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
 import { openVoting } from "../voting/lifecycle";
-import { candidateGroups, selectCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
+import { candidateGroups, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
+import { rankWithGemini } from "./rankWithGemini";
 import { classifySlot, earliestTimezone, formatTimeHHMM, freeWindows, getLocalParts } from "./timeMath";
 
 export { freeWindows, classifySlot } from "./timeMath";
 
 let running: Promise<void> | null = null;
 let rerunRequested = false;
+
+let mutexQueue: Promise<any> = Promise.resolve();
+export function withMatcherMutex<T>(task: () => Promise<T>): Promise<T> {
+  const next = mutexQueue.then(() => task());
+  mutexQueue = next.catch(() => {});
+  return next;
+}
 
 export function openEventsByParticipant(events: readonly MatchingEvent[]): Map<string, MatchingEvent[]> {
   const byParticipant = new Map<string, MatchingEvent[]>();
@@ -173,7 +181,9 @@ export async function runPipeline(now = new Date()): Promise<void> {
     }
   }
 
-  const selected = selectCandidates(groupSlots, friendships, [...openEvents, ...cooldownEvents], now, env.COOLDOWN_HOURS);
+  const deterministicRanking = rankCandidates(groupSlots, friendships, now);
+  const reranked = await rankWithGemini(deterministicRanking, favoritesByUser);
+  const selected = selectRankedCandidates(reranked, [...openEvents, ...cooldownEvents], now, env.COOLDOWN_HOURS);
   for (const candidate of selected) {
     const venueMembers = candidate.group.memberIds
       .map((id) => usersById.get(id))
@@ -184,6 +194,7 @@ export async function runPipeline(now = new Date()): Promise<void> {
         homeLat: user.homeLat,
         homeLng: user.homeLng,
         favorites: user.favorites,
+        travelMode: user.travelMode,
       }));
     const rankedVenues = await fetchCandidates(candidate.slot, venueMembers);
     if (rankedVenues.length < 3) continue;
@@ -210,6 +221,7 @@ export async function runPipeline(now = new Date()): Promise<void> {
           endsAt: candidate.slot.end,
           vibeTag: candidate.slot.vibe_tag,
           timezone: eventTimezone,
+          matchReason: candidate.matchReason,
           backupVenues: unusedVenueSnapshots(rankedVenues, options),
           voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
           participants: {
@@ -240,4 +252,117 @@ export function triggerMatcher(): Promise<void> {
     }
   })();
   return running;
+}
+
+export async function createUserHangout(
+  callerId: string,
+  inviteeIds: string[],
+  vibeTag?: import("@web/contract").VibeTag,
+  earliest?: string,
+  latest?: string,
+): Promise<string | null> {
+  const memberIds = [...new Set([callerId, ...inviteeIds])].sort();
+  const now = new Date();
+
+  const [users, openEvents] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: memberIds } },
+      include: { busyBlocks: true, favorites: true },
+    }),
+    prisma.event.findMany({
+      where: {
+        status: { in: ["voting", "confirmed"] },
+        participants: { some: { userId: { in: memberIds } } },
+      },
+      include: { participants: true },
+    }),
+  ]);
+
+  const usersById = new Map(users.map((user) => [user.id, user]));
+  const eventsByParticipant = openEventsByParticipant(openEvents);
+
+  if (users.length !== memberIds.length) return null;
+
+  const availability = memberIds.map((id) => {
+    const user = usersById.get(id)!;
+    return {
+      id: user.id,
+      timezone: user.timezone,
+      busyBlocks: user.busyBlocks.map((block) => ({ start: block.startsAt, end: block.endsAt })),
+      openEvents: (eventsByParticipant.get(user.id) ?? [])
+        .map((event) => ({ start: event.startsAt, end: event.endsAt })),
+    };
+  });
+
+  const windows = freeWindows(availability, now, {
+    busyPaddingMin: env.BUSY_PADDING_MIN,
+    minLeadHours: env.MIN_LEAD_HOURS,
+    horizonDays: env.MATCH_HORIZON_DAYS,
+  });
+
+  let bestSlot = null;
+  const timezones = Object.fromEntries(users.map((u) => [u.id, u.timezone]));
+
+  for (const window of windows) {
+    if (earliest && window.end < new Date(earliest)) continue;
+    if (latest && window.start > new Date(latest)) continue;
+
+    const slot = classifySlot(window, Object.values(timezones));
+    if (slot && (!vibeTag || slot.vibe_tag === vibeTag)) {
+      if (vibeTag) slot.vibe_tag = vibeTag;
+      bestSlot = slot;
+      break;
+    }
+  }
+
+  if (!bestSlot) return null;
+
+  const groupKey = memberIds.join(",");
+  const favoritesByUser = new Map(users.map((u) => [u.id, u.favorites]));
+  const venueMembers = memberIds.map((id) => {
+    const user = usersById.get(id)!;
+    return {
+      id: user.id,
+      timezone: user.timezone,
+      homeLat: user.homeLat,
+      homeLng: user.homeLng,
+      favorites: user.favorites,
+    };
+  });
+
+  const rankedVenues = await fetchCandidates(bestSlot, venueMembers);
+  if (rankedVenues.length < 3) return null;
+
+  const group = { memberIds, memberTimezones: timezones, groupKey, sourceGroupId: null };
+  const candidate = { group, slot: bestSlot, matchReason: null };
+
+  const options = await curateVenues(rankedVenues, curateContext(candidate, favoritesByUser));
+  if (options.length !== 3) return null;
+
+  const eventTimezone = timezoneClosestToVenueCentroid(venueMembers, options) ??
+    earliestTimezone(bestSlot.start, Object.values(timezones));
+
+  const createdId = await prisma.$transaction(async (tx) => {
+    const event = await tx.event.create({
+      data: {
+        groupKey,
+        status: "voting",
+        startsAt: bestSlot.start,
+        endsAt: bestSlot.end,
+        vibeTag: bestSlot.vibe_tag,
+        timezone: eventTimezone,
+        backupVenues: unusedVenueSnapshots(rankedVenues, options),
+        voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
+        participants: {
+          create: memberIds.map((userId) => ({ userId, voteStatus: "invited" })),
+        },
+        options: { create: options.map(optionData) },
+      },
+      select: { id: true },
+    });
+    return event.id;
+  });
+
+  if (createdId) await openVoting(createdId);
+  return createdId;
 }

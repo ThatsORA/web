@@ -26,11 +26,23 @@ describe("Settings Mount Points", () => {
     expect(typeof FavoritesSettings).toBe("function");
   });
 
-  it("exports AvailabilitySettings mount point (undefined until implemented by Riley)", () => {
-    expect(AvailabilitySettings).toBeUndefined();
+  it("exports AvailabilitySettings mount point", () => {
+    expect(typeof AvailabilitySettings).toBe("function");
   });
 
   it("exports CloseFriendsSettings mount point (undefined until implemented by Ojas)", () => {
     expect(CloseFriendsSettings).toBeUndefined();
   });
 });
+vi.mock("expo-location", () => ({
+  requestForegroundPermissionsAsync: vi.fn(),
+  getCurrentPositionAsync: vi.fn(),
+}));
+vi.mock("expo-web-browser", () => ({
+  maybeCompleteAuthSession: vi.fn(),
+  openAuthSessionAsync: vi.fn(),
+}));
+vi.mock("expo-linking", () => ({
+  createURL: vi.fn(),
+  parse: vi.fn(),
+}));
