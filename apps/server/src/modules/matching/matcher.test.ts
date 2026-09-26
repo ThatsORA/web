@@ -31,7 +31,8 @@ vi.mock("../venues/liveVenues", () => ({ fetchCandidates: mocks.fetchCandidates 
 vi.mock("../voting/lifecycle", () => ({ openVoting: mocks.openVoting }));
 
 import { env } from "../../env";
-import { runPipeline, triggerMatcher, unusedVenueSnapshots } from "./matcher";
+import type { MatchingEvent } from "./candidates";
+import { openEventsByParticipant, runPipeline, timezoneClosestToVenueCentroid, triggerMatcher, unusedVenueSnapshots } from "./matcher";
 
 const NOW = new Date("2026-09-26T12:00:00Z");
 const IDS = [
@@ -106,6 +107,17 @@ beforeEach(() => {
 });
 
 describe("venue snapshots", () => {
+  it("uses the timezone of the member closest to the curated venue centroid", () => {
+    expect(timezoneClosestToVenueCentroid([
+      { id: "new-york", timezone: "America/New_York", homeLat: 40.7128, homeLng: -74.006 },
+      { id: "chicago", timezone: "America/Chicago", homeLat: 41.8781, homeLng: -87.6298 },
+    ], [
+      { lat: 41.88, lng: -87.63 },
+      { lat: 41.89, lng: -87.62 },
+      { lat: 41.87, lng: -87.64 },
+    ])).toBe("America/Chicago");
+  });
+
   it("snapshots unselected venues in route order with their top-five ranks", () => {
     const options = [rankedVenues[3]!, rankedVenues[0]!, rankedVenues[4]!];
     const snapshots = unusedVenueSnapshots(rankedVenues, options);
@@ -122,14 +134,60 @@ describe("venue snapshots", () => {
   });
 });
 
+describe("open event index", () => {
+  it("matches the old per-user scan for 50 users and 200 events", () => {
+    const userIds = Array.from({ length: 50 }, (_, index) => `user-${index}`);
+    const events: MatchingEvent[] = Array.from({ length: 200 }, (_, index) => ({
+      groupKey: `group-${index}`,
+      status: index % 2 ? "voting" : "confirmed",
+      startsAt: new Date(NOW.getTime() + index * 60_000),
+      endsAt: new Date(NOW.getTime() + (index + 60) * 60_000),
+      resolvedAt: null,
+      participants: [index, index + 7, index + 13].map((value) => ({ userId: userIds[value % userIds.length]! })),
+    }));
+
+    const indexed = openEventsByParticipant(events);
+    for (const userId of userIds) {
+      const oldScan = events.filter((event) => event.participants.some((participant) => participant.userId === userId));
+      expect(indexed.get(userId) ?? []).toEqual(oldScan);
+    }
+  });
+});
+
 describe("matcher pipeline", () => {
   it("loads DB state and atomically writes the one Thursday dinner event", async () => {
     await runPipeline(NOW);
 
-    expect(mocks.userFindMany).toHaveBeenCalledWith({ include: { busyBlocks: true, favorites: true } });
+    expect(mocks.userFindMany).toHaveBeenNthCalledWith(1, {
+      where: { id: { in: IDS } },
+      select: { id: true, timezone: true },
+    });
+    expect(mocks.userFindMany).toHaveBeenNthCalledWith(2, {
+      where: { id: { in: IDS } },
+      include: { busyBlocks: true, favorites: true },
+    });
     expect(mocks.friendshipFindMany).toHaveBeenCalledOnce();
     expect(mocks.explicitGroupFindMany).toHaveBeenCalledWith({ include: { members: true } });
-    expect(mocks.eventFindMany).toHaveBeenCalledWith({ include: { participants: true } });
+    expect(mocks.eventFindMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        status: { in: ["voting", "confirmed"] },
+        participants: { some: { userId: { in: IDS } } },
+      },
+      include: { participants: true },
+    });
+    expect(mocks.eventFindMany).toHaveBeenNthCalledWith(2, {
+      where: {
+        groupKey: { in: [
+          `${IDS[0]},${IDS[1]}`,
+          IDS.join(","),
+          `${IDS[0]},${IDS[2]}`,
+          `${IDS[1]},${IDS[2]}`,
+        ] },
+        status: { in: ["expired", "chatted"] },
+        resolvedAt: { gte: new Date(NOW.getTime() - env.COOLDOWN_HOURS * 60 * 60 * 1_000) },
+      },
+      include: { participants: true },
+    });
     expect(mocks.fetchCandidates).toHaveBeenCalledWith(
       expect.objectContaining({ vibe_tag: "dinner" }),
       users.map(({ id, timezone, homeLat, homeLng, favorites }) => ({ id, timezone, homeLat, homeLng, favorites })),
@@ -192,7 +250,7 @@ describe("matcher pipeline", () => {
   });
 
   it("skips a group that already has an open event before curation", async () => {
-    mocks.eventFindMany.mockResolvedValue([{
+    mocks.eventFindMany.mockResolvedValueOnce([{
       id: "existing",
       groupKey: IDS.join(","),
       status: "voting",
@@ -200,7 +258,7 @@ describe("matcher pipeline", () => {
       endsAt: new Date("2026-10-02T00:30:00Z"),
       resolvedAt: null,
       participants: IDS.map((userId) => ({ userId })),
-    }]);
+    }]).mockResolvedValueOnce([]);
     await runPipeline(NOW);
     expect(mocks.curateVenues).not.toHaveBeenCalled();
     expect(mocks.transaction).not.toHaveBeenCalled();
@@ -231,10 +289,11 @@ describe("matcher mutex", () => {
     const first = triggerMatcher();
     const second = triggerMatcher();
     expect(second).toBe(first);
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
     release!(users);
     await first;
 
-    expect(mocks.userFindMany).toHaveBeenCalledTimes(2);
+    expect(mocks.userFindMany).toHaveBeenCalledTimes(4);
     expect(mocks.eventCreate).toHaveBeenCalledOnce();
     expect(mocks.openVoting).toHaveBeenCalledOnce();
   });

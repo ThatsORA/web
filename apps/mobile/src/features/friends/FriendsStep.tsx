@@ -1,66 +1,102 @@
-// Owner: Ojas — onboarding step 5: search by username, tap Add. You only ever see "Added"
-// (demo step 4): nothing here says whether they've added you back.
-import { AddCloseFriendRequest, routes, UserSearchResponse } from "@web/contract";
-import { useRef, useState } from "react";
+// Owner: Ojas — onboarding step 5: search + send friend requests, then star any accepted close friends.
+// Copy explains that close friends are completely private.
+import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
-import { z } from "zod";
-import { api } from "../../lib/api";
 import { stepEyebrow, type OnboardingStepProps } from "../../lib/onboarding";
-import { Badge, Button, Callout, Screen, TextField, Txt, useTheme } from "../../ui";
-
-type Found = z.infer<typeof UserSearchResponse>["users"];
+import { Button, Chip, Screen, Txt, useTheme } from "../../ui";
+import { FriendSearch } from "./FriendSearch";
+import {
+  getFriendRequests,
+  getFriends,
+  starCloseFriend,
+  unstarCloseFriend,
+  type Friend,
+  type FriendRequestsResponse,
+} from "./friendsApi";
 
 export function FriendsStep({ onDone }: OnboardingStepProps) {
   const t = useTheme();
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState<Found>([]);
-  const [added, setAdded] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const latest = useRef(0);
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [requests, setRequests] = useState<FriendRequestsResponse>({ incoming: [], outgoing: [] });
+  const [hasActed, setHasActed] = useState(false);
 
-  async function search(text: string) {
-    setQ(text);
-    const n = ++latest.current;
-    const query = text.trim();
-    if (!query) return setResults([]);
+  const loadData = useCallback(async () => {
     try {
-      const { users } = await api(`${routes.userSearch}?q=${encodeURIComponent(query)}`, UserSearchResponse);
-      if (n === latest.current) setResults(users);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const [friendsList, reqs] = await Promise.all([getFriends(), getFriendRequests()]);
+      setFriends(friendsList);
+      setRequests(reqs);
+    } catch {
+      // Best-effort in onboarding
+    }
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(loadData);
+  }, [loadData]);
+
+  async function handleToggleClose(f: Friend) {
+    setHasActed(true);
+    const nextClose = !f.close;
+    setFriends((prev) => prev.map((item) => (item.id === f.id ? { ...item, close: nextClose } : item)));
+    try {
+      if (nextClose) {
+        await starCloseFriend(f.username);
+      } else {
+        await unstarCloseFriend(f.id);
+      }
+    } catch {
+      setFriends((prev) => prev.map((item) => (item.id === f.id ? { ...item, close: f.close } : item)));
     }
   }
 
-  async function add(username: string, id: string) {
-    setError(null);
-    try {
-      await api(routes.closeFriends, z.unknown(), { method: "POST", body: AddCloseFriendRequest.parse({ username }) });
-      setAdded((a) => [...a, id]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
+  function handleRefresh() {
+    setHasActed(true);
+    void loadData();
   }
+
+  const hasCloseFriends = friends.some((f) => f.close);
+  const doneLabel = hasActed || hasCloseFriends || requests.outgoing.length > 0 ? "Done" : "Skip for now";
 
   return (
     <Screen
       eyebrow={stepEyebrow("friends")}
-      title="Add close friends"
-      subtitle="Search by username. They won't be told, and you won't see if they add you back."
-      footer={<Button label={added.length ? "Done" : "Skip for now"} variant={added.length ? "primary" : "ghost"} onPress={onDone} />}
+      title="Add friends"
+      subtitle="Search by username to send friend requests, then star any friends who have already accepted. Close friends are completely private — nobody knows who you star."
+      footer={
+        <Button
+          label={doneLabel}
+          variant={doneLabel === "Done" ? "primary" : "ghost"}
+          onPress={onDone}
+        />
+      }
     >
-      <TextField label="Username" placeholder="riley" value={q} onChangeText={(text) => void search(text)} autoCorrect={false} />
-      <View style={{ gap: t.spacing.sm }}>
-        {results.map((u) => (
-          <View key={u.id} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: t.spacing.sm }}>
-            <Txt variant="body">@{u.username}</Txt>
-            {added.includes(u.id) ? <Badge tone="success" label="Added" /> : <Button label="Add" variant="outline" onPress={() => void add(u.username, u.id)} />}
+      <FriendSearch friends={friends} requests={requests} onRefresh={handleRefresh} />
+
+      {friends.length > 0 ? (
+        <View style={{ gap: t.spacing.sm, marginTop: t.spacing.md }}>
+          <Txt variant="section">Star close friends</Txt>
+          <View style={{ gap: t.spacing.sm }}>
+            {friends.map((f) => (
+              <View
+                key={f.id}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: t.spacing.sm,
+                  paddingVertical: t.spacing.xs,
+                }}
+              >
+                <Txt variant="body">@{f.username}</Txt>
+                <Chip
+                  label={f.close ? "★ Close" : "☆ Close"}
+                  selected={f.close}
+                  onPress={() => void handleToggleClose(f)}
+                />
+              </View>
+            ))}
           </View>
-        ))}
-      </View>
-      {error ? (
-        <Callout tone="danger" title="Something went wrong">
-          {error}
-        </Callout>
+        </View>
       ) : null}
     </Screen>
   );

@@ -61,7 +61,14 @@ enum FriendshipStatus {
 
 enum BusySource {
   device_calendar
+  google_calendar
   seed
+}
+
+enum GoogleCalendarConnectionStatus {
+  active
+  revoked
+  error
 }
 
 model User {
@@ -78,17 +85,18 @@ model User {
   // lack the field and scripts/backfill.ts marks them verified.
   emailVerifiedAt DateTime? @map("email_verified_at")
 
-  busyBlocks      BusyBlock[]
-  friendshipsLow  Friendship[]       @relation("FriendshipLow")
-  friendshipsHigh Friendship[]       @relation("FriendshipHigh")
-  groupsCreated   ExplicitGroup[]
-  groupMembers    GroupMember[]
-  favorites       UserFavorite[]
-  participations  EventParticipant[]
-  votes           Vote[]
-  expensesPaid    Expense[]
-  expenseSplits   ExpenseSplit[]
-  emailCodes      EmailCode[]
+  busyBlocks               BusyBlock[]
+  friendshipsLow           Friendship[]              @relation("FriendshipLow")
+  friendshipsHigh          Friendship[]              @relation("FriendshipHigh")
+  groupsCreated            ExplicitGroup[]
+  groupMembers             GroupMember[]
+  favorites                UserFavorite[]
+  participations           EventParticipant[]
+  votes                    Vote[]
+  expensesPaid             Expense[]
+  expenseSplits            ExpenseSplit[]
+  googleCalendarConnection GoogleCalendarConnection?
+  emailCodes               EmailCode[]
 
   @@map("users")
 }
@@ -108,6 +116,21 @@ model EmailCode {
 
   @@index([userId, purpose])
   @@map("email_codes")
+}
+
+model GoogleCalendarConnection {
+  id              String                         @id @default(uuid()) @map("_id")
+  userId          String                         @unique @map("user_id")
+  refreshTokenEnc String                         @map("refresh_token_enc") // AES-256-GCM ciphertext only; encrypted by the OAuth handler.
+  scopes          String[]
+  status          GoogleCalendarConnectionStatus @default(active)
+  connectedAt     DateTime                       @default(now()) @map("connected_at")
+  lastSyncedAt    DateTime?                      @map("last_synced_at")
+  lastError       String?                        @map("last_error")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("google_calendar_connections")
 }
 
 model BusyBlock {
@@ -212,6 +235,7 @@ model Event {
   voteClosesAt  DateTime    @map("vote_closes_at")
   createdAt     DateTime    @default(now()) @map("created_at")
   resolvedAt    DateTime?   @map("resolved_at")
+  matchReason   String?     @map("match_reason") // Null for the deterministic fallback.
 
   sourceGroup  ExplicitGroup?     @relation(fields: [sourceGroupId], references: [id], onDelete: SetNull)
   participants EventParticipant[]

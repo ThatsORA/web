@@ -35,14 +35,26 @@ export function useEvents() {
   const loadAll = useCallback(async () => {
     try {
       const { events } = await api(routes.events, EventsListResponse);
-      await Promise.all(events.map((e) => refetch(e.id)));
+      const nextCards: Record<string, EventCardPayload> = {};
+      const newSwapped: Record<string, boolean> = {};
+      for (const card of events) {
+        if (detectSwap(cardsRef.current[card.id], card)) {
+          newSwapped[card.id] = true;
+        }
+        nextCards[card.id] = card;
+      }
+      if (Object.keys(newSwapped).length > 0) {
+        setSwapped((s) => ({ ...s, ...newSwapped }));
+      }
+      cardsRef.current = nextCards;
+      setCards(nextCards);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoaded(true);
     }
-  }, [refetch]);
+  }, []);
 
   useEffect(() => {
     void Promise.resolve().then(loadAll);
