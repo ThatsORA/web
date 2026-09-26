@@ -28,6 +28,11 @@ describe("checkPassword", () => {
   it.each(["cedarharbor", "cedar harbor moon", "web-demo-2026", "c".repeat(127) + "z", "🌱".repeat(9) + "🌙"])("allows %s without composition rules", (password) => {
     expect(checkPassword(password, identity)).toEqual({ ok: true });
   });
+  it("ignores 1–2 character email local parts, which would block nearly everything", () => {
+    expect(checkPassword("cedar harbor moon", { username: "ojas", email: "a@example.com" })).toEqual({ ok: true });
+    expect(checkPassword("cedar harbor moon", { username: "ojas", email: "ce@example.com" })).toEqual({ ok: true });
+    expect(checkPassword("cedar harbor moon", { username: "ojas", email: "harbor@example.com" })).toEqual({ ok: false, reason: passwordReasons.email });
+  });
   it("does not treat empty identity fields as substrings", () => {
     expect(checkPassword("cedar harbor moon", { username: "", email: "" })).toEqual({ ok: true });
   });
