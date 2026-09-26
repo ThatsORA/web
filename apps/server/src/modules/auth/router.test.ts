@@ -5,7 +5,7 @@ import { Prisma, type User } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ create: vi.fn(), findUnique: vi.fn(), update: vi.fn() }));
 // In-memory email_codes, enough for issueCode/consumeCode.
-const codes = vi.hoisted(() => ({ rows: [] as Record<string, any>[], sent: [] as string[] }));
+const codes = vi.hoisted(() => ({ rows: [] as Record<string, any>[], sent: [] as string[], sentTo: [] as string[], notices: [] as string[] }));
 vi.mock("../../lib/prisma", () => ({
   prisma: {
     user: mocks,
@@ -25,12 +25,15 @@ vi.mock("../../lib/prisma", () => ({
     },
   },
 }));
-vi.mock("./email", () => ({ sendCodeEmail: async (_to: string, code: string) => void codes.sent.push(code) }));
+vi.mock("./email", () => ({
+  sendCodeEmail: async (to: string, code: string) => void (codes.sent.push(code), codes.sentTo.push(to)),
+  sendEmail: async (to: string) => void codes.notices.push(to),
+}));
 import { authRouter } from "./router";
 import { signToken } from "../../lib/auth";
 let base: string;
 let close: () => void;
-const user: User = { id: "6f48fb35-1518-481d-ab60-cfd2dcc28acf", username: "ojas", email: "ojas@example.com", passwordHash: bcrypt.hashSync("correct-horse", 4), timezone: "America/New_York", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: new Date() };
+const user: User = { id: "6f48fb35-1518-481d-ab60-cfd2dcc28acf", username: "ojas", email: "ojas@example.com", passwordHash: bcrypt.hashSync("correct-horse", 4), timezone: "America/New_York", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: new Date(), displayName: null, bio: null, usernameChangedAt: null };
 beforeAll(async () => {
   const app = express();
   app.use(express.json(), authRouter);
@@ -44,6 +47,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   codes.rows = [];
   codes.sent = [];
+  codes.sentTo = [];
+  codes.notices = [];
 });
 const call = (method: string, path: string, body?: unknown, auth = false) => fetch(base + path, { method, headers: { "content-type": "application/json", ...(auth ? { authorization: `Bearer ${signToken(user.id)}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
 const signup = { email: "new@example.com", username: "new_user", password: "longenough", timezone: "America/New_York" };
@@ -90,7 +95,7 @@ describe("auth router", () => {
     expect((await call("GET", "/me")).status).toBe(401);
     mocks.findUnique.mockResolvedValueOnce(user);
     const body = await (await call("GET", "/me", undefined, true)).json();
-    expect(body).toEqual({ id: user.id, username: "ojas", email: user.email, timezone: user.timezone, home_lat: null, home_lng: null, travel_mode: "DRIVE", email_verified: true });
+    expect(body).toEqual({ id: user.id, username: "ojas", email: user.email, timezone: user.timezone, home_lat: null, home_lng: null, travel_mode: "DRIVE", email_verified: true, display_name: null, bio: null });
   });
   it("PATCH /me rounds home coordinates to 3 decimals", async () => {
     mocks.update.mockImplementation(async ({ data }) => ({ ...user, homeLat: data.homeLat, homeLng: data.homeLng }));
@@ -146,5 +151,56 @@ describe("email verification", () => {
   it("rejects codes that aren't 6 digits", async () => {
     expect((await verify("12345")).status).toBe(400);
     expect((await verify("abcdef")).status).toBe(400);
+  });
+});
+
+describe("profile", () => {
+  const DAY = 24 * 3_600_000;
+  const patch = (body: unknown) => call("PATCH", "/me", body, true);
+  beforeEach(() => {
+    // Like Prisma, undefined fields are left alone.
+    mocks.update.mockImplementation(async ({ data }) => ({ ...user, ...Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)) }));
+  });
+
+  it("sets and clears display name and bio", async () => {
+    expect(await (await patch({ display_name: "  Ojas P ", bio: "capstone" })).json()).toMatchObject({ display_name: "Ojas P", bio: "capstone" });
+    expect(mocks.update.mock.calls[0]![0].data).toMatchObject({ displayName: "Ojas P", bio: "capstone" });
+    await patch({ display_name: null, bio: "" });
+    expect(mocks.update.mock.calls[1]![0].data).toMatchObject({ displayName: null, bio: null });
+    expect((await patch({ display_name: "x".repeat(41) })).status).toBe(400);
+    expect((await patch({ bio: "x".repeat(161) })).status).toBe(400);
+  });
+
+  it("changes the username at most once per 30 days", async () => {
+    mocks.findUnique.mockResolvedValueOnce({ ...user, usernameChangedAt: new Date(Date.now() - 31 * DAY) });
+    expect((await patch({ username: "ojas_p" })).status).toBe(200);
+    expect(mocks.update.mock.calls[0]![0].data).toMatchObject({ username: "ojas_p", usernameChangedAt: expect.any(Date) });
+    mocks.findUnique.mockResolvedValueOnce({ ...user, usernameChangedAt: new Date(Date.now() - DAY) });
+    const cooldown = await patch({ username: "ojas_q" });
+    expect(cooldown.status).toBe(409);
+    expect(await cooldown.json()).toMatchObject({ error: "username_cooldown", retry_at: expect.any(String) });
+    expect((await patch({ username: "Bad Name" })).status).toBe(400);
+  });
+
+  it("409s a taken username", async () => {
+    mocks.findUnique.mockResolvedValueOnce(user);
+    mocks.update.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError("dup", { code: "P2002", clientVersion: "6" }));
+    expect(await (await patch({ username: "riley" })).json()).toEqual({ error: "username_taken" });
+  });
+
+  it("email change: password first, code to the new address, switch on confirm, old address told", async () => {
+    mocks.findUnique.mockImplementation(async ({ where }) => (where.email ? null : user));
+    expect((await call("POST", "/me/email", { new_email: "new@example.com", password: "wrong" }, true)).status).toBe(401);
+    expect((await call("POST", "/me/email", { new_email: "new@example.com", password: "correct-horse" }, true)).status).toBe(204);
+    expect(codes.sentTo).toEqual(["new@example.com"]);
+    const ok = await call("POST", "/me/email/confirm", { code: codes.sent[0] }, true);
+    expect(await ok.json()).toMatchObject({ email: "new@example.com", email_verified: true });
+    expect(codes.notices).toEqual([user.email]);
+  });
+
+  it("email change: 409 when the new address is taken", async () => {
+    mocks.findUnique.mockImplementation(async ({ where }) => (where.email ? { ...user, id: "someone-else" } : user));
+    expect((await call("POST", "/me/email", { new_email: "taken@example.com", password: "correct-horse" }, true)).status).toBe(409);
+    expect(codes.sent).toEqual([]);
   });
 });

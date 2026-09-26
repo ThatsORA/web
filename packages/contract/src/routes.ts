@@ -9,6 +9,9 @@ export const routes = {
   verifyEmail: "/auth/verify-email", // { code } → Me
   busyBlocks: "/busy-blocks",
   userSearch: "/users/search", // ?q=
+  user: (id: string) => `/users/${id}`, // public profile
+  meEmail: "/me/email", // POST { new_email, password } → code to the new address
+  meEmailConfirm: "/me/email/confirm", // POST { code } → Me
   closeFriends: "/friends/close",
   closeFriend: (userId: string) => `/friends/close/${userId}`,
   squads: "/squads",
