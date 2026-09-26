@@ -1,6 +1,7 @@
 // Owner: Riley — the matcher pipeline (plan §2–§7), behind ONE in-process mutex.
 // Every trigger (cron, handshake, busy-block PUT, /internal/run-matcher)
 // calls triggerMatcher(); never call the pipeline around it.
+export { freeWindows, classifySlot } from "./timeMath";
 
 let running: Promise<void> | null = null;
 let rerunRequested = false;
