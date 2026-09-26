@@ -140,7 +140,8 @@ web/
       events/ favorites/                # Andy
     src/realtime/           # Socket.io server (Ojas)
   apps/mobile/
-    app/(onboarding)/ app/(main)/       # Andy (shell, routes)
+    src/app/(onboarding)/ src/app/(main)/  # Andy (shell, routes)
+    src/lib/                            # Andy (API client, socket hook)
     src/features/calendar/              # Riley
     src/features/auth/ friends/         # Ojas
     src/features/favorites/ event-card/ # Andy

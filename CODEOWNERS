@@ -21,7 +21,8 @@
 /apps/mobile/src/features/friends/     @OJAS_GITHUB
 
 # Andy: shell, onboarding, event card, demo
-/apps/mobile/app/                      @ANDY_GITHUB
+/apps/mobile/src/app/                  @ANDY_GITHUB
+/apps/mobile/src/lib/                  @ANDY_GITHUB
 /apps/mobile/src/ui/                   @ANDY_GITHUB
 /apps/mobile/src/features/favorites/   @ANDY_GITHUB
 /apps/mobile/src/features/event-card/  @ANDY_GITHUB

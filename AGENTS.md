@@ -19,7 +19,7 @@ plan disagree, the plan wins; flag the mismatch in your PR.
 | --- | --- | --- |
 | Availability, matching, venues, mobility | Riley | `apps/server/src/modules/{calendar,matching,venues}/`, `apps/server/scripts/seed.ts`, `apps/mobile/src/features/calendar/` |
 | Identity, social graph, decision, AI | Ojas | `apps/server/src/modules/{auth,friends,groups,intelligence,voting,expenses}/`, `apps/server/src/realtime/`, `apps/server/prisma/`, `apps/mobile/src/features/{auth,friends}/` |
-| Shell, onboarding, event card, demo | Andy | `apps/mobile/app/`, `apps/mobile/src/ui/`, `apps/mobile/src/features/{favorites,event-card}/`, `apps/server/src/modules/{events,favorites}/`, `apps/server/scripts/demo-reset.ts` |
+| Shell, onboarding, event card, demo | Andy | `apps/mobile/src/app/`, `apps/mobile/src/ui/`, `apps/mobile/src/lib/`, `apps/mobile/src/features/{favorites,event-card}/`, `apps/server/src/modules/{events,favorites}/`, `apps/server/scripts/demo-reset.ts` |
 | Shared contract | All three | `packages/contract/` |
 
 - **`apps/server/prisma/schema.prisma` and migrations:** only Ojas (the
@@ -99,6 +99,18 @@ plan disagree, the plan wins; flag the mismatch in your PR.
   with the zod schemas from `packages/contract`.
 - The PR description says what you changed, how you tested it, and
   anything you stubbed.
+
+## Pinned versions (don't upgrade mid-hackathon)
+
+- **Expo SDK 57** (React Native 0.86, React 19.2, TypeScript 6). Expo
+  changes every SDK, so read `apps/mobile/AGENTS.md` and use the v57 docs,
+  not memory. Add Expo packages with `npx expo install <pkg>` from
+  `apps/mobile`.
+- **Prisma 6** (`prisma-client-js`, `url` in `schema.prisma`). Prisma 7
+  changed the config format, so don't write Prisma 7 code.
+- **Express 5, zod 3, Socket.io 4, Vitest 5, Node 22, pnpm 10.**
+- Server code runs through `tsx` (ESM, bundler resolution), so relative
+  imports need no `.js` extension.
 
 ## Things that will bite you
 
