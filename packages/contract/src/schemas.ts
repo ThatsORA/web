@@ -91,6 +91,44 @@ export const EventOption = RankedVenue.extend({
 });
 export type EventOption = z.infer<typeof EventOption>;
 
+export interface OptionRowLike {
+  id: string;
+  rank: number;
+  placeId: string;
+  name: string;
+  lat: number;
+  lng: number;
+  primaryType: string | null;
+  priceLevel: number | null;
+  rating: number | null;
+  userRatingCount: number | null;
+  travelMinutes: unknown;
+  maxTravelMin: number;
+  routeScore: number;
+  factsLine: string;
+  aiBlurb: string | null;
+}
+
+export function optionFromRow(row: OptionRowLike): EventOption & { id: string } {
+  return EventOption.parse({
+    id: row.id,
+    rank: row.rank,
+    place_id: row.placeId,
+    name: row.name,
+    lat: row.lat,
+    lng: row.lng,
+    primary_type: row.primaryType,
+    price_level: row.priceLevel,
+    rating: row.rating,
+    user_rating_count: row.userRatingCount,
+    travel_minutes: row.travelMinutes,
+    max_travel_min: row.maxTravelMin,
+    route_score: row.routeScore,
+    facts_line: row.factsLine,
+    ai_blurb: row.aiBlurb,
+  }) as EventOption & { id: string };
+}
+
 export const CurateContext = z.object({
   vibe_tag: VibeTag,
   slot_local: z.string(), // e.g. "Thu 6:30–8:30pm"
