@@ -7,7 +7,8 @@ import { env } from "../../env";
 import { withFixture } from "../../lib/demoMode";
 
 const PRICE = ["", "$", "$$", "$$$", "$$$$"];
-const GEMINI_MODEL = "gemini-3.5-flash-lite";
+// Lite first; escalate to full Flash only when Lite errors or returns invalid output.
+const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash"];
 
 export function factsLine(v: RankedVenue): string {
   const parts: string[] = [];
@@ -64,9 +65,9 @@ const RESPONSE_SCHEMA = {
   required: ["options"],
 };
 
-async function callGemini(prompt: string, vibe: string): Promise<unknown> {
+async function callGemini(model: string, prompt: string, vibe: string): Promise<unknown> {
   return withFixture("gemini", vibe, async () => {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
       body: JSON.stringify({
@@ -116,29 +117,41 @@ export async function curateVenues(venues: RankedVenue[], ctx: CurateContext): P
   const hit = cache.get(key);
   if (hit) return hit;
 
+  const withReviews = await Promise.all(top.map(async (v) => ({ ...v, reviews: await reviewSnippets(v.place_id) })));
+  const prompt = buildPrompt(withReviews, ctx);
+  // One GEMINI_TIMEOUT_MS budget across both models; a timeout goes straight to fallback.
+  const TIMEOUT = new Error("Gemini timeout");
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(TIMEOUT), env.GEMINI_TIMEOUT_MS);
+  });
   try {
-    const withReviews = await Promise.all(top.map(async (v) => ({ ...v, reviews: await reviewSnippets(v.place_id) })));
-    let timer: NodeJS.Timeout | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error("Gemini timeout")), env.GEMINI_TIMEOUT_MS);
-    });
-    const raw = await Promise.race([callGemini(buildPrompt(withReviews, ctx), ctx.vibe_tag), timeout]).finally(() =>
-      clearTimeout(timer),
-    );
-
-    const parsed = GeminiResult.safeParse(raw);
-    if (!parsed.success) return fallback;
-    const byId = new Map(top.map((v) => [v.place_id, v]));
-    const ids = parsed.data.options.map((o) => o.place_id);
-    if (new Set(ids).size !== 3 || !ids.every((id) => byId.has(id))) return fallback;
-
-    const options = parsed.data.options.map((o, i) => {
-      const v = byId.get(o.place_id)!;
-      return { ...v, rank: i + 1, facts_line: factsLine(v), ai_blurb: o.blurb.trim() };
-    });
-    cache.set(key, options);
-    return options;
-  } catch {
-    return fallback;
+    for (const model of GEMINI_MODELS) {
+      try {
+        const options = toOptions(await Promise.race([callGemini(model, prompt, ctx.vibe_tag), timeout]), top);
+        if (options) {
+          cache.set(key, options);
+          return options;
+        }
+      } catch (e) {
+        if (e === TIMEOUT) break;
+      }
+    }
+  } finally {
+    clearTimeout(timer);
   }
+  return fallback;
+}
+
+/** Validated Gemini output → options, or null if it fails the schema or names a place_id not in the input. */
+function toOptions(raw: unknown, top: RankedVenue[]): EventOption[] | null {
+  const parsed = GeminiResult.safeParse(raw);
+  if (!parsed.success) return null;
+  const byId = new Map(top.map((v) => [v.place_id, v]));
+  const ids = parsed.data.options.map((o) => o.place_id);
+  if (new Set(ids).size !== 3 || !ids.every((id) => byId.has(id))) return null;
+  return parsed.data.options.map((o, i) => {
+    const v = byId.get(o.place_id)!;
+    return { ...v, rank: i + 1, facts_line: factsLine(v), ai_blurb: o.blurb.trim() };
+  });
 }

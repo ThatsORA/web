@@ -76,6 +76,21 @@ describe("curateVenues", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("escalates to full Flash when Lite returns invalid output", async () => {
+    const lite = reply([{ place_id: "e1", blurb: "only one" }]);
+    const flash = reply([
+      { place_id: "e2", blurb: "a" },
+      { place_id: "e1", blurb: "b" },
+      { place_id: "e3", blurb: "c" },
+    ]);
+    geminiReply = () => (fetchMock.mock.calls.filter(([u]) => String(u).includes("generativelanguage")).length === 1 ? lite() : flash());
+    const out = await curateVenues(five("e"), ctx);
+    expect(out.map((o) => o.place_id)).toEqual(["e2", "e1", "e3"]);
+    const models = fetchMock.mock.calls.map(([u]) => String(u)).filter((u) => u.includes("generativelanguage"));
+    expect(models[0]).toContain("flash-lite");
+    expect(models[1]).not.toContain("flash-lite");
+  });
+
   it("falls back on a hallucinated place_id", async () => {
     geminiReply = reply([
       { place_id: "h1", blurb: "a" },
@@ -103,8 +118,9 @@ describe("curateVenues", () => {
     expect(await curateVenues(five("b"), ctx)).toEqual(fallbackOptions(five("b")));
   });
 
-  it("falls back when Gemini times out", async () => {
+  it("falls back when Gemini times out, without escalating", async () => {
     geminiReply = () => new Promise<Response>(() => {});
     expect(await curateVenues(five("t"), ctx)).toEqual(fallbackOptions(five("t")));
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).includes("generativelanguage"))).toHaveLength(1);
   });
 });
