@@ -3,6 +3,8 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
+    "@expo-google-fonts/geist-mono": "^0.4.3",
+    "@expo-google-fonts/playfair-display": "^0.4.2",
     "@expo/ui": "~57.0.20",
     "@web/contract": "workspace:*",
     "expo": "~57.0.25",

@@ -1,10 +1,13 @@
-// Owner: Andy — safe-area page wrapper with optional title and a pinned footer.
+// Owner: Andy — safe-area page: Playfair headline ("serif speaks"), mono subtitle,
+// optional eyebrow, and a pinned footer for the primary action.
 import type { ReactNode } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Txt } from "./Txt";
 import { useTheme } from "./useTheme";
 
 type Props = {
+  eyebrow?: string;
   title?: string;
   subtitle?: string;
   children?: ReactNode;
@@ -12,7 +15,7 @@ type Props = {
   footer?: ReactNode;
 };
 
-export function Screen({ title, subtitle, children, footer }: Props) {
+export function Screen({ eyebrow, title, subtitle, children, footer }: Props) {
   const t = useTheme();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.colors.background }}>
@@ -20,15 +23,28 @@ export function Screen({ title, subtitle, children, footer }: Props) {
         contentContainerStyle={{ padding: t.spacing.lg, gap: t.spacing.md }}
         keyboardShouldPersistTaps="handled"
       >
+        {eyebrow ? <Txt variant="eyebrow">{eyebrow}</Txt> : null}
         {title ? (
-          <Text accessibilityRole="header" style={{ color: t.colors.text, fontSize: t.font.title, fontWeight: "700" }}>
+          <Txt variant="display" accessibilityRole="header">
             {title}
-          </Text>
+          </Txt>
         ) : null}
-        {subtitle ? <Text style={{ color: t.colors.textMuted, fontSize: t.font.body }}>{subtitle}</Text> : null}
+        {subtitle ? <Txt variant="body" color="textMuted">{subtitle}</Txt> : null}
         {children}
       </ScrollView>
-      {footer ? <View style={{ padding: t.spacing.lg, gap: t.spacing.sm }}>{footer}</View> : null}
+      {footer ? (
+        <View
+          style={{
+            padding: t.spacing.lg,
+            gap: t.spacing.sm,
+            borderTopWidth: 1,
+            borderTopColor: t.colors.border,
+            backgroundColor: t.colors.background,
+          }}
+        >
+          {footer}
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

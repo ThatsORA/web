@@ -1,31 +1,48 @@
-// Owner: Andy — labelled text input with an optional error line.
-import { Text, TextInput, View, type TextInputProps } from "react-native";
+// Owner: Andy — labelled input: 44pt, 1px borderStrong, 2px brand ring on focus.
+import { useState } from "react";
+import { TextInput, View, type TextInputProps } from "react-native";
+import { Txt } from "./Txt";
 import { useTheme } from "./useTheme";
 
 type Props = Omit<TextInputProps, "style"> & { label: string; error?: string | null };
 
-export function TextField({ label, error, ...input }: Props) {
+export function TextField({ label, error, onFocus, onBlur, ...input }: Props) {
   const t = useTheme();
+  const [focused, setFocused] = useState(false);
   return (
     <View style={{ gap: t.spacing.xs }}>
-      <Text style={{ color: t.colors.textMuted, fontSize: t.font.small }}>{label}</Text>
+      <Txt variant="label" color="heading">
+        {label}
+      </Txt>
       <TextInput
         accessibilityLabel={label}
         placeholderTextColor={t.colors.textMuted}
         autoCapitalize="none"
         {...input}
+        onFocus={(e) => {
+          setFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlur?.(e);
+        }}
         style={{
-          color: t.colors.text,
+          ...t.type.body,
+          minHeight: t.touch,
+          color: t.colors.heading,
           backgroundColor: t.colors.surface,
-          borderColor: error ? t.colors.danger : t.colors.border,
-          borderWidth: 1,
+          borderColor: error ? t.colors.danger : focused ? t.colors.primary : t.colors.borderStrong,
+          borderWidth: focused || error ? 2 : 1,
           borderRadius: t.radius.sm,
-          paddingVertical: 12,
-          paddingHorizontal: t.spacing.md,
-          fontSize: t.font.body,
+          paddingHorizontal: t.spacing.ms,
         }}
       />
-      {error ? <Text style={{ color: t.colors.danger, fontSize: t.font.small }}>{error}</Text> : null}
+      {error ? (
+        <Txt variant="small" color="danger">
+          {error}
+        </Txt>
+      ) : null}
     </View>
   );
 }

@@ -1,7 +1,9 @@
-// Owner: Andy — tinted message box, e.g. "Synced 23 busy blocks. We never read event titles."
+// Owner: Andy — tinted message box: soft fill + 1px tinted border, e.g.
+// "Synced 23 busy blocks. We never read event titles."
 import type { ReactNode } from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import { toneColors, type Tone } from "./theme";
+import { Txt } from "./Txt";
 import { useTheme } from "./useTheme";
 
 type Props = { tone?: Tone; title?: string; children?: ReactNode };
@@ -12,10 +14,27 @@ export function Callout({ tone = "info", title, children }: Props) {
   return (
     <View
       accessibilityRole={tone === "danger" ? "alert" : "summary"}
-      style={{ backgroundColor: bg, borderRadius: t.radius.md, padding: t.spacing.md, gap: t.spacing.xs }}
+      style={{
+        backgroundColor: bg,
+        borderColor: fg + "40",
+        borderWidth: 1,
+        borderRadius: t.radius.md,
+        padding: t.spacing.md,
+        gap: t.spacing.xs,
+      }}
     >
-      {title ? <Text style={{ color: fg, fontSize: t.font.body, fontWeight: "600" }}>{title}</Text> : null}
-      {typeof children === "string" ? <Text style={{ color: fg, fontSize: t.font.small }}>{children}</Text> : children}
+      {title ? (
+        <Txt variant="label" style={{ color: fg, fontFamily: t.fonts.monoSemi }}>
+          {title}
+        </Txt>
+      ) : null}
+      {typeof children === "string" ? (
+        <Txt variant="body" style={{ color: fg }}>
+          {children}
+        </Txt>
+      ) : (
+        children
+      )}
     </View>
   );
 }
