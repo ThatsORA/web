@@ -27,12 +27,13 @@ using seeded accounts.
 2. **Calendar (A).** Grant calendar permission. Show the callout:
    "Synced 23 busy blocks. We never read event titles."
 3. **Quick-tap favorites (A).** Tap coffee, tacos, casual dining.
-4. **Close friends (A).** Search for Riley and Ojas and tap Add. A sees
-   only "Added". It gets no signal about whether they've added A back.
-5. **Mutual handshake (B, C).** Riley and Ojas add the presenter on their
-   phones. Once the second handshake completes, all three form a mutual
-   clique (Riley and Ojas are already mutual in the seed data), which
-   triggers the matcher.
+4. **Friend requests (A).** Search for Riley and Ojas and tap Add friend;
+   each shows "Requested". Friendship is visible, like any social app.
+5. **Accept + silent star (B, C, A).** Riley and Ojas accept the request
+   on their Friends tab and star the presenter as a close friend; A opens
+   Friends and stars them back. Nobody is told who starred whom. Once the
+   last star lands, all three form a mutual clique (Riley and Ojas are
+   already mutual in the seed data), which triggers the matcher.
 6. **The proposal appears (A, B, C).** An event card arrives on all three
    phones within a few seconds (a "Finding a time…" state covers the
    wait): "Thu · 6:30–8:30pm · Dinner". It shows
