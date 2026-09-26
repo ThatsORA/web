@@ -6,8 +6,7 @@ import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { emitToUsers } from "../../realtime";
 import { findableWhere, isUniqueViolation, publicUserSelect, toPublicUser } from "../auth/helpers";
-import { triggerMatcher } from "../matching/matcher";
-import { isMutual, pair } from "./handshake";
+import { pair } from "./handshake";
 import { MAX_PENDING_OUTGOING, canAccept, friendshipState, onDelete, onSend, requestView } from "./requests";
 
 export const friendsRouter = Router();
@@ -173,9 +172,7 @@ friendsRouter.post(routes.closeFriends, async (req, res) => {
   if (existing?.status !== "accepted") return res.status(409).json({ error: "not_friends" });
   if (existing[myFlag]) return res.status(204).end();
 
-  const row = await prisma.friendship.update({ where: key, data: { [myFlag]: true } });
-  // ponytail: reruns the whole matcher, not just groups containing this pair; it's mutexed and deduped.
-  if (isMutual(row)) void triggerMatcher().catch((e: unknown) => console.error("triggerMatcher", e));
+  await prisma.friendship.update({ where: key, data: { [myFlag]: true } });
   res.status(204).end();
 });
 

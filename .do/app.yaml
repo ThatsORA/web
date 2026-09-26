@@ -21,7 +21,7 @@ services:
         value: "true"
         scope: BUILD_TIME
       - key: VOTE_TIMEOUT_SEC
-        value: "90"
+        value: "43200"
         scope: RUN_TIME
       - key: COOLDOWN_HOURS
         value: "0"

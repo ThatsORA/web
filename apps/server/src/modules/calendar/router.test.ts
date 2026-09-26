@@ -58,8 +58,7 @@ describe("PUT busy-blocks", () => {
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
     expect(mocks.deleteMany).toHaveBeenCalledWith({ where: { userId, startsAt: { lt: new Date(body.horizon_end) }, endsAt: { gt: new Date(body.horizon_start) } } });
     expect(mocks.createMany).toHaveBeenCalledWith({ data: [{ userId, source: "device_calendar", startsAt: new Date(body.blocks[0]!.starts_at), endsAt: new Date(body.blocks[0]!.ends_at) }] });
-    expect(mocks.trigger).toHaveBeenCalledTimes(1);
-    expect(mocks.createMany.mock.invocationCallOrder[0]).toBeLessThan(mocks.trigger.mock.invocationCallOrder[0]!);
+    expect(mocks.trigger).not.toHaveBeenCalled(); // auto-proposals off (#196)
   });
   it("preserves both portions of a block crossing the horizon", async () => {
     const existing: BusyBlock = { id: "old", userId, source: "seed", startsAt: new Date("2026-09-25T00:00:00Z"), endsAt: new Date("2026-10-04T00:00:00Z"), syncedAt: new Date("2026-09-24T00:00:00Z") };
