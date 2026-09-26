@@ -1,10 +1,11 @@
 // Owner: Ojas — "Check your email" (#91): the 6-digit code sent at sign-up. Andy's onboarding
-// container mounts it right after sign-up; onDone() runs once the email is verified.
+// container mounts it right after sign-up; onDone() runs once the email is verified, or on skip
+// (unverified accounts can finish onboarding, they just can't be found until they verify).
 import { Me, VerifyEmailRequest, routes } from "@web/contract";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { api, ApiError } from "../../lib/api";
-import type { OnboardingStepProps } from "../../lib/onboarding";
+import { stepEyebrow, type OnboardingStepProps } from "../../lib/onboarding";
 import { Button, Callout, Screen, TextField } from "../../ui";
 import { verifyErrorMessage } from "./errors";
 
@@ -18,6 +19,19 @@ export function VerifyEmailStep({ onDone }: OnboardingStepProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resent, setResent] = useState(false);
+
+  // Already verified, or verification is off (demo config reports every account as verified).
+  useEffect(() => {
+    let cancelled = false;
+    api(routes.me, Me)
+      .then((me) => {
+        if (!cancelled && me.email_verified) onDone();
+      })
+      .catch(() => {}); // the code field still works
+    return () => {
+      cancelled = true;
+    };
+  }, [onDone]);
 
   async function verify() {
     setBusy(true);
@@ -48,12 +62,14 @@ export function VerifyEmailStep({ onDone }: OnboardingStepProps) {
 
   return (
     <Screen
+      eyebrow={stepEyebrow("verify-email")}
       title="Check your email"
       subtitle="We sent you a 6-digit code. It expires in 10 minutes."
       footer={
         <>
           <Button label="Verify" onPress={verify} loading={busy} disabled={code.length !== 6} />
           <Button label="Send a new code" variant="ghost" onPress={resend} />
+          <Button label="Skip for now" variant="ghost" onPress={onDone} />
         </>
       }
     >

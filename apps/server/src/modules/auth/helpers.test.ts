@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
+import { env } from "../../env";
 import { USERNAME_COOLDOWN_MS, isUniqueViolation, roundCoord, toMe, toPublicUser, usernameRetryAt } from "./helpers";
 
 describe("roundCoord", () => {
@@ -24,6 +25,19 @@ describe("toMe", () => {
     const me = toMe({ id: "u1", username: "ojas", email: "o@x.io", passwordHash: "secret", timezone: "UTC", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: null, displayName: null, bio: null, usernameChangedAt: null, passwordChangedAt: null });
     expect(JSON.stringify(me)).not.toContain("secret");
     expect(me).not.toHaveProperty("passwordHash");
+  });
+
+  it("reports unverified accounts as verified only while verification is off", () => {
+    const user = { id: "u1", username: "ojas", email: "o@x.io", passwordHash: "x", timezone: "UTC", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: null, displayName: null, bio: null, usernameChangedAt: null, passwordChangedAt: null };
+    const was = env.EMAIL_VERIFICATION_REQUIRED;
+    try {
+      env.EMAIL_VERIFICATION_REQUIRED = true;
+      expect(toMe(user).email_verified).toBe(false);
+      env.EMAIL_VERIFICATION_REQUIRED = false;
+      expect(toMe(user).email_verified).toBe(true);
+    } finally {
+      env.EMAIL_VERIFICATION_REQUIRED = was;
+    }
   });
 });
 
