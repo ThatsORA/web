@@ -5,9 +5,9 @@ import { FAVORITE_CATEGORIES, MAX_FAVORITES, toggleCategory } from "./categories
 describe("toggleCategory", () => {
   it("adds, then removes, preserving tap order", () => {
     let s = toggleCategory([], "coffee_shop");
-    s = toggleCategory(s, "taco_restaurant");
-    expect(s).toEqual(["coffee_shop", "taco_restaurant"]);
-    expect(toggleCategory(s, "coffee_shop")).toEqual(["taco_restaurant"]);
+    s = toggleCategory(s, "mexican_restaurant");
+    expect(s).toEqual(["coffee_shop", "mexican_restaurant"]);
+    expect(toggleCategory(s, "coffee_shop")).toEqual(["mexican_restaurant"]);
   });
 
   it("does not mutate its input", () => {
@@ -33,7 +33,7 @@ describe("FAVORITE_CATEGORIES", () => {
   it("maps each chip to a Places API (New) Table A type", () => {
     expect(Object.fromEntries(FAVORITE_CATEGORIES.map((c) => [c.label, c.value]))).toEqual({
       Coffee: "coffee_shop",
-      Tacos: "taco_restaurant",
+      Tacos: "mexican_restaurant",
       "Casual dining": "restaurant", // closest match: no casual-dining type
       Sushi: "sushi_restaurant",
       Pizza: "pizza_restaurant",

@@ -4,10 +4,12 @@
 // Two chips have no exact type, so they use the closest real one:
 // - Casual dining → `restaurant`: the generic type Google gives sit-down places with no cuisine subtype.
 // - Boba → `tea_house`: Table A has no bubble tea / boba type.
+// Tacos → `mexican_restaurant`, not `taco_restaurant`: most taco spots near FIU are tagged
+// mexican_restaurant on Google, so this is the type that actually earns the +0.3 boost.
 
 export const FAVORITE_CATEGORIES = [
   { value: "coffee_shop", label: "Coffee" },
-  { value: "taco_restaurant", label: "Tacos" },
+  { value: "mexican_restaurant", label: "Tacos" },
   { value: "restaurant", label: "Casual dining" },
   { value: "sushi_restaurant", label: "Sushi" },
   { value: "pizza_restaurant", label: "Pizza" },
