@@ -5,10 +5,16 @@ export const routes = {
   signup: "/auth/signup",
   login: "/auth/login",
   me: "/me",
+  pushToken: `${API_PREFIX}/me/push-token`,
   busyBlocks: "/busy-blocks",
   userSearch: "/users/search", // ?q=
   closeFriends: "/friends/close",
   closeFriend: (userId: string) => `/friends/close/${userId}`,
+  friends: "/friends",
+  friend: (userId: string) => `/friends/${userId}`, // DELETE = unfriend
+  friendRequests: "/friends/requests",
+  friendRequest: (id: string) => `/friends/requests/${id}`, // DELETE = decline (recipient) or cancel (requester)
+  acceptFriendRequest: (id: string) => `/friends/requests/${id}/accept`,
   favorites: "/favorites",
   events: "/events",
   event: (id: string) => `/events/${id}`,

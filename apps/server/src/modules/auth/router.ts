@@ -1,7 +1,16 @@
 // Owner: Ojas — signup/login/profile. Plan: "API Contract v2".
 import bcrypt from "bcryptjs";
 import { Router } from "express";
-import { AuthResponse, LoginRequest, Me, PatchMeRequest, SignupRequest, routes } from "@web/contract";
+import {
+  AuthResponse,
+  DeletePushTokenRequest,
+  LoginRequest,
+  Me,
+  PatchMeRequest,
+  SavePushTokenRequest,
+  SignupRequest,
+  routes,
+} from "@web/contract";
 import { requireAuth, signToken, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { isUniqueViolation, roundCoord, toMe } from "./helpers";
@@ -55,4 +64,28 @@ authRouter.patch(routes.me, requireAuth, async (req, res) => {
     },
   });
   return res.json(Me.parse(toMe(user)));
+});
+
+authRouter.put(["/me/push-token", routes.pushToken], requireAuth, async (req, res) => {
+  const parsed = SavePushTokenRequest.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
+  const userId = (req as AuthedRequest).userId;
+  const { token, platform } = parsed.data;
+  await prisma.pushToken.upsert({
+    where: { token },
+    create: { userId, token, platform },
+    update: { userId, platform },
+  });
+  return res.status(204).send();
+});
+
+authRouter.delete(["/me/push-token", routes.pushToken], requireAuth, async (req, res) => {
+  const parsed = DeletePushTokenRequest.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
+  const userId = (req as AuthedRequest).userId;
+  const { token } = parsed.data;
+  await prisma.pushToken.deleteMany({
+    where: { userId, token },
+  });
+  return res.status(204).send();
 });
