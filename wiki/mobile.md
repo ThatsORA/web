@@ -39,6 +39,30 @@ Run lint and typecheck before declaring any task done.
 Use EAS to build, sign, and submit the app in the cloud (`eas build`, `eas submit`) and to ship over-the-air updates (`eas update`) — no local Xcode or Android Studio required. Run EAS CLI as `bunx eas-cli <command>` in Bun projects, or `npx eas-cli@latest <command>` otherwise; substitute that for bare `eas` in docs examples.
 Docs: https://docs.expo.dev/eas/index.md
 
+## Push notifications need a development build
+
+Remote push isn't available in Expo Go (Android lost it in SDK 53), so
+`src/lib/usePushNotifications.ts` turns itself off there and the app runs as
+usual; in dev the console says `Push notifications off: expo-go`. It also
+stays off (`no-project-id`) until the app has an EAS project ID. To test push
+on a phone:
+
+1. `cd apps/mobile && npx eas-cli@latest init`: links the Expo project and
+   writes `extra.eas.projectId` into `app.json`. Commit that once.
+2. `npx expo install expo-dev-client`, on your own branch only. Keep it off
+   `main`: with it installed, `npx expo start` opens the dev build instead of
+   Expo Go (`npx expo start --go` switches back).
+3. `npx eas-cli@latest build --profile development --platform android` (or
+   `ios`; register the iPhone first with `npx eas-cli@latest device:create`).
+   The `development` profile is in `apps/mobile/eas.json`. Android also needs
+   FCM V1 credentials in the Expo project; on iOS, `eas build` offers to make
+   the APNs key.
+4. Install the build, then `npx expo start --dev-client`. Sign in; the
+   permission prompt comes when the Hangouts feed first opens.
+5. Send a test with the [Expo push tool](https://expo.dev/notifications) using
+   the token from `PUT /me/push-token`, with data `{"event_id": "<uuid>"}`.
+   Tapping it opens Hangouts scrolled to that event.
+
 ## Rules
 
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.

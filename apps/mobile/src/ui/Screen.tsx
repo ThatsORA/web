@@ -1,6 +1,6 @@
 // Owner: Andy — safe-area page: Playfair headline ("serif speaks"), mono subtitle,
 // optional eyebrow, and a pinned footer for the primary action.
-import type { ReactElement, ReactNode } from "react";
+import type { ReactElement, ReactNode, Ref } from "react";
 import { ScrollView, View, type RefreshControlProps } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Txt } from "./Txt";
@@ -17,13 +17,16 @@ type Props = {
   refreshControl?: ReactElement<RefreshControlProps>;
   /** Optional action/element displayed on the right of the header title. */
   headerRight?: ReactNode;
+  /** For screens that scroll to a child, e.g. the feed opening at a notified event. */
+  scrollRef?: Ref<ScrollView>;
 };
 
-export function Screen({ eyebrow, title, subtitle, children, footer, refreshControl, headerRight }: Props) {
+export function Screen({ eyebrow, title, subtitle, children, footer, refreshControl, headerRight, scrollRef }: Props) {
   const t = useTheme();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.colors.background }}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={{ padding: t.spacing.lg, gap: t.spacing.md }}
         keyboardShouldPersistTaps="handled"
         refreshControl={refreshControl}

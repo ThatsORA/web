@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { z } from "zod";
 import { api } from "../../lib/api";
+import { unregisterPushToken } from "../../lib/push";
 import { session } from "../../lib/secureSession";
 import { AvailabilitySettings } from "../../features/calendar";
 import { FavoritesSettings } from "../../features/favorites";
@@ -36,6 +37,7 @@ export default function Settings() {
     setLoggingOut(true);
     setLogoutError(false);
     try {
+      void unregisterPushToken(); // start it before clear(): it sends with this session
       await session.clear();
       router.replace("/(onboarding)/signup");
     } catch {

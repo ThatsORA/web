@@ -4,6 +4,7 @@ import { Me, routes } from "@web/contract";
 import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import { unregisterPushToken } from "../../lib/push";
 import { session } from "../../lib/secureSession";
 import { Button, Callout, Card, Screen, Txt } from "../../ui";
 
@@ -32,6 +33,7 @@ export default function You() {
     setLoggingOut(true);
     setLogoutError(false);
     try {
+      void unregisterPushToken(); // start it before clear(): it sends with this session
       await session.clear();
       router.replace("/(onboarding)/signup");
     } catch {

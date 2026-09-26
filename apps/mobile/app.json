@@ -46,6 +46,7 @@
         }
       ],
       "expo-localization",
+      "expo-notifications",
       "expo-secure-store",
       "expo-font"
     ],
