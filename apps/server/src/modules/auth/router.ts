@@ -29,7 +29,8 @@ authRouter.post(routes.signup, async (req, res) => {
 authRouter.post(routes.login, async (req, res) => {
   const parsed = LoginRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
-  const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+  const { identifier } = parsed.data; // already trimmed + lowercased by the contract
+  const user = await prisma.user.findUnique({ where: identifier.includes("@") ? { email: identifier } : { username: identifier } });
   const ok = await bcrypt.compare(parsed.data.password, user?.passwordHash ?? DUMMY_HASH);
   if (!user || !ok) return res.status(401).json({ error: "invalid_credentials" });
   return res.json(AuthResponse.parse({ token: signToken(user.id), user_id: user.id }));
