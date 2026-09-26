@@ -28,6 +28,9 @@ vi.mock("../../lib/prisma", () => ({
 vi.mock("./email", () => ({ sendCodeEmail: async (_to: string, code: string) => void codes.sent.push(code) }));
 import { authRouter } from "./router";
 import { signToken } from "../../lib/auth";
+import { loginLimiter } from "./loginLimiter";
+import { verifyPassword } from "./passwordHash";
+import { passwordReasons } from "@web/contract";
 let base: string;
 let close: () => void;
 const user: User = { id: "6f48fb35-1518-481d-ab60-cfd2dcc28acf", username: "ojas", email: "ojas@example.com", passwordHash: bcrypt.hashSync("correct-horse", 4), timezone: "America/New_York", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: new Date() };
@@ -44,18 +47,40 @@ beforeEach(() => {
   vi.clearAllMocks();
   codes.rows = [];
   codes.sent = [];
+  for (const email of [user.email, "ghost@example.com"]) loginLimiter.succeeded(email, "127.0.0.1");
 });
 const call = (method: string, path: string, body?: unknown, auth = false) => fetch(base + path, { method, headers: { "content-type": "application/json", ...(auth ? { authorization: `Bearer ${signToken(user.id)}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
-const signup = { email: "new@example.com", username: "new_user", password: "longenough", timezone: "America/New_York" };
+const signup = { email: "new@example.com", username: "new_user", password: "cedar harbor moon", timezone: "America/New_York" };
 
 describe("auth router", () => {
+  it("returns the shared weak-password reason before creating a user", async () => {
+    const res = await call("POST", "/auth/signup", { ...signup, password: "short" });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "weak_password", reason: passwordReasons.length });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("blocks the sixth attempt with Retry-After, including for unknown accounts", async () => {
+    mocks.findUnique.mockResolvedValue(null);
+    for (let i = 0; i < 5; i++) expect((await call("POST", "/auth/login", { email: "ghost@example.com", password: "wrong" })).status).toBe(401);
+    const res = await call("POST", "/auth/login", { email: "ghost@example.com", password: "wrong" });
+    expect(res.status).toBe(429);
+    expect(Number(res.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect(await res.json()).toEqual({ error: "too_many_attempts" });
+    expect(mocks.findUnique).toHaveBeenCalledTimes(5);
+  });
+  it("lets an existing weak password log in and resets previous failures", async () => {
+    mocks.findUnique.mockResolvedValue({ ...user, passwordHash: bcrypt.hashSync("short", 4) });
+    for (let i = 0; i < 4; i++) await call("POST", "/auth/login", { email: user.email, password: "wrong" });
+    expect((await call("POST", "/auth/login", { email: user.email, password: "short" })).status).toBe(200);
+    for (let i = 0; i < 5; i++) expect((await call("POST", "/auth/login", { email: user.email, password: "wrong" })).status).toBe(401);
+  });
   it("signs up with a bcrypt hash and returns AuthResponse", async () => {
     mocks.create.mockImplementation(async ({ data }) => ({ ...user, ...data }));
     const res = await call("POST", "/auth/signup", signup);
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ user_id: user.id, token: expect.any(String) });
     const { passwordHash, emailVerifiedAt } = mocks.create.mock.calls[0]![0].data;
-    expect(await bcrypt.compare("longenough", passwordHash)).toBe(true);
+    expect(await verifyPassword("cedar harbor moon", passwordHash)).toBe(true);
     expect(emailVerifiedAt).toBeNull(); // explicit null = unverified (backfill only fills missing fields)
     await vi.waitFor(() => expect(codes.sent).toHaveLength(1));
     expect(codes.sent[0]).toMatch(/^\d{6}$/);

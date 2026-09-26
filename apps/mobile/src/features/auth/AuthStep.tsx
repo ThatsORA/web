@@ -1,12 +1,12 @@
 // Owner: Ojas — sign-up + login (demo step 1). Andy's onboarding container hosts these;
 // on success we save the token via session.save() before onDone(), as the container expects.
-import { AuthResponse, LoginRequest, SignupRequest, routes } from "@web/contract";
+import { AuthResponse, LoginRequest, SignupRequest, checkPassword, routes } from "@web/contract";
 import { getCalendars } from "expo-localization";
 import { useState } from "react";
 import { api, ApiError } from "../../lib/api";
 import { stepEyebrow, type OnboardingStepProps } from "../../lib/onboarding";
 import { session } from "../../lib/secureSession";
-import { Button, Callout, Screen, TextField } from "../../ui";
+import { Button, Callout, Screen, TextField, Txt } from "../../ui";
 import { authErrorMessage } from "./errors";
 
 type Mode = "signup" | "login";
@@ -22,8 +22,11 @@ function AuthStep({ onDone, initialMode }: OnboardingStepProps & { initialMode: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const signup = mode === "signup";
+  const passwordCheck = signup ? checkPassword(password, { username, email }) : { ok: true as const };
+  const strength = !passwordCheck.ok ? "Weak" : Array.from(password).length >= 16 ? "Strong" : "Okay";
 
   async function submit() {
+    if (signup && !passwordCheck.ok) return setError(passwordCheck.reason);
     setBusy(true);
     setError(null);
     try {
@@ -71,6 +74,14 @@ function AuthStep({ onDone, initialMode }: OnboardingStepProps & { initialMode: 
         textContentType={signup ? "newPassword" : "password"}
         onSubmitEditing={submit}
       />
+      {signup ? (
+        <>
+          <Txt variant="label" color={passwordCheck.ok ? "success" : "textMuted"}>Password strength: {strength}</Txt>
+          <Txt variant="small" color="textMuted">
+            {passwordCheck.ok ? "A longer, unique passphrase is stronger." : passwordCheck.reason}
+          </Txt>
+        </>
+      ) : null}
       {error ? (
         <Callout tone="danger" title={signup ? "Couldn't create account" : "Couldn't log in"}>
           {error}
