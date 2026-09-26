@@ -2,8 +2,8 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BusyBlock } from "@prisma/client";
-const mocks = vi.hoisted(() => ({ findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn(), transaction: vi.fn(), trigger: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), googleCalendarDelete: vi.fn(), fetch: vi.fn(), signState: vi.fn(), verifyState: vi.fn(), encryptToken: vi.fn(), decryptToken: vi.fn() }));
-vi.mock("../../lib/prisma", () => ({ prisma: { user: { findUnique: async () => ({ passwordChangedAt: null }) }, $transaction: mocks.transaction, googleCalendarConnection: { findUnique: mocks.findUnique, upsert: mocks.upsert, delete: mocks.googleCalendarDelete } } }));
+const mocks = vi.hoisted(() => ({ findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn(), transaction: vi.fn(), trigger: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), googleCalendarDelete: vi.fn(), fetch: vi.fn(), signState: vi.fn(), verifyState: vi.fn(), encryptToken: vi.fn(), decryptToken: vi.fn(), userFindUnique: vi.fn(), eventFindMany: vi.fn() }));
+vi.mock("../../lib/prisma", () => ({ prisma: { user: { findUnique: mocks.userFindUnique }, event: { findMany: mocks.eventFindMany }, $transaction: mocks.transaction, googleCalendarConnection: { findUnique: mocks.findUnique, upsert: mocks.upsert, delete: mocks.googleCalendarDelete } } }));
 vi.mock("../matching/matcher", () => ({ triggerMatcher: mocks.trigger }));
 vi.mock("./crypto", () => ({
   signState: mocks.signState,
@@ -13,6 +13,7 @@ vi.mock("./crypto", () => ({
 }));
 import { calendarRouter } from "./router";
 import { signToken } from "../../lib/auth";
+import { freeWindows } from "../matching/timeMath";
 let base: string;
 let close: () => void;
 const userId = "6f48fb35-1518-481d-ab60-cfd2dcc28acf";
@@ -28,6 +29,7 @@ beforeAll(async () => {
 afterAll(() => close());
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.userFindUnique.mockResolvedValue({ passwordChangedAt: null });
   mocks.findMany.mockResolvedValue([]);
   mocks.deleteMany.mockResolvedValue({ count: 0 });
   mocks.createMany.mockResolvedValue({ count: 1 });
@@ -147,5 +149,37 @@ describe("Google Calendar routes", () => {
     const res = await fetch(`${googleBase}/callback?code=abc&state=xyz`, { redirect: "manual" });
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toContain("error=invalid_state");
+  });
+});
+
+describe("GET /availability/me", () => {
+  const url = () => base.replace("/busy-blocks", "/availability/me");
+  const busy = { startsAt: new Date("2026-09-29T14:00:00Z"), endsAt: new Date("2026-09-29T15:00:00Z") };
+  const event = { startsAt: new Date("2026-09-30T22:00:00Z"), endsAt: new Date("2026-10-01T00:00:00Z") };
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-28T12:00:00Z"));
+    mocks.userFindUnique.mockResolvedValue({ id: userId, passwordChangedAt: null, timezone: "America/New_York", busyBlocks: [busy] });
+    mocks.eventFindMany.mockResolvedValue([event]);
+  });
+  afterAll(() => vi.useRealTimers());
+
+  it("requires authentication", async () => {
+    expect((await fetch(url())).status).toBe(401);
+    expect(mocks.eventFindMany).not.toHaveBeenCalled();
+  });
+
+  it("returns only the caller's free windows, computed like the matcher", async () => {
+    const res = await fetch(url(), { headers: { authorization: `Bearer ${signToken(userId)}` } });
+    expect(res.status).toBe(200);
+    expect(mocks.userFindUnique).toHaveBeenLastCalledWith({ where: { id: userId }, include: { busyBlocks: true } });
+    expect(mocks.eventFindMany).toHaveBeenCalledWith({ where: { status: { in: ["voting", "confirmed"] }, participants: { some: { userId } } } });
+    const expected = freeWindows([{ id: userId, timezone: "America/New_York", busyBlocks: [{ start: busy.startsAt, end: busy.endsAt }], openEvents: [{ start: event.startsAt, end: event.endsAt }] }], new Date(), { busyPaddingMin: 15, minLeadHours: 2, horizonDays: 7 });
+    const { windows } = await res.json() as { windows: { starts_at: string; ends_at: string }[] };
+    expect(windows.length).toBeGreaterThan(0);
+    expect(windows).toEqual(expected.map(w => ({ starts_at: w.start.toISOString(), ends_at: w.end.toISOString() })));
+    for (const block of [busy, event]) {
+      expect(windows.some(w => new Date(w.starts_at) < block.endsAt && new Date(w.ends_at) > block.startsAt)).toBe(false);
+    }
   });
 });

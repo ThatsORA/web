@@ -11,6 +11,7 @@ export const routes = {
   verifyEmail: "/auth/verify-email", // { code } → Me
   pushToken: `${API_PREFIX}/me/push-token`,
   busyBlocks: "/busy-blocks",
+  myAvailability: "/availability/me", // GET → the caller's own free windows, as the matcher sees them
   userSearch: "/users/search", // ?q=
   user: (id: string) => `/users/${id}`, // public profile
   meEmail: "/me/email", // POST { new_email, password } → code to the new address
