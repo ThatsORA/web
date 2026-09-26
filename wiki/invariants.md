@@ -44,6 +44,8 @@ touches before you write code.
 
 **Keys and data**
 - API keys come only from env vars. Never commit `.env`.
+- Email codes are stored only as an HMAC (keyed with `JWT_SECRET`), never
+  in plain text, and every check burns one of 5 attempts.
 - A new env var goes in `.env.example` in the same PR.
 - `DEMO_MODE=true` replays `apps/server/fixtures/` instead of calling
   Google or Gemini. Any new external call needs a fixture path too.

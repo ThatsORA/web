@@ -186,6 +186,12 @@ users
   home_lat numeric(8,3), home_lng numeric(8,3)   -- rounded, ~110 m
   travel_mode text default 'DRIVE'
   created_at
+  email_verified_at null     -- null = unverified; sign-up writes null, seed/legacy accounts are backfilled as verified
+
+email_codes                -- one live code per (user, purpose); 6 digits, stored as HMAC-SHA256, never plain
+  id, user_id fk, purpose ('verify'|'reset'|'change_email'), code_hash, new_email null,
+  expires_at (10 min), attempts (max 5), created_at   -- 60 s resend cooldown
+  index (user_id, purpose)
 
 busy_blocks
   id, user_id fk, starts_at, ends_at, source ('device_calendar'|'seed'), synced_at
@@ -253,7 +259,9 @@ Every route except signup and login requires `Authorization: Bearer <JWT>`.
 | --- | --- | --- | --- |
 | POST | /auth/signup | Ojas | Create user, return JWT |
 | POST | /auth/login | Ojas | Return JWT |
-| GET / PATCH | /me | Ojas | Profile: timezone, home_lat/lng, travel_mode |
+| POST | /auth/verify-email/send | Ojas | Email a new 6-digit code. 204, or 429 + `Retry-After` within 60 s, or 409 if already verified |
+| POST | /auth/verify-email | Ojas | `{ code }` → `Me`. `400 wrong_code` burns an attempt; `400 code_expired` means send a new one |
+| GET / PATCH | /me | Ojas | Profile: timezone, home_lat/lng, travel_mode, `email_verified` (read-only) |
 | PUT | /busy-blocks | Riley | Replace the caller's blocks inside `[horizon_start, horizon_end]` in one transaction |
 | GET | /users/search?q= | Ojas | Username search. Never reveals whether they added you |
 | POST | /friends/requests | Ojas | `{ username }` → `{ status: "requested" \| "friends" }`. If they already requested me, this accepts. Max 50 pending outgoing |
@@ -654,6 +662,7 @@ fallback chat.
 | 2026-09-26 | **Travel mode: DRIVE** (`routingPreference` TRAFFIC_AWARE). Matches the Waymo/autonomous-ride framing. |
 | 2026-09-26 | **Hosting: DigitalOcean App Platform** instead of Railway. Same shape as Railway: GitHub auto-deploy and a long-running process for Socket.io. |
 | 2026-09-26 | **Two-layer social graph (#93, after the demo).** Adding someone sends a visible friend request; close friends stay a silent flag that can only be set on an accepted friend. Declines are soft (the requester still sees "pending") so they're never announced. `GET /friends/close` no longer returns a `mutual` flag. |
+| 2026-09-26 | **Email verification (#91, after the demo).** Sign-up emails a 6-digit code (Resend). While `EMAIL_VERIFICATION_REQUIRED` is true, unverified accounts can't be found, requested or accepted as friends, so they never reach the matcher. It's `false` on the demo deploy. |
 | 2026-09-26 | **Demo location: around FIU's Modesto A. Maidique Campus (Miami).** It's the hackathon venue, so the presenter's live device location is on campus. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)

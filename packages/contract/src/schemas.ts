@@ -36,7 +36,9 @@ export const Me = z.object({
   home_lat: z.number().nullable(),
   home_lng: z.number().nullable(),
   travel_mode: TravelMode,
+  email_verified: z.boolean(),
 });
+export const VerifyEmailRequest = z.object({ code: z.string().regex(/^\d{6}$/) });
 export const PatchMeRequest = z
   .object({
     timezone: IanaTimezone,

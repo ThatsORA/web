@@ -5,7 +5,7 @@ import { AddCloseFriendRequest, SendFriendRequest, routes } from "@web/contract"
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { emitToUsers } from "../../realtime";
-import { isUniqueViolation } from "../auth/helpers";
+import { findableWhere, isUniqueViolation } from "../auth/helpers";
 import { triggerMatcher } from "../matching/matcher";
 import { isMutual, pair } from "./handshake";
 import { MAX_PENDING_OUTGOING, canAccept, onDelete, onSend, requestView } from "./requests";
@@ -23,7 +23,7 @@ const otherOf = <U>(row: Pair<U>, me: string) => (row.userLowId === me ? row.use
 async function target(req: Request, res: Response, schema: typeof SendFriendRequest) {
   const body = schema.safeParse(req.body);
   const other = body.success
-    ? await prisma.user.findUnique({ where: { username: body.data.username.toLowerCase() }, select: { id: true } })
+    ? await prisma.user.findFirst({ where: { username: body.data.username.toLowerCase(), ...findableWhere() }, select: { id: true } })
     : null;
   if (!body.success) res.status(400).json({ error: "invalid_body", message: body.error.message });
   else if (!other) res.status(404).json({ error: "not_found" });
@@ -37,7 +37,7 @@ friendsRouter.get(routes.userSearch, async (req, res) => {
   const q = String(req.query.q ?? "").trim().toLowerCase();
   const users = q
     ? await prisma.user.findMany({
-        where: { username: { startsWith: q }, id: { not: me } },
+        where: { username: { startsWith: q }, id: { not: me }, ...findableWhere() },
         select: { id: true, username: true },
         orderBy: { username: "asc" },
         take: 10,
@@ -82,9 +82,15 @@ friendsRouter.get(routes.friendRequests, async (req, res) => {
     include: withUsers,
     orderBy: { requestedAt: "desc" },
   });
+  // Requests from unverified accounts wait, unseen, until they verify.
+  const requesters = rows.flatMap((r) => (r.requestedById && r.requestedById !== me ? [r.requestedById] : []));
+  const findable = new Set(
+    (await prisma.user.findMany({ where: { id: { in: requesters }, ...findableWhere() }, select: { id: true } })).map((u) => u.id),
+  );
   const out = { incoming: [] as unknown[], outgoing: [] as unknown[] };
   for (const r of rows) {
     const view = requestView(r, me);
+    if (view === "incoming" && !findable.has(r.requestedById ?? "")) continue;
     if (view) out[view].push({ id: r.id, user: otherOf(r, me), requested_at: r.requestedAt.toISOString() });
   }
   res.json(out);
@@ -93,7 +99,10 @@ friendsRouter.get(routes.friendRequests, async (req, res) => {
 friendsRouter.post(routes.acceptFriendRequest(":id"), async (req, res) => {
   const me = meOf(req);
   const row = await prisma.friendship.findFirst({ where: { id: String(req.params.id), ...mine(me) } });
-  if (!row || !canAccept(row, me)) return res.status(404).json({ error: "not_found" });
+  const requester = row?.requestedById
+    ? await prisma.user.findFirst({ where: { id: row.requestedById, ...findableWhere() }, select: { id: true } })
+    : null;
+  if (!row || !canAccept(row, me) || !requester) return res.status(404).json({ error: "not_found" });
   await prisma.friendship.update({ where: { id: row.id }, data: { status: "accepted", acceptedAt: new Date(), declinedAt: null } });
   if (row.requestedById) emitToUsers([row.requestedById], "friend:accepted", { user_id: me });
   res.status(204).end();
