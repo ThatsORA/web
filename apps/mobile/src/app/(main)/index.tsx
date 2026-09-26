@@ -1,41 +1,16 @@
 // Owner: Andy — event feed; renders the event card in every state.
 import { Link, router } from "expo-router";
-import { useState } from "react";
 import { EmptyFeedCard, EventCard, FindingCard, useEvents } from "../../features/event-card";
 import { useFeedEmptyState } from "../../lib/matcherTrigger";
 import { FRIENDS_HREF } from "../../lib/routes";
-import { session } from "../../lib/secureSession";
 import { Button, Callout, Screen, Txt } from "../../ui";
 
 export default function Home() {
   const { cards, swapped, busy, notice, loaded, error, reload, actionsFor } = useEvents();
   const feedState = useFeedEmptyState(cards.length);
-  const [loggingOut, setLoggingOut] = useState(false);
-  const [logoutError, setLogoutError] = useState(false);
-
-  async function logOut() {
-    setLoggingOut(true);
-    setLogoutError(false);
-    try {
-      await session.clear();
-      router.replace("/(onboarding)/signup");
-    } catch {
-      setLogoutError(true);
-    } finally {
-      setLoggingOut(false);
-    }
-  }
 
   return (
-    <Screen
-      title="Hangouts"
-      footer={<Button label="Log out" variant="ghost" onPress={() => void logOut()} loading={loggingOut} />}
-    >
-      {logoutError ? (
-        <Callout tone="danger" title="Couldn't log out">
-          Try again.
-        </Callout>
-      ) : null}
+    <Screen title="Hangouts">
       {error ? (
         <>
           <Callout tone="danger" title="Couldn't load hangouts">
