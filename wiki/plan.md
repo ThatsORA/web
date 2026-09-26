@@ -27,12 +27,13 @@ using seeded accounts.
 2. **Calendar (A).** Grant calendar permission. Show the callout:
    "Synced 23 busy blocks. We never read event titles."
 3. **Quick-tap favorites (A).** Tap coffee, tacos, casual dining.
-4. **Close friends (A).** Search for Riley and Ojas and tap Add. A sees
-   only "Added". It gets no signal about whether they've added A back.
-5. **Mutual handshake (B, C).** Riley and Ojas add the presenter on their
-   phones. Once the second handshake completes, all three form a mutual
-   clique (Riley and Ojas are already mutual in the seed data), which
-   triggers the matcher.
+4. **Friend requests (A).** Search for Riley and Ojas and tap Add friend;
+   each shows "Requested". Friendship is visible, like any social app.
+5. **Accept + silent star (B, C, A).** Riley and Ojas accept the request
+   on their Friends tab and star the presenter as a close friend; A opens
+   Friends and stars them back. Nobody is told who starred whom. Once the
+   last star lands, all three form a mutual clique (Riley and Ojas are
+   already mutual in the seed data), which triggers the matcher.
 6. **The proposal appears (A, B, C).** An event card arrives on all three
    phones within a few seconds (a "Finding a time…" state covers the
    wait): "Thu · 6:30–8:30pm · Dinner". It shows
@@ -197,7 +198,11 @@ google_calendar_connections
 
 friendships                -- exactly one row per pair
   id, user_low_id, user_high_id          -- CHECK user_low_id < user_high_id, unique pair
+  status ('pending'|'accepted') default 'accepted'   -- visible friend-request layer
+  requested_by_id null, requested_at, accepted_at null
+  declined_at null           -- soft decline: hidden from the recipient, still pending to the requester
   low_added_high bool default false, high_added_low bool default false
+  -- close-friend flags (silent layer): only ever true when status = 'accepted'
   -- mutual = low_added_high AND high_added_low, computed in queries
   -- (Prisma can't model generated columns; don't hand-write one)
   interaction_score real default 0.5     -- 0..1, seeded for demo
@@ -257,9 +262,15 @@ Every route except signup and login requires `Authorization: Bearer <JWT>`.
 | GET / PATCH | /me | Ojas | Profile: timezone, home_lat/lng, travel_mode |
 | PUT | /busy-blocks | Riley | Replace the caller's blocks inside `[horizon_start, horizon_end]` in one transaction |
 | GET | /users/search?q= | Ojas | Username search. Never reveals whether they added you |
-| GET | /friends/close | Ojas | My additions (no mutual signal; invariant: privacy) |
-| POST | /friends/close | Ojas | `{ username }` sets my direction. If it becomes mutual, triggers the matcher for affected groups |
-| DELETE | /friends/close/:userId | Ojas | Clear my direction silently |
+| POST | /friends/requests | Ojas | `{ username }` → `{ status: "requested" \| "friends" }`. If they already requested me, this accepts. Max 50 pending outgoing |
+| GET | /friends/requests | Ojas | `{ incoming, outgoing }` pending requests. A declined request stays in the requester's outgoing list |
+| POST | /friends/requests/:id/accept | Ojas | Recipient accepts |
+| DELETE | /friends/requests/:id | Ojas | Recipient declines (silently) or requester cancels |
+| GET | /friends | Ojas | Accepted friends, each with `close` = **my** flag only |
+| DELETE | /friends/:userId | Ojas | Unfriend. Deletes the pair, clearing both close-friend flags |
+| GET | /friends/close | Ojas | My close friends. Never says whether they chose me back |
+| POST | /friends/close | Ojas | `{ username }` sets my direction; 409 unless we're accepted friends. If it becomes mutual, triggers the matcher for affected groups |
+| DELETE | /friends/close/:userId | Ojas | Clear my direction silently; 409 unless we're accepted friends |
 | PUT | /favorites | Andy | `{ categories: string[] }` |
 | GET | /events | Andy | My open and recent events |
 | GET | /events/:id | Andy | `EventCardPayload`: options, facts, blurbs, progress, outcome. Never includes voter identities |
@@ -281,6 +292,8 @@ payloads are deliberately thin: on any event, the client refetches
 | `event:progress` | `{ event_id, responded, total }` |
 | `event:resolved` | `{ event_id, status }` |
 | `event:venue_changed` | `{ event_id }` |
+| `friend:request` | `{ user_id }` (to the recipient; refetch `GET /friends/requests`) |
+| `friend:accepted` | `{ user_id }` (to the requester; refetch `GET /friends`) |
 
 ## The Pipeline, End to End
 
@@ -655,6 +668,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-26 | **Reach goal: MongoDB Atlas showcase**, either (A) a geospatial venue cache or (B) change streams driving the sockets. Decide at the hour-8 checkpoint; build in hours 20–28. Ranked above expenses. |
 | 2026-09-26 | **Travel mode: DRIVE** (`routingPreference` TRAFFIC_AWARE). Matches the Waymo/autonomous-ride framing. |
 | 2026-09-26 | **Hosting: DigitalOcean App Platform** instead of Railway. Same shape as Railway: GitHub auto-deploy and a long-running process for Socket.io. |
+| 2026-09-26 | **Two-layer social graph (#93, after the demo).** Adding someone sends a visible friend request; close friends stay a silent flag that can only be set on an accepted friend. Declines are soft (the requester still sees "pending") so they're never announced. `GET /friends/close` no longer returns a `mutual` flag. |
 | 2026-09-26 | **Demo location: around FIU's Modesto A. Maidique Campus (Miami).** It's the hackathon venue, so the presenter's live device location is on campus. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)

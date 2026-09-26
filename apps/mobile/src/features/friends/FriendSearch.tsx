@@ -1,26 +1,29 @@
-// Owner: Ojas — reusable close-friend search component.
-// Used by FriendsStep (onboarding) and FriendsScreen (main tab).
-// Invariant: privacy — friend endpoints never reveal whether someone added you.
-// Button state only ever shows "Added".
-import type { UserSearchResult } from "@web/contract";
+// Owner: Ojas — search users by username and display action buttons:
+// Add friend → Requested (tap to cancel) → Friends; Accept when they requested you first.
 import { useRef, useState } from "react";
 import { View } from "react-native";
 import { Badge, Button, Callout, TextField, Txt, useTheme } from "../../ui";
-import { addCloseFriend, searchUsers } from "./friendsApi";
+import {
+  acceptFriendRequest,
+  deleteFriendRequest,
+  searchUsers,
+  sendFriendRequest,
+  type Friend,
+  type FriendRequestsResponse,
+  type UserSearchResult,
+} from "./friendsApi";
 
 export type FriendSearchProps = {
-  /** IDs already added (e.g. from existing close friends or prior additions in session). */
-  addedIds?: string[];
-  /** Callback invoked when a user is successfully added. */
-  onAdded?: (user: UserSearchResult) => void;
+  friends?: Friend[];
+  requests?: FriendRequestsResponse;
+  onRefresh?: () => void;
 };
 
-export function FriendSearch({ addedIds = [], onAdded }: FriendSearchProps) {
+export function FriendSearch({ friends = [], requests = { incoming: [], outgoing: [] }, onRefresh }: FriendSearchProps) {
   const t = useTheme();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<UserSearchResult[]>([]);
-  const [localAdded, setLocalAdded] = useState<string[]>([]);
-  const [addingId, setAddingId] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const latest = useRef(0);
 
@@ -44,21 +47,44 @@ export function FriendSearch({ addedIds = [], onAdded }: FriendSearchProps) {
     }
   }
 
-  async function handleAdd(user: UserSearchResult) {
+  async function handleAdd(username: string, userId: string) {
     setError(null);
-    setAddingId(user.id);
+    setActionBusy((prev) => ({ ...prev, [userId]: true }));
     try {
-      await addCloseFriend(user.username);
-      setLocalAdded((prev) => (prev.includes(user.id) ? prev : [...prev, user.id]));
-      onAdded?.(user);
+      await sendFriendRequest(username);
+      onRefresh?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setAddingId(null);
+      setActionBusy((prev) => ({ ...prev, [userId]: false }));
     }
   }
 
-  const isUserAdded = (id: string) => addedIds.includes(id) || localAdded.includes(id);
+  async function handleCancel(requestId: string, userId: string) {
+    setError(null);
+    setActionBusy((prev) => ({ ...prev, [userId]: true }));
+    try {
+      await deleteFriendRequest(requestId);
+      onRefresh?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setActionBusy((prev) => ({ ...prev, [userId]: false }));
+    }
+  }
+
+  async function handleAccept(requestId: string, userId: string) {
+    setError(null);
+    setActionBusy((prev) => ({ ...prev, [userId]: true }));
+    try {
+      await acceptFriendRequest(requestId);
+      onRefresh?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setActionBusy((prev) => ({ ...prev, [userId]: false }));
+    }
+  }
 
   return (
     <View style={{ gap: t.spacing.sm }}>
@@ -72,7 +98,11 @@ export function FriendSearch({ addedIds = [], onAdded }: FriendSearchProps) {
       {results.length > 0 ? (
         <View style={{ gap: t.spacing.sm }}>
           {results.map((u) => {
-            const added = isUserAdded(u.id);
+            const isFriend = friends.some((f) => f.id === u.id);
+            const incoming = requests.incoming.find((r) => r.user.id === u.id);
+            const outgoing = requests.outgoing.find((r) => r.user.id === u.id);
+            const busy = !!actionBusy[u.id];
+
             return (
               <View
                 key={u.id}
@@ -85,14 +115,28 @@ export function FriendSearch({ addedIds = [], onAdded }: FriendSearchProps) {
                 }}
               >
                 <Txt variant="body">@{u.username}</Txt>
-                {added ? (
-                  <Badge tone="success" label="Added" />
+                {isFriend ? (
+                  <Badge tone="neutral" label="Friends" />
+                ) : incoming ? (
+                  <Button
+                    label="Accept"
+                    variant="primary"
+                    onPress={() => void handleAccept(incoming.id, u.id)}
+                    loading={busy}
+                  />
+                ) : outgoing ? (
+                  <Button
+                    label="Requested"
+                    variant="outline"
+                    onPress={() => void handleCancel(outgoing.id, u.id)}
+                    loading={busy}
+                  />
                 ) : (
                   <Button
-                    label="Add"
+                    label="Add friend"
                     variant="outline"
-                    onPress={() => void handleAdd(u)}
-                    loading={addingId === u.id}
+                    onPress={() => void handleAdd(u.username, u.id)}
+                    loading={busy}
                   />
                 )}
               </View>
