@@ -1,36 +1,35 @@
-# Replace the placeholder handles with real GitHub usernames before enabling
-# "Require review from Code Owners". Lanes are defined in AGENTS.md.
+# Lanes are defined in AGENTS.md.
 
 # Riley: availability, matching, venues, mobility
-/apps/server/src/modules/calendar/     @RILEY_GITHUB
-/apps/server/src/modules/matching/     @RILEY_GITHUB
-/apps/server/src/modules/venues/       @RILEY_GITHUB
-/apps/server/scripts/seed.ts           @RILEY_GITHUB
-/apps/mobile/src/features/calendar/    @RILEY_GITHUB
+/apps/server/src/modules/calendar/     @rileyh6
+/apps/server/src/modules/matching/     @rileyh6
+/apps/server/src/modules/venues/       @rileyh6
+/apps/server/scripts/seed.ts           @rileyh6
+/apps/mobile/src/features/calendar/    @rileyh6
 
 # Ojas: identity, social graph, decision, AI, schema steward
-/apps/server/src/modules/auth/         @OJAS_GITHUB
-/apps/server/src/modules/friends/      @OJAS_GITHUB
-/apps/server/src/modules/groups/       @OJAS_GITHUB
-/apps/server/src/modules/intelligence/ @OJAS_GITHUB
-/apps/server/src/modules/voting/       @OJAS_GITHUB
-/apps/server/src/modules/expenses/     @OJAS_GITHUB
-/apps/server/src/realtime/             @OJAS_GITHUB
-/apps/server/prisma/                   @OJAS_GITHUB
-/apps/mobile/src/features/auth/        @OJAS_GITHUB
-/apps/mobile/src/features/friends/     @OJAS_GITHUB
+/apps/server/src/modules/auth/         @TheRealOP
+/apps/server/src/modules/friends/      @TheRealOP
+/apps/server/src/modules/groups/       @TheRealOP
+/apps/server/src/modules/intelligence/ @TheRealOP
+/apps/server/src/modules/voting/       @TheRealOP
+/apps/server/src/modules/expenses/     @TheRealOP
+/apps/server/src/realtime/             @TheRealOP
+/apps/server/prisma/                   @TheRealOP
+/apps/mobile/src/features/auth/        @TheRealOP
+/apps/mobile/src/features/friends/     @TheRealOP
 
 # Andy: shell, onboarding, event card, demo
-/apps/mobile/src/app/                  @ANDY_GITHUB
-/apps/mobile/src/lib/                  @ANDY_GITHUB
-/apps/mobile/src/ui/                   @ANDY_GITHUB
-/apps/mobile/src/features/favorites/   @ANDY_GITHUB
-/apps/mobile/src/features/event-card/  @ANDY_GITHUB
-/apps/server/src/modules/events/       @ANDY_GITHUB
-/apps/server/src/modules/favorites/    @ANDY_GITHUB
-/apps/server/scripts/demo-reset.ts     @ANDY_GITHUB
+/apps/mobile/src/app/                  @andydo4
+/apps/mobile/src/lib/                  @andydo4
+/apps/mobile/src/ui/                   @andydo4
+/apps/mobile/src/features/favorites/   @andydo4
+/apps/mobile/src/features/event-card/  @andydo4
+/apps/server/src/modules/events/       @andydo4
+/apps/server/src/modules/favorites/    @andydo4
+/apps/server/scripts/demo-reset.ts     @andydo4
 
 # Shared: any change needs the other two
-/packages/contract/                    @ANDY_GITHUB @RILEY_GITHUB @OJAS_GITHUB
-/AGENTS.md                             @ANDY_GITHUB @RILEY_GITHUB @OJAS_GITHUB
-/wiki/plan.md                          @ANDY_GITHUB @RILEY_GITHUB @OJAS_GITHUB
+/packages/contract/                    @andydo4 @rileyh6 @TheRealOP
+/AGENTS.md                             @andydo4 @rileyh6 @TheRealOP
+/wiki/plan.md                          @andydo4 @rileyh6 @TheRealOP

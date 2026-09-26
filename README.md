@@ -12,8 +12,8 @@ Built in 36 hours at the FIU hackathon (Google/Waymo Mobility Challenge).
    script, scope, schema, API contract, pipeline and timeline.
 2. **Agent rules:** [`AGENTS.md`](AGENTS.md). `CLAUDE.md` and `GEMINI.md`
    point to it, so every vendor follows the same rules.
-3. **Ownership:** [`CODEOWNERS`](CODEOWNERS). Replace the placeholder
-   handles first.
+3. **Ownership:** [`CODEOWNERS`](CODEOWNERS). Riley = @rileyh6,
+   Ojas = @TheRealOP, Andy = @andydo4.
 4. **Work:** every agent session starts from a GitHub Issue that uses the
    "Agent task" template.
 
