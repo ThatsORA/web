@@ -1,0 +1,45 @@
+name: web-demo
+region: nyc
+services:
+  - name: server
+    environment_slug: node-js
+    github:
+      repo: ThatsORA/web
+      branch: main
+      deploy_on_push: true
+    source_dir: /
+    build_command: pnpm install --frozen-lockfile && pnpm --filter @web/server exec prisma generate
+    run_command: pnpm --filter @web/server start
+    http_port: 8080
+    instance_count: 1
+    health_check:
+      http_path: /health
+    envs:
+      # The start command uses prisma and tsx, which are devDependencies.
+      - key: PNPM_SKIP_PRUNING
+        value: "true"
+        scope: BUILD_TIME
+      - key: VOTE_TIMEOUT_SEC
+        value: "90"
+        scope: RUN_TIME
+      - key: COOLDOWN_HOURS
+        value: "0"
+        scope: RUN_TIME
+      - key: MATCH_HORIZON_DAYS
+        value: "7"
+        scope: RUN_TIME
+      - key: MIN_LEAD_HOURS
+        value: "2"
+        scope: RUN_TIME
+      - key: BUSY_PADDING_MIN
+        value: "15"
+        scope: RUN_TIME
+      - key: GEMINI_TIMEOUT_MS
+        value: "8000"
+        scope: RUN_TIME
+      - key: REPORT_CLOSED_WINDOW_HOURS
+        value: "168"
+        scope: RUN_TIME
+      - key: DEMO_MODE
+        value: "false"
+        scope: RUN_TIME
