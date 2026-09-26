@@ -38,7 +38,7 @@ export function mapEventToCalendarDetails(card: EventCardPayload): CalendarDetai
   const venueName = card.outcome?.venue?.name ?? "";
   const title = venueName ? `${vibe} at ${venueName}` : vibe;
   const location = venueName;
-  const participants = card.participants.map((p) => p.username).join(", ");
+  const participants = card.participants.map((p) => p.display_name ?? p.username).join(", ");
   const facts = card.outcome?.venue?.facts_line ? ` · ${card.outcome.venue.facts_line}` : "";
   const notes = `With ${participants}${facts}`;
 

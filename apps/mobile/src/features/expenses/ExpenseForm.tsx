@@ -10,7 +10,7 @@ import { parseCents, remainingLine } from "./amounts";
 // The contract defines no response schema for POST /expenses, and nothing here reads it.
 const CreateExpenseResponse = z.unknown();
 
-type Props = { eventId: string; attendees: { id: string; username: string }[]; onSaved?: () => void };
+type Props = { eventId: string; attendees: { id: string; username: string; display_name?: string }[]; onSaved?: () => void };
 
 export function ExpenseForm({ eventId, attendees, onSaved }: Props) {
   const t = useTheme();
@@ -65,7 +65,7 @@ export function ExpenseForm({ eventId, attendees, onSaved }: Props) {
           {attendees.map((a) => (
             <TextField
               key={a.id}
-              label={a.username}
+              label={a.display_name ?? a.username}
               value={amounts[a.id] ?? ""}
               onChangeText={(v) => setAmounts((m) => ({ ...m, [a.id]: v }))}
               keyboardType="decimal-pad"

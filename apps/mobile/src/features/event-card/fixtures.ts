@@ -4,9 +4,9 @@ import type { EventCardPayload, EventOption } from "@web/contract";
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
-export const ME = { id: id(1), username: "presenter" };
-const RILEY = { id: id(2), username: "riley" };
-const OJAS = { id: id(3), username: "ojas" };
+export const ME = { id: id(1), username: "presenter", display_name: "presenter" };
+const RILEY = { id: id(2), username: "riley", display_name: "riley" };
+const OJAS = { id: id(3), username: "ojas", display_name: "ojas" };
 const EVERYONE = [ME, RILEY, OJAS];
 
 function option(n: number, name: string, facts: string, blurb: string | null, minutes: [number, number, number]): EventOption {

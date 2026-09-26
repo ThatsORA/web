@@ -35,7 +35,7 @@ export function toMe(user: User): MeT {
 
 /** The only shape another user leaves the server in: no email, no close-friend status. */
 export const publicUserSelect = { id: true, username: true, displayName: true } as const;
-export const toPublicUser = (u: { id: string; username: string; displayName: string | null }) => ({
+export const toPublicUser = (u: { id: string; username: string; displayName?: string | null }) => ({
   id: u.id,
   username: u.username,
   display_name: u.displayName ?? u.username,

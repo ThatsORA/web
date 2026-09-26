@@ -23,8 +23,6 @@ export type VoteStatus = z.infer<typeof VoteStatus>;
 export const Username = z.string().min(3).max(24).regex(/^[a-z0-9_]+$/);
 export const DisplayName = z.string().trim().min(1).max(40);
 export const Bio = z.string().trim().max(160);
-/** How any user appears to others: display_name falls back to username. Never email or close-friend status. */
-export const PublicUser = z.object({ id: Id, username: z.string(), display_name: z.string() });
 
 export const SignupRequest = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -44,6 +42,10 @@ export const PasswordResetSuccess = z.object({ reset: z.literal(true) });
 // Usernames can't contain "@" (see Username), so the server reads an identifier with "@" as an email, otherwise a username.
 export const LoginRequest = z.object({ identifier: z.string().trim().toLowerCase().min(1), password: z.string() });
 export const AuthResponse = z.object({ token: z.string(), user_id: Id });
+
+/** How any user appears to others: display_name falls back to username. Never email or close-friend status. */
+export const PublicUser = z.object({ id: Id, username: z.string(), display_name: z.string() });
+export type PublicUser = z.infer<typeof PublicUser>;
 
 export const Me = z.object({
   id: Id,
@@ -235,7 +237,7 @@ export const CreateEventRequest = z.object({
 export type CreateEventRequest = z.infer<typeof CreateEventRequest>;
 
 export const EventCardPayload = z.object({
-  created_by: z.object({ id: Id, username: z.string() }).nullable().optional(),
+  created_by: PublicUser.nullable().optional(),
   id: Id,
   status: EventStatus,
   starts_at: Instant,
@@ -243,7 +245,7 @@ export const EventCardPayload = z.object({
   timezone: IanaTimezone,
   vibe_tag: VibeTag,
   match_reason: z.string().max(90).nullable().optional(),
-  participants: z.array(z.object({ id: Id, username: z.string() })),
+  participants: z.array(PublicUser),
   options: z.array(EventOption), // the 3 choices while voting
   progress: z.object({ responded: z.number().int(), total: z.number().int() }),
   my_status: VoteStatus,
@@ -254,7 +256,7 @@ export const EventCardPayload = z.object({
     .object({
       venue: EventOption.nullable(),
       venue_status: VenueStatus,
-      attendees: z.array(z.object({ id: Id, username: z.string() })),
+      attendees: z.array(PublicUser),
       tallies: z.record(Id, z.number().int()).nullable(),
     })
     .nullable(),
