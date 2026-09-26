@@ -15,6 +15,7 @@ import { z } from "zod";
 import { api, ApiError, getToken } from "../../lib/api";
 import { userIdFromToken } from "../../lib/session";
 import { Badge, Button, Callout, Card, Chip, Screen, TextField, Txt, useTheme } from "../../ui";
+import { PersonLink } from "../friends";
 import { invitable, isWaiting, memberBadge, splitSquads, squadErrorMessage, type FriendT, type SquadT } from "./squads";
 
 const NoContent = z.unknown();
@@ -105,7 +106,7 @@ export function SquadsScreen() {
             const badge = memberBadge(m, now);
             return (
               <View key={m.id} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: t.spacing.sm }}>
-                <Txt variant="body">@{m.username}</Txt>
+                <PersonLink id={m.id} username={m.username} />
                 {badge ? (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: t.spacing.sm }}>
                     <Badge label={badge} />

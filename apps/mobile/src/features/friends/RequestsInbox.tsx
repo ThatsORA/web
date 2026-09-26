@@ -8,6 +8,7 @@ import {
   deleteFriendRequest,
   type FriendRequestsResponse,
 } from "./friendsApi";
+import { PersonLink } from "./PersonLink";
 
 export type RequestsInboxProps = {
   requests: FriendRequestsResponse;
@@ -105,7 +106,7 @@ export function RequestsInbox({ requests, onRefresh, defaultExpanded = false }: 
                       paddingVertical: t.spacing.xs,
                     }}
                   >
-                    <Txt variant="body">@{req.user.username}</Txt>
+                    <PersonLink id={req.user.id} username={req.user.username} />
                     <View style={{ flexDirection: "row", gap: t.spacing.xs }}>
                       <Button
                         label="Accept"
@@ -146,7 +147,7 @@ export function RequestsInbox({ requests, onRefresh, defaultExpanded = false }: 
                       paddingVertical: t.spacing.xs,
                     }}
                   >
-                    <Txt variant="body">@{req.user.username}</Txt>
+                    <PersonLink id={req.user.id} username={req.user.username} />
                     <Button
                       label="Cancel"
                       variant="ghost"

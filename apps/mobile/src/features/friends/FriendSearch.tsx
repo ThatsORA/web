@@ -2,7 +2,7 @@
 // Add friend → Requested (tap to cancel) → Friends; Accept when they requested you first.
 import { useRef, useState } from "react";
 import { View } from "react-native";
-import { Badge, Button, Callout, TextField, Txt, useTheme } from "../../ui";
+import { Badge, Button, Callout, TextField, useTheme } from "../../ui";
 import {
   acceptFriendRequest,
   deleteFriendRequest,
@@ -12,6 +12,7 @@ import {
   type FriendRequestsResponse,
   type UserSearchResult,
 } from "./friendsApi";
+import { PersonLink } from "./PersonLink";
 
 export type FriendSearchProps = {
   friends?: Friend[];
@@ -114,7 +115,7 @@ export function FriendSearch({ friends = [], requests = { incoming: [], outgoing
                   paddingVertical: t.spacing.xs,
                 }}
               >
-                <Txt variant="body">@{u.username}</Txt>
+                <PersonLink id={u.id} username={u.username} />
                 {isFriend ? (
                   <Badge tone="neutral" label="Friends" />
                 ) : incoming ? (
