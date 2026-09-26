@@ -4,6 +4,7 @@ import { PutBusyBlocksRequest, PutBusyBlocksResponse, routes } from "@web/contra
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { triggerMatcher } from "../matching/matcher";
+import { syncGoogleCalendar } from "./googleSync";
 
 export const calendarRouter = Router();
 calendarRouter.put(routes.busyBlocks, requireAuth, async (req, res) => {
@@ -48,6 +49,7 @@ calendarRouter.get(routes.googleCalendar, requireAuth, async (req, res) => {
   return res.json({
     connected: conn?.status === "active",
     last_synced_at: conn?.lastSyncedAt?.toISOString() || null,
+    revoked: conn?.status === "revoked",
   });
 });
 
@@ -128,6 +130,7 @@ calendarRouter.get(routes.googleCalendarCallback, async (req, res) => {
       },
     });
 
+    void syncGoogleCalendar(userId).then(() => triggerMatcher()).catch(e => console.error("Sync failed:", e));
     return res.redirect(redirectUrlWith("ok=1"));
   } catch (e) {
     console.error("Google OAuth callback error:", e);
@@ -158,4 +161,18 @@ calendarRouter.delete(routes.googleCalendar, requireAuth, async (req, res) => {
   });
 
   return res.json({ success: true });
+});
+
+calendarRouter.post(routes.googleCalendarSync, requireAuth, async (req, res) => {
+  const userId = (req as AuthedRequest).userId;
+  try {
+    const result = await syncGoogleCalendar(userId);
+    if (result.success) {
+      void triggerMatcher().catch(() => console.error("Matcher failed after google sync"));
+    }
+    return res.json(result);
+  } catch (e) {
+    console.error("Google sync route error:", e);
+    return res.status(500).json({ error: "sync_failed" });
+  }
 });

@@ -73,7 +73,22 @@ export function GoogleCalendarConnect() {
 
   return (
     <View style={{ marginVertical: theme.spacing.md }}>
-      {status.connected ? (
+      {status.revoked ? (
+        <View style={{
+          padding: theme.spacing.md,
+          backgroundColor: theme.colors.surfaceMuted,
+          borderRadius: theme.radius.md,
+          gap: theme.spacing.sm,
+        }}>
+          <Txt variant="label" color="danger">Google Calendar Revoked</Txt>
+          <Txt variant="small" color="textMuted">Your connection has expired or was revoked.</Txt>
+          <Button 
+            label="Reconnect Google Calendar" 
+            onPress={handleConnect} 
+            disabled={loading} 
+          />
+        </View>
+      ) : status.connected ? (
         <View style={{
           padding: theme.spacing.md,
           backgroundColor: theme.colors.surfaceMuted,

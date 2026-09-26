@@ -372,6 +372,23 @@ describe("freeWindows — plan §3", () => {
 });
 
 describe("helper functions", () => {
+  it("deduplicates identical or overlapping intervals from different sources", () => {
+    const t0 = new Date("2026-09-29T10:00:00Z");
+    const t1 = new Date("2026-09-29T11:00:00Z");
+    const t2 = new Date("2026-09-29T10:30:00Z");
+    const t3 = new Date("2026-09-29T11:30:00Z");
+
+    const merged = mergeIntervals([
+      { start: t0, end: t1 }, // device_calendar block
+      { start: t2, end: t3 }, // google_calendar block overlapping
+      { start: t0, end: t1 }, // exact duplicate
+    ]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.start).toEqual(t0);
+    expect(merged[0]!.end).toEqual(t3);
+  });
+
   it("mergeIntervals combines overlapping and abutting intervals", () => {
     const t0 = new Date("2026-09-29T10:00:00Z");
     const t1 = new Date("2026-09-29T11:00:00Z");

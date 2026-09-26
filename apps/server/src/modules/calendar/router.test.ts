@@ -103,7 +103,7 @@ describe("Google Calendar routes", () => {
     mocks.findUnique.mockResolvedValue({ status: "active", lastSyncedAt: new Date("2026-09-26T00:00:00Z") });
     const res = await fetch(googleBase, { headers: { authorization: `Bearer ${signToken(userId)}` } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ connected: true, last_synced_at: "2026-09-26T00:00:00.000Z" });
+    expect(await res.json()).toEqual({ connected: true, last_synced_at: "2026-09-26T00:00:00.000Z", revoked: false });
   });
 
   it("POST /calendar/google/start returns auth url", async () => {
