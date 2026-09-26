@@ -21,4 +21,5 @@ export const routes = {
   googleCalendar: "/calendar/google",
   googleCalendarStart: "/calendar/google/start",
   googleCalendarCallback: "/calendar/google/callback",
+  googleCalendarSync: "/calendar/google/sync",
 } as const;

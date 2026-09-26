@@ -55,7 +55,7 @@ export const PutBusyBlocksRequest = z.object({
 });
 export const PutBusyBlocksResponse = z.object({ stored: z.number().int() });
 
-export const GoogleCalendarStatusResponse = z.object({ connected: z.boolean(), last_synced_at: z.string().nullable() });
+export const GoogleCalendarStatusResponse = z.object({ connected: z.boolean(), last_synced_at: z.string().nullable(), revoked: z.boolean().optional() });
 export const GoogleCalendarStartResponse = z.object({ url: z.string() });
 export const GoogleCalendarStartRequest = z.object({ redirect_uri: z.string().optional() });
 
