@@ -1,6 +1,7 @@
 // Owner: Andy (route) — hosts Riley's calendar permission and sync step.
 import { CalendarStep } from "../../features/calendar";
 import { getToken } from "../../lib/api";
+import { markMatcherTriggered } from "../../lib/matcherTrigger";
 import { stepEyebrow } from "../../lib/onboarding";
 import { useOnboardingNav } from "../../lib/useOnboardingNav";
 import { Button, Callout, Screen } from "../../ui";
@@ -20,5 +21,10 @@ export default function CalendarRoute() {
       </Screen>
     );
   }
-  return <CalendarStep onDone={onDone} />;
+  // A calendar sync runs the matcher, so the feed shows "Finding a time…" briefly (#99).
+  const onSynced = () => {
+    markMatcherTriggered();
+    onDone();
+  };
+  return <CalendarStep onDone={onSynced} />;
 }

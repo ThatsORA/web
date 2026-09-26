@@ -1,6 +1,6 @@
 // Owner: Andy — dev gallery: the event card in every state on stub fixtures (no backend needed).
 import { Fragment } from "react";
-import { EventCard, FIXTURES, FindingCard, type CardActions } from "../../features/event-card";
+import { EmptyFeedCard, EventCard, FIXTURES, FindingCard, type CardActions } from "../../features/event-card";
 import { Screen, Txt } from "../../ui";
 
 const noop: CardActions = { vote: () => {}, ghostPass: () => {}, reportClosed: () => {} };
@@ -10,6 +10,8 @@ export default function CardStates() {
     <Screen eyebrow="Dev" title="Card states">
       <Txt variant="eyebrow">Finding a time</Txt>
       <FindingCard />
+      <Txt variant="eyebrow">No plans yet</Txt>
+      <EmptyFeedCard onAddFriends={() => {}} />
       {FIXTURES.map((f) => (
         <Fragment key={f.label}>
           <Txt variant="eyebrow">{f.label}</Txt>

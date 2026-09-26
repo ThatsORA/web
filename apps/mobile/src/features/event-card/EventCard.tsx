@@ -36,6 +36,17 @@ export function FindingCard() {
   );
 }
 
+/** The feed's default state with no events. No spinner, and never says who has or hasn't added you. */
+export function EmptyFeedCard({ onAddFriends }: { onAddFriends: () => void }) {
+  return (
+    <Card tint>
+      <Txt variant="headline">No plans yet</Txt>
+      <Txt variant="small">Web suggests a hangout when your close friends are free at the same time. We check every few minutes.</Txt>
+      <Button label="Add friends" variant="outline" onPress={onAddFriends} />
+    </Card>
+  );
+}
+
 export function EventCard(props: Props) {
   const { card } = props;
   const kind = cardKind(card);
