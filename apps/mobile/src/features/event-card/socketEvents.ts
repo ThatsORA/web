@@ -1,0 +1,19 @@
+// Owner: Andy — every socket event carries only { event_id }; the client refetches GET /events/:id.
+import { SocketEvents } from "@web/contract";
+
+type Handler = (payload: { event_id: string }) => void;
+/** The slice of a socket.io client this needs, so tests can pass a fake. */
+export type EventEmitterLike = {
+  on(event: string, fn: Handler): unknown;
+  off(event: string, fn: Handler): unknown;
+};
+
+/** Calls `onEvent(eventId)` for every event:* message. Returns an unsubscribe function. */
+export function onAnyEventUpdate(socket: EventEmitterLike, onEvent: (eventId: string) => void): () => void {
+  const handler: Handler = (p) => onEvent(p.event_id);
+  const names = Object.values(SocketEvents);
+  for (const name of names) socket.on(name, handler);
+  return () => {
+    for (const name of names) socket.off(name, handler);
+  };
+}
