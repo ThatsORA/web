@@ -1,12 +1,14 @@
-import { Link } from "expo-router";
-import { Text, View } from "react-native";
+// Owner: Andy — welcome screen.
+import { Button, Screen } from "../../ui";
+import { useOnboardingNav } from "../../lib/useOnboardingNav";
 
 export default function Welcome() {
+  const onDone = useOnboardingNav("welcome");
   return (
-    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
-      <Text style={{ fontSize: 32, fontWeight: "700" }}>Web</Text>
-      <Text>Hangouts that plan themselves.</Text>
-      <Link href="/(main)">Skip to app (dev)</Link>
-    </View>
+    <Screen
+      title="Web"
+      subtitle="Hangouts that plan themselves. Tell us when you're busy and who your close friends are; we'll find the time and the place."
+      footer={<Button label="Get started" onPress={onDone} />}
+    />
   );
 }

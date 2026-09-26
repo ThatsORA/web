@@ -1,2 +1,3 @@
 // Owner: Andy — quick-tap favorite categories
-export {};
+export { FavoritesStep } from "./FavoritesStep";
+export { FAVORITE_CATEGORIES, toggleCategory } from "./categories";

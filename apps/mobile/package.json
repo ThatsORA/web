@@ -16,6 +16,7 @@
     "expo-localization": "~57.0.2",
     "expo-location": "~57.0.20",
     "expo-router": "~57.0.23",
+    "expo-secure-store": "~57.0.4",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.3",
@@ -35,7 +36,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.2"
   },
   "scripts": {
     "start": "expo start",
@@ -44,7 +46,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"no mobile tests yet\""
+    "test": "vitest run"
   },
   "private": true
 }

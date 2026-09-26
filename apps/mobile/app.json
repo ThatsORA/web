@@ -45,7 +45,8 @@
           "locationWhenInUsePermission": "Web uses your approximate home location to find places that are fair for everyone to get to."
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
