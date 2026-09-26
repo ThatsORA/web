@@ -7,7 +7,7 @@ import { env } from "../../env";
 import { withFixture } from "../../lib/demoMode";
 
 const PRICE = ["", "$", "$$", "$$$", "$$$$"];
-const GEMINI_MODEL = "gemini-3.8-flash";
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
 
 export function factsLine(v: RankedVenue): string {
   const parts: string[] = [];
