@@ -11,11 +11,8 @@ import {
 
 const slot: ClassifiedSlot = {
   vibe_tag: "dinner",
-  vibe: "dinner",
   start: new Date("2026-10-01T22:30:00Z"),
   end: new Date("2026-10-02T00:30:00Z"),
-  starts_at: new Date("2026-10-01T22:30:00Z"),
-  ends_at: new Date("2026-10-02T00:30:00Z"),
   durationMinutes: 120,
 };
 

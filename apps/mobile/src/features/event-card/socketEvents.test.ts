@@ -1,6 +1,6 @@
 import { SocketEvents } from "@web/contract";
 import { describe, expect, it } from "vitest";
-import { onAnyEventUpdate, type EventEmitterLike } from "./socketEvents";
+import { onAnyEventUpdate, onAnyFriendUpdate, type EventEmitterLike } from "./socketEvents";
 
 function fakeSocket() {
   const handlers = new Map<string, Set<(p: { event_id: string }) => void>>();
@@ -28,5 +28,29 @@ describe("onAnyEventUpdate", () => {
     off();
     emit(SocketEvents.eventProgress, { event_id: "e" });
     expect(seen).toEqual([]);
+  });
+});
+
+describe("onAnyFriendUpdate", () => {
+  it("fires on friend:request and friend:accepted, and not on event:* messages", () => {
+    const { socket, emit } = fakeSocket();
+    let changes = 0;
+    const events: string[] = [];
+    onAnyFriendUpdate(socket, () => changes++);
+    onAnyEventUpdate(socket, (id) => events.push(id));
+    emit("friend:request", { event_id: "ignored" });
+    emit("friend:accepted", { event_id: "ignored" });
+    emit(SocketEvents.eventCreated, { event_id: "e1" });
+    expect(changes).toBe(2);
+    expect(events).toEqual(["e1"]);
+  });
+
+  it("stops after unsubscribe", () => {
+    const { socket, emit } = fakeSocket();
+    let changes = 0;
+    const off = onAnyFriendUpdate(socket, () => changes++);
+    off();
+    emit("friend:request", { event_id: "ignored" });
+    expect(changes).toBe(0);
   });
 });

@@ -2,4 +2,4 @@
 export { EmptyFeedCard, EventCard, FindingCard, type CardActions } from "./EventCard";
 export { FIXTURES } from "./fixtures";
 export { useEvents } from "./useEvents";
-export { useEventSocket } from "./useEventSocket";
+export { useEventSocket, useFriendEvents, useSessionSocket } from "./useEventSocket";

@@ -8,10 +8,20 @@ export type EventEmitterLike = {
   off(event: string, fn: Handler): unknown;
 };
 
+// TODO(#113): import FriendSocketEvents from @web/contract once #113 adds it; these are its server's exact names.
+const FRIEND_EVENTS = ["friend:request", "friend:accepted"];
+
 /** Calls `onEvent(eventId)` for every event:* message. Returns an unsubscribe function. */
 export function onAnyEventUpdate(socket: EventEmitterLike, onEvent: (eventId: string) => void): () => void {
-  const handler: Handler = (p) => onEvent(p.event_id);
-  const names = Object.values(SocketEvents);
+  return listen(socket, Object.values(SocketEvents), (p) => onEvent(p.event_id));
+}
+
+/** Calls `onChange()` for every friend:* message; listeners just refetch, so the payload is ignored. */
+export function onAnyFriendUpdate(socket: EventEmitterLike, onChange: () => void): () => void {
+  return listen(socket, FRIEND_EVENTS, () => onChange());
+}
+
+function listen(socket: EventEmitterLike, names: string[], handler: Handler): () => void {
   for (const name of names) socket.on(name, handler);
   return () => {
     for (const name of names) socket.off(name, handler);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitEqually } from "./split";
+import { customSplitError, splitEqually } from "./split";
 
 const amounts = (total: number, n: number) => splitEqually(total, ["a", "b", "c", "d"].slice(0, n)).map((s) => s.amountCents);
 
@@ -15,5 +15,21 @@ describe("splitEqually", () => {
   });
   it("keeps user order", () => {
     expect(splitEqually(5, ["x", "y"])).toEqual([{ userId: "x", amountCents: 3 }, { userId: "y", amountCents: 2 }]);
+  });
+});
+
+describe("customSplitError", () => {
+  const attendees = ["a", "b", "c"];
+  const split = (...pairs: [string, number][]) => pairs.map(([user_id, amount_cents]) => ({ user_id, amount_cents }));
+  it("accepts distinct attendees summing exactly to the total, even a subset", () => {
+    expect(customSplitError(1000, split(["a", 600], ["c", 400]), attendees)).toBeNull();
+  });
+  it("rejects a sum off by even one cent", () => {
+    expect(customSplitError(1000, split(["a", 600], ["b", 399]), attendees)).toBe("sum_mismatch");
+    expect(customSplitError(1000, split(["a", 1001]), attendees)).toBe("sum_mismatch");
+  });
+  it("rejects users who aren't confirmed attendees, and duplicates", () => {
+    expect(customSplitError(1000, split(["a", 500], ["z", 500]), attendees)).toBe("not_attendee");
+    expect(customSplitError(1000, split(["a", 500], ["a", 500]), attendees)).toBe("duplicate_user");
   });
 });

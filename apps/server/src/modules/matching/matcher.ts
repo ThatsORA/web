@@ -5,15 +5,27 @@ import type { CurateContext, EventOption, RankedVenue } from "@web/contract";
 import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
 import { curateVenues, factsLine } from "../intelligence/curateVenues";
-import { fetchCandidates } from "../venues/liveVenues";
+import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
 import { openVoting } from "../voting/lifecycle";
-import { candidateGroups, selectCandidates, type GroupSlot } from "./candidates";
-import { classifySlot, formatTimeHHMM, freeWindows, getLocalParts } from "./timeMath";
+import { candidateGroups, selectCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
+import { classifySlot, earliestTimezone, formatTimeHHMM, freeWindows, getLocalParts } from "./timeMath";
 
 export { freeWindows, classifySlot } from "./timeMath";
 
 let running: Promise<void> | null = null;
 let rerunRequested = false;
+
+export function openEventsByParticipant(events: readonly MatchingEvent[]): Map<string, MatchingEvent[]> {
+  const byParticipant = new Map<string, MatchingEvent[]>();
+  for (const event of events) {
+    for (const participant of event.participants) {
+      const participantEvents = byParticipant.get(participant.userId) ?? [];
+      participantEvents.push(event);
+      byParticipant.set(participant.userId, participantEvents);
+    }
+  }
+  return byParticipant;
+}
 
 /** EventOption snapshots for top-five venues that were not selected for voting. */
 export function unusedVenueSnapshots(
@@ -44,12 +56,30 @@ function curateContext(
       favorite_counts[favorite.category] = (favorite_counts[favorite.category] ?? 0) + 1;
     }
   }
-  const local = getLocalParts(candidate.slot.start, candidate.group.timezone);
+  const timezone = earliestTimezone(candidate.slot.start, Object.values(candidate.group.memberTimezones));
+  const local = getLocalParts(candidate.slot.start, timezone);
   return {
     vibe_tag: candidate.slot.vibe_tag,
-    slot_local: `${local.weekday} ${formatTimeHHMM(candidate.slot.start, candidate.group.timezone)}–${formatTimeHHMM(candidate.slot.end, candidate.group.timezone)}`,
+    slot_local: `${local.weekday} ${formatTimeHHMM(candidate.slot.start, timezone)}–${formatTimeHHMM(candidate.slot.end, timezone)}`,
     favorite_counts,
   };
+}
+
+export function timezoneClosestToVenueCentroid(
+  members: readonly Pick<VenueMember, "id" | "timezone" | "homeLat" | "homeLng">[],
+  venues: readonly Pick<EventOption, "lat" | "lng">[],
+): string | null {
+  if (!venues.length) return null;
+  const latitude = venues.reduce((sum, venue) => sum + venue.lat, 0) / venues.length;
+  const longitude = venues.reduce((sum, venue) => sum + venue.lng, 0) / venues.length;
+  const longitudeScale = Math.cos(latitude * Math.PI / 180);
+  return members
+    .filter((member) => member.homeLat !== null && member.homeLng !== null)
+    .map((member) => ({
+      member,
+      distance: (member.homeLat! - latitude) ** 2 + ((member.homeLng! - longitude) * longitudeScale) ** 2,
+    }))
+    .sort((a, b) => a.distance - b.distance || a.member.id.localeCompare(b.member.id))[0]?.member.timezone ?? null;
 }
 
 function optionData(option: EventOption) {
@@ -72,16 +102,55 @@ function optionData(option: EventOption) {
 }
 
 export async function runPipeline(now = new Date()): Promise<void> {
-  const [users, friendships, explicitGroups, events] = await Promise.all([
-    prisma.user.findMany({ include: { busyBlocks: true, favorites: true } }),
+  const [friendships, explicitGroups] = await Promise.all([
     prisma.friendship.findMany(),
     prisma.explicitGroup.findMany({ include: { members: true } }),
-    prisma.event.findMany({ include: { participants: true } }),
   ]);
 
-  const groups = candidateGroups(users, friendships, explicitGroups);
+  // ponytail: discovery reads lightweight identities for relationship endpoints, then loads
+  // busy blocks and favorites only for users who can form a candidate group.
+  const referencedUserIds = [...new Set([
+    ...friendships.flatMap((friendship) => [friendship.userLowId, friendship.userHighId]),
+    ...explicitGroups.flatMap((group) => group.members.map((member) => member.userId)),
+  ])].sort();
+  if (!referencedUserIds.length) return;
+  const identities = await prisma.user.findMany({
+    where: { id: { in: referencedUserIds } },
+    select: { id: true, timezone: true },
+  });
+  const groups = candidateGroups(identities, friendships, explicitGroups);
+  if (!groups.length) return;
+
+  const candidateUserIds = [...new Set(groups.flatMap((group) => group.memberIds))].sort();
+  const groupKeys = groups.map((group) => group.groupKey);
+  const cooldownSince = new Date(now.getTime() - env.COOLDOWN_HOURS * 60 * 60 * 1_000);
+  const [users, openEvents, cooldownEvents] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: candidateUserIds } },
+      include: { busyBlocks: true, favorites: true },
+    }),
+    prisma.event.findMany({
+      where: {
+        status: { in: ["voting", "confirmed"] },
+        participants: { some: { userId: { in: candidateUserIds } } },
+      },
+      include: { participants: true },
+    }),
+    env.COOLDOWN_HOURS > 0
+      ? prisma.event.findMany({
+        where: {
+          groupKey: { in: groupKeys },
+          status: { in: ["expired", "chatted"] },
+          resolvedAt: { gte: cooldownSince },
+        },
+        include: { participants: true },
+      })
+      : Promise.resolve([]),
+  ]);
+
   const usersById = new Map(users.map((user) => [user.id, user]));
   const favoritesByUser = new Map(users.map((user) => [user.id, user.favorites]));
+  const eventsByParticipant = openEventsByParticipant(openEvents);
   const groupSlots: GroupSlot[] = [];
 
   for (const group of groups) {
@@ -91,25 +160,20 @@ export async function runPipeline(now = new Date()): Promise<void> {
       id: user.id,
       timezone: user.timezone,
       busyBlocks: user.busyBlocks.map((block) => ({ start: block.startsAt, end: block.endsAt })),
-      openEvents: events
-        .filter((event) =>
-          (event.status === "voting" || event.status === "confirmed") &&
-          event.participants.some((participant) => participant.userId === user.id),
-        )
+      openEvents: (eventsByParticipant.get(user.id) ?? [])
         .map((event) => ({ start: event.startsAt, end: event.endsAt })),
     }));
     for (const window of freeWindows(availability, now, {
-      timezone: group.timezone,
       busyPaddingMin: env.BUSY_PADDING_MIN,
       minLeadHours: env.MIN_LEAD_HOURS,
       horizonDays: env.MATCH_HORIZON_DAYS,
     })) {
-      const slot = classifySlot(window, group.timezone);
+      const slot = classifySlot(window, Object.values(group.memberTimezones));
       if (slot) groupSlots.push({ group, slot });
     }
   }
 
-  const selected = selectCandidates(groupSlots, friendships, events, now, env.COOLDOWN_HOURS);
+  const selected = selectCandidates(groupSlots, friendships, [...openEvents, ...cooldownEvents], now, env.COOLDOWN_HOURS);
   for (const candidate of selected) {
     const venueMembers = candidate.group.memberIds
       .map((id) => usersById.get(id))
@@ -128,6 +192,8 @@ export async function runPipeline(now = new Date()): Promise<void> {
       curateContext(candidate, favoritesByUser),
     );
     if (options.length !== 3) throw new Error(`Venue curation returned ${options.length} options; expected 3`);
+    const eventTimezone = timezoneClosestToVenueCentroid(venueMembers, options) ??
+      earliestTimezone(candidate.slot.start, Object.values(candidate.group.memberTimezones));
 
     const created = await prisma.$transaction(async (tx) => {
       const duplicate = await tx.event.findFirst({
@@ -143,7 +209,7 @@ export async function runPipeline(now = new Date()): Promise<void> {
           startsAt: candidate.slot.start,
           endsAt: candidate.slot.end,
           vibeTag: candidate.slot.vibe_tag,
-          timezone: candidate.group.timezone,
+          timezone: eventTimezone,
           backupVenues: unusedVenueSnapshots(rankedVenues, options),
           voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
           participants: {

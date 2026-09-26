@@ -2,6 +2,7 @@
 // Invariant: privacy — close-friend star status is never revealed to the other person.
 import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
+import { useFriendEvents } from "../event-card";
 import { Button, Callout, Card, Chip, Screen, Txt, useTheme } from "../../ui";
 import { FriendSearch } from "./FriendSearch";
 import { RequestsInbox } from "./RequestsInbox";
@@ -42,6 +43,9 @@ export function FriendsScreen() {
   useEffect(() => {
     void Promise.resolve().then(loadData);
   }, [loadData]);
+
+  // Live friend:request / friend:accepted on the session socket; also refreshes the inbox.
+  useFriendEvents(() => void loadData());
 
   async function handleRefresh() {
     setRefreshing(true);
