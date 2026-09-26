@@ -69,6 +69,16 @@ describe("candidate groups", () => {
     expect(six).toHaveLength(7);
     expect(six.every(g => g.memberIds.length >= 5)).toBe(true);
   });
+  it("excludes invited/pending members from explicit groups and skips groups with < 2 active members", () => {
+    const ids = ["a", "b", "c", "d"];
+    const squad2 = { id: "squad2", members: [{ userId: "a" }, { userId: "b" }, { userId: "c" }, { userId: "d", status: "invited" }] };
+    const result2 = candidateGroups(users(ids), [], [squad2]);
+    expect(result2.find(g => g.groupKey === "a,b,c")?.sourceGroupId).toBe("squad2");
+    expect(result2.find(g => g.groupKey === "a,b,c,d")).toBeUndefined();
+    
+    const squad3 = { id: "squad3", members: [{ userId: "a", status: "active" }, { userId: "b", status: "invited" }] };
+    expect(candidateGroups(users(["a", "b"]), [], [squad3])).toEqual([]);
+  });
 });
 describe("ranking and cooldown", () => {
   it("computes the numeric example: .4*.6 + .35*.5 + .25*.5 = .54", () => {
@@ -100,6 +110,17 @@ describe("ranking and cooldown", () => {
     const ranked = rankCandidates([pair, group], [...clique(group.group.memberIds), edge("d", "e")], now);
     expect(ranked.map(c => c.group.groupKey)).toEqual(["a,b,c", "d,e"]);
     expect(ranked[1]!.score).toBeCloseTo(ranked[0]!.score * 0.85);
+  });
+  it("adds +0.05 closeness bonus to squad-sourced groups to win ties against identical ad-hoc cliques", () => {
+    const squadGroup = candidate(["a", "b", "c"], 24);
+    squadGroup.group.sourceGroupId = "squad1";
+    const adhocGroup = candidate(["a", "b", "c"], 24);
+    const pairs = clique(["a", "b", "c"]);
+    
+    const rankedSquad = rankCandidates([squadGroup], pairs, now)[0]!;
+    const rankedAdhoc = rankCandidates([adhocGroup], pairs, now)[0]!;
+    expect(rankedSquad.closeness).toBeCloseTo(rankedAdhoc.closeness + 0.05);
+    expect(rankedSquad.score).toBeGreaterThan(rankedAdhoc.score);
   });
   it.each(["expired", "chatted"] as const)("uses %s resolution for cooldown with an exact boundary and demo disable", status => {
     const e = event(["a", "b", "c"], status);
