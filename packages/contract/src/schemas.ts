@@ -58,9 +58,19 @@ export const PutBusyBlocksResponse = z.object({ stored: z.number().int() });
 // ---------- friends (Ojas) ----------
 export const UserSearchResult = z.object({ id: Id, username: z.string() }); // never reveals "added you"
 export const UserSearchResponse = z.object({ users: z.array(UserSearchResult) });
-export const CloseFriend = z.object({ id: Id, username: z.string(), mutual: z.boolean() });
+// Close friends: my silent choices only. Never says whether they chose me back.
+export const CloseFriend = z.object({ id: Id, username: z.string() });
 export const CloseFriendsResponse = z.object({ friends: z.array(CloseFriend) });
-export const AddCloseFriendRequest = z.object({ username: z.string() });
+export const AddCloseFriendRequest = z.object({ username: z.string() }); // 409 unless we're accepted friends
+
+// Friends: the visible request/accept layer. `close` is MY flag only.
+export const Friend = z.object({ id: Id, username: z.string(), close: z.boolean() });
+export const FriendsResponse = z.object({ friends: z.array(Friend) });
+export const SendFriendRequest = z.object({ username: z.string() });
+/** "friends" when they had already requested me, so this accepted it. */
+export const SendFriendRequestResponse = z.object({ status: z.enum(["requested", "friends"]) });
+export const FriendRequest = z.object({ id: Id, user: UserSearchResult, requested_at: Instant });
+export const FriendRequestsResponse = z.object({ incoming: z.array(FriendRequest), outgoing: z.array(FriendRequest) });
 
 // ---------- favorites (Andy) ----------
 export const PutFavoritesRequest = z.object({ categories: z.array(z.string()).max(20) });

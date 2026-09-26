@@ -16,7 +16,9 @@ touches before you write code.
 - Votes are anonymous. No API response or socket payload may reveal who
   voted for what. Progress is `responded/total`, and a ghost pass counts
   as responded. Tallies stay hidden until voting closes.
-- Search and friend endpoints never reveal whether someone added you.
+- Friend status (pending/accepted) is visible to both people. Close-friend
+  status never is: no endpoint or socket payload reveals whether someone
+  marked you close, and a declined friend request is never announced.
 
 **Money**
 - Money is always integer cents. Split evenly, then give the leftover

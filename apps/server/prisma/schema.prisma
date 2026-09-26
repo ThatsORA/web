@@ -43,6 +43,11 @@ enum VenueStatus {
   reported_closed
 }
 
+enum FriendshipStatus {
+  pending
+  accepted
+}
+
 enum BusySource {
   device_calendar
   seed
@@ -88,15 +93,22 @@ model BusyBlock {
 }
 
 /// Exactly one document per pair; code must sort so userLowId < userHighId.
+/// Two layers: `status` is the visible friend request; the two flags are the silent
+/// close-friend choices, only ever true when status = accepted.
 /// mutual = lowAddedHigh AND highAddedLow — compute in queries.
 model Friendship {
-  id               String    @id @default(uuid()) @map("_id")
-  userLowId        String    @map("user_low_id")
-  userHighId       String    @map("user_high_id")
-  lowAddedHigh     Boolean   @default(false) @map("low_added_high")
-  highAddedLow     Boolean   @default(false) @map("high_added_low")
-  interactionScore Float     @default(0.5) @map("interaction_score")
-  lastHangoutAt    DateTime? @map("last_hangout_at")
+  id               String           @id @default(uuid()) @map("_id")
+  userLowId        String           @map("user_low_id")
+  userHighId       String           @map("user_high_id")
+  status           FriendshipStatus @default(accepted) // seed/legacy rows are friends; requests set pending
+  requestedById    String?          @map("requested_by_id") // null on seed/legacy rows
+  requestedAt      DateTime         @default(now()) @map("requested_at")
+  acceptedAt       DateTime?        @map("accepted_at")
+  declinedAt       DateTime?        @map("declined_at") // soft decline: hidden from the recipient, still pending to the requester
+  lowAddedHigh     Boolean          @default(false) @map("low_added_high")
+  highAddedLow     Boolean          @default(false) @map("high_added_low")
+  interactionScore Float            @default(0.5) @map("interaction_score")
+  lastHangoutAt    DateTime?        @map("last_hangout_at")
 
   userLow  User @relation("FriendshipLow", fields: [userLowId], references: [id], onDelete: Cascade)
   userHigh User @relation("FriendshipHigh", fields: [userHighId], references: [id], onDelete: Cascade)
