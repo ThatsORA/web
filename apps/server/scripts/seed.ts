@@ -1,5 +1,94 @@
 // Owner: Riley — demo seed (plan "Demo Operations" + "Demo geography").
-// Riley (25.781,-80.360) and Ojas (25.700,-80.370) are mutual, interaction 0.8,
-// last hangout 10 days ago. Their busy blocks cover the whole horizon except the
-// first Thursday ≥24 h away, 18:15–21:00 America/New_York.
-console.log("TODO(Riley): implement seed");
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import {
+  buildDemoSeedSchedule,
+  DEMO_PASSWORD,
+  DEMO_TIMEZONE,
+  DEMO_USERS,
+} from "./demoSeed";
+
+const prisma = new PrismaClient();
+
+async function seed() {
+  const now = new Date();
+  const schedule = buildDemoSeedSchedule(now);
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+
+  const seededUsers = await prisma.$transaction(async (tx) => {
+    const users = [];
+    for (const demoUser of DEMO_USERS) {
+      const user = await tx.user.upsert({
+        where: { username: demoUser.username },
+        update: {
+          email: demoUser.email,
+          passwordHash,
+          timezone: DEMO_TIMEZONE,
+          homeLat: demoUser.homeLat,
+          homeLng: demoUser.homeLng,
+          travelMode: "DRIVE",
+        },
+        create: {
+          username: demoUser.username,
+          email: demoUser.email,
+          passwordHash,
+          timezone: DEMO_TIMEZONE,
+          homeLat: demoUser.homeLat,
+          homeLng: demoUser.homeLng,
+          travelMode: "DRIVE",
+        },
+      });
+      users.push(user);
+    }
+
+    const [userLowId, userHighId] = users.map((user) => user.id).sort();
+    await tx.friendship.upsert({
+      where: { userLowId_userHighId: { userLowId: userLowId!, userHighId: userHighId! } },
+      update: {
+        lowAddedHigh: true,
+        highAddedLow: true,
+        interactionScore: 0.8,
+        lastHangoutAt: schedule.lastHangoutAt,
+      },
+      create: {
+        userLowId: userLowId!,
+        userHighId: userHighId!,
+        lowAddedHigh: true,
+        highAddedLow: true,
+        interactionScore: 0.8,
+        lastHangoutAt: schedule.lastHangoutAt,
+      },
+    });
+
+    for (const user of users) {
+      await tx.busyBlock.deleteMany({ where: { userId: user.id, source: "seed" } });
+      await tx.busyBlock.createMany({
+        data: schedule.busyBlocks.map((block) => ({
+          ...block,
+          userId: user.id,
+          source: "seed" as const,
+          syncedAt: now,
+        })),
+      });
+    }
+
+    return users;
+  });
+
+  console.log(
+    `Seeded ${seededUsers.map((user) => user.username).join(" + ")} with one shared Thursday window.`,
+  );
+  console.log(`Demo password: ${DEMO_PASSWORD}`);
+  console.log(
+    `Available locally: ${schedule.availableWindow.start.toISOString()} – ${schedule.availableWindow.end.toISOString()} (${DEMO_TIMEZONE})`,
+  );
+}
+
+seed()
+  .catch((error: unknown) => {
+    console.error("Seed failed", error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
