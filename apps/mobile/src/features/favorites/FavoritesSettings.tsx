@@ -35,7 +35,7 @@ export function FavoritesSettings() {
     <Card>
       <Txt variant="section">Favorites</Txt>
       <Txt variant="small" color="textMuted">
-        Tap categories you like. We'll lean toward these when picking places.
+        Tap categories you like. We&apos;ll lean toward these when picking places.
       </Txt>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm }}>
         {FAVORITE_CATEGORIES.map((c) => (
