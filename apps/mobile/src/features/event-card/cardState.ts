@@ -113,17 +113,17 @@ export const canInvite = (card: EventCardPayload, now = Date.now()) =>
 
 /**
  * The invite picker's search results (#345): nothing until you type, then every friend whose name or username
- * matches. Anyone already visible on the card comes back `inGroup` (shown faded, not selectable). Hidden
- * participants look like anyone else; the server skips them silently.
+ * matches. Anyone in `memberIds` (the card's visible participants, or a squad's members) comes back `inGroup`
+ * (shown faded, not selectable). Hidden hangout participants look like anyone else; the server skips them silently.
  */
 export function inviteSearch<F extends { id: string; username: string; display_name?: string | null }>(
   friends: readonly F[],
-  card: Pick<EventCardPayload, "participants">,
+  memberIds: readonly string[],
   query: string,
 ): { friend: F; inGroup: boolean }[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   return friends
     .filter((friend) => friend.username.toLowerCase().includes(q) || !!friend.display_name?.toLowerCase().includes(q))
-    .map((friend) => ({ friend, inGroup: card.participants.some((p) => p.id === friend.id) }));
+    .map((friend) => ({ friend, inGroup: memberIds.includes(friend.id) }));
 }
