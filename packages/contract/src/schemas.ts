@@ -138,6 +138,8 @@ export type UserSearchResponse = z.infer<typeof UserSearchResponse>;
 export type CloseFriend = z.infer<typeof CloseFriend>;
 export type CloseFriendsResponse = z.infer<typeof CloseFriendsResponse>;
 export type AddCloseFriendRequest = z.infer<typeof AddCloseFriendRequest>;
+export type Friend = z.infer<typeof Friend>;
+export type FriendsResponse = z.infer<typeof FriendsResponse>;
 
 // ---------- squads (Ojas) ----------
 // Joining needs the invitee's yes; in a squad of 3+ active members any member can also
@@ -154,6 +156,9 @@ export const SquadMember = PublicUser.extend({
 });
 export const Squad = z.object({ id: Id, name: z.string(), my_status: SquadMemberStatus, members: z.array(SquadMember) });
 export const SquadsResponse = z.object({ squads: z.array(Squad) });
+export type Squad = z.infer<typeof Squad>;
+export type SquadMember = z.infer<typeof SquadMember>;
+export type SquadsResponse = z.infer<typeof SquadsResponse>;
 
 // ---------- favorites (Andy) ----------
 export const PutFavoritesRequest = z.object({ categories: z.array(z.string()).max(20) });
@@ -336,6 +341,7 @@ export const ChatMessage = z.object({
   event_id: Id,
   user_id: Id,
   username: z.string(),
+  display_name: z.string(),
   body: z.string().min(1).max(1000),
   created_at: Instant,
 });

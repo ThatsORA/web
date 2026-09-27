@@ -120,10 +120,30 @@ describe("chatRouter", () => {
         event_id: eventId,
         user_id: userId,
         username: "ojas",
+        display_name: "ojas",
         body: "Hey everyone",
         created_at: msgTime.toISOString(),
       });
       expect(json.next_cursor).toBeNull();
+    });
+
+    it("returns display_name from author's displayName when present", async () => {
+      const msgTime = new Date("2026-09-26T10:00:00.000Z");
+      mocks.chatMessageFindMany.mockResolvedValueOnce([
+        {
+          id: messageId1,
+          eventId,
+          userId,
+          body: "Hey everyone",
+          createdAt: msgTime,
+          user: { username: "ojas", displayName: "Ojas Polakhare" },
+        },
+      ]);
+
+      const res = await get();
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.messages[0].display_name).toBe("Ojas Polakhare");
     });
 
     it("supports ?before= pagination cursor", async () => {
@@ -201,6 +221,7 @@ describe("chatRouter", () => {
         event_id: eventId,
         user_id: userId,
         username: "ojas",
+        display_name: "ojas",
         body: "Where should we go instead?",
         created_at: now.toISOString(),
       });
@@ -219,6 +240,22 @@ describe("chatRouter", () => {
         "event:message",
         { event_id: eventId }
       );
+    });
+
+    it("uses displayName when sender has one set", async () => {
+      mocks.userFindUnique.mockResolvedValue({ id: userId, username: "ojas", displayName: "Ojas Polakhare" });
+      mocks.chatMessageCreate.mockResolvedValueOnce({
+        id: messageId2,
+        eventId,
+        userId,
+        body: "Where should we go instead?",
+        createdAt: new Date("2026-09-26T10:05:00.000Z"),
+      });
+
+      const res = await post({ body: "Where should we go instead?" });
+      expect(res.status).toBe(201);
+      const json = await res.json();
+      expect(json.display_name).toBe("Ojas Polakhare");
     });
 
     it("lets a squad invitee who passed (visible Pass) keep posting", async () => {

@@ -14,6 +14,7 @@ import {
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { emitToUsers } from "../../realtime";
+import { publicUserSelect, toPublicUser } from "../auth/helpers";
 import { chatAccess, chatAudience, eventParticipants } from "../events/invitations";
 
 export const chatRouter = Router();
@@ -39,7 +40,7 @@ chatRouter.get(routes.eventMessages(":id"), async (req, res) => {
       ...(beforeValid ? { createdAt: { lt: beforeValid } } : {}),
     },
     include: {
-      user: { select: { username: true } },
+      user: { select: publicUserSelect },
     },
     orderBy: { createdAt: "desc" },
     take: 50,
@@ -47,14 +48,18 @@ chatRouter.get(routes.eventMessages(":id"), async (req, res) => {
 
   const nextCursor = raw.length === 50 ? raw[raw.length - 1]?.createdAt.toISOString() ?? null : null;
   const messages = raw
-    .map((m) => ({
-      id: m.id,
-      event_id: m.eventId,
-      user_id: m.userId,
-      username: m.user.username,
-      body: m.body,
-      created_at: m.createdAt.toISOString(),
-    }))
+    .map((m) => {
+      const author = toPublicUser(m.user);
+      return {
+        id: m.id,
+        event_id: m.eventId,
+        user_id: m.userId,
+        username: author.username,
+        display_name: author.display_name,
+        body: m.body,
+        created_at: m.createdAt.toISOString(),
+      };
+    })
     .reverse();
 
   res.json(ChatMessagesResponse.parse({ messages, next_cursor: nextCursor }));
@@ -83,9 +88,10 @@ chatRouter.post(routes.eventMessages(":id"), async (req, res) => {
 
   const user = await prisma.user.findUnique({
     where: { id: me },
-    select: { username: true },
+    select: publicUserSelect,
   });
   if (!user) return res.status(404).json({ error: "user_not_found" });
+  const author = toPublicUser(user);
 
   const created = await prisma.chatMessage.create({
     data: {
@@ -106,7 +112,8 @@ chatRouter.post(routes.eventMessages(":id"), async (req, res) => {
       id: created.id,
       event_id: created.eventId,
       user_id: created.userId,
-      username: user.username,
+      username: author.username,
+      display_name: author.display_name,
       body: created.body,
       created_at: created.createdAt.toISOString(),
     })
