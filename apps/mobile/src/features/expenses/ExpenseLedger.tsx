@@ -125,21 +125,37 @@ export function ExpenseLedgerView({
                   Paid by {attendeeName(expense.paid_by, attendees, currentUserId, { preferYou: false })}
                 </Txt>
 
-                <View style={{ marginTop: t.spacing.xs, gap: t.spacing.xs }}>
-                  {expense.splits.map((split) => {
+                <View style={{ marginTop: t.spacing.xs, gap: t.spacing.sm }}>
+                  {expense.splits.map((split, splitIndex) => {
                     const isPayer = split.user_id === expense.paid_by;
                     const canToggle = canToggleSplit(split, expense, currentUserId);
                     return (
                       <View
                         key={split.id}
                         style={{
-                          flexDirection: "row",
-                          justifyContent: "space-between",
-                          alignItems: "center",
+                          paddingTop: splitIndex > 0 ? t.spacing.xs : 0,
+                          borderTopWidth: splitIndex > 0 ? 1 : 0,
+                          borderTopColor: t.colors.border,
+                          gap: t.spacing.xs,
                         }}
                       >
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: t.spacing.xs }}>
-                          <Txt variant="small">{attendeeName(split.user_id, attendees, currentUserId)}</Txt>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: t.spacing.sm }}>
+                          <Txt variant="small" style={{ flexShrink: 1 }}>
+                            {attendeeName(split.user_id, attendees, currentUserId)}
+                          </Txt>
+                          <Txt variant="small" numeric color="heading">
+                            {formatCents(split.amount_owed_cents)}
+                          </Txt>
+                        </View>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            gap: t.spacing.xs,
+                          }}
+                        >
                           {isPayer ? (
                             <Badge tone="neutral" label="Payer" />
                           ) : split.settled ? (
@@ -147,11 +163,6 @@ export function ExpenseLedgerView({
                           ) : (
                             <Badge tone="warning" label="Owes" />
                           )}
-                        </View>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: t.spacing.xs }}>
-                          <Txt variant="small" numeric>
-                            {formatCents(split.amount_owed_cents)}
-                          </Txt>
                           {canToggle && onToggleSplit ? (
                             <Button
                               label={split.settled ? "Mark unsettled" : "Mark settled"}
