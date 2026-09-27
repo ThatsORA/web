@@ -119,14 +119,8 @@ export function ManualAvailabilityView({
           gap: theme.spacing.xs,
         }}
       >
-        <View style={{ flex: 1, minWidth: 200 }}>
-          <Txt variant="title">Manual Availability</Txt>
-          <Txt variant="small" color="textMuted">
-            Add busy times if you don&apos;t use Apple or Google Calendars.
-          </Txt>
-        </View>
         <Button
-          label={isAdding ? "Cancel" : "+ Add busy time"}
+          label={isAdding ? "Cancel" : "+ Manually add busy time"}
           variant={isAdding ? "ghost" : "outline"}
           size="sm"
           onPress={() => onToggleAdding?.()}
