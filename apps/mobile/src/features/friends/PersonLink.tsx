@@ -1,22 +1,27 @@
-// Owner: Ojas — a person's @username in a list row; tapping it opens their profile (#185).
+// Owner: Ojas, with Andy for the label (#211) — a person in a list row: their name, with
+// @username under it for telling people apart and for search; tapping it opens their profile (#185).
 // A sibling of the row's buttons (not a wrapper), so Add/Accept/star never also open the profile.
+import type { PublicUser } from "@web/contract";
 import { router } from "expo-router";
 import { Pressable } from "react-native";
+import { displayName } from "../../lib/displayName";
 import { profileHref } from "../../lib/routes";
 import { Txt, useTheme } from "../../ui";
 
-export function PersonLink({ id, username }: { id: string; username: string }) {
+export function PersonLink({ user }: { user: PublicUser }) {
   const t = useTheme();
+  const name = displayName(user);
   return (
     <Pressable
       accessibilityRole="link"
-      accessibilityLabel={`Open @${username}'s profile`}
-      onPress={() => router.push(profileHref(id))}
+      accessibilityLabel={`Open ${name}'s profile, @${user.username}`}
+      onPress={() => router.push(profileHref(user.id))}
       style={{ minHeight: t.touch, justifyContent: "center", flexShrink: 1 }}
     >
       <Txt variant="body" color="link">
-        @{username}
+        {name}
       </Txt>
+      <Txt variant="small">@{user.username}</Txt>
     </Pressable>
   );
 }

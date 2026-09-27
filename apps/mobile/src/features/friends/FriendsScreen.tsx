@@ -162,7 +162,7 @@ export function FriendsScreen() {
                   borderBottomColor: t.colors.border,
                 }}
               >
-                <PersonLink id={f.id} username={f.username} />
+                <PersonLink user={f} />
                 <View style={{ flexDirection: "row", alignItems: "center", gap: t.spacing.xs }}>
                   <Chip
                     label={f.close ? "★ Close" : "☆ Close"}

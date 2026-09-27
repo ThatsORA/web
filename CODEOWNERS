@@ -22,6 +22,8 @@
 /apps/mobile/src/features/voting/      @TheRealOP
 /apps/mobile/src/features/squads/      @TheRealOP
 /apps/mobile/src/features/chat/        @TheRealOP
+# Display labels (#211): Andy owns the person label; Ojas keeps the screen.
+/apps/mobile/src/features/friends/PersonLink.tsx @andydo4 @TheRealOP
 
 # Andy: shell, onboarding, event card, demo
 /apps/mobile/src/app/                  @andydo4

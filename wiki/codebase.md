@@ -54,6 +54,11 @@ fit, open an issue for the owner.
 | Shared server wiring | All three (small edits only) | `apps/server/src/{app,index,env}.ts`, `apps/server/src/lib/{prisma,demoMode,notImplemented}.ts`, `.env.example` |
 | Repo config | Andy | root `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.github/`, `CODEOWNERS` |
 
+- **Display labels (#211):** Andy owns how a person is labeled in the app
+  (`lib/displayName.ts`, used everywhere a name is shown) and co-owns
+  `features/friends/PersonLink.tsx` with Ojas. Label-only edits to Ojas's
+  feature screens are allowed with Ojas's review.
+
 - **Shared server wiring:** add your env var to `env.ts` + `.env.example`,
   or register a cron job in `index.ts`. Keep it to the few lines you need
   and say so in the PR. `lib/auth.ts` belongs to Ojas.

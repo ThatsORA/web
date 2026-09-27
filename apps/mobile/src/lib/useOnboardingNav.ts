@@ -8,6 +8,7 @@ import { nextStep, resumeAfterLogin, type OnboardingStep, type ResumeStep } from
 const HREF = {
   welcome: "/(onboarding)",
   signup: "/(onboarding)/signup",
+  name: "/(onboarding)/name",
   "verify-email": "/(onboarding)/verify-email",
   location: "/(onboarding)/location",
   calendar: "/(onboarding)/calendar",
@@ -17,6 +18,7 @@ const HREF = {
 
 /** Where a signed-in user lands for each resume step. */
 export const RESUME_HREF = {
+  name: HREF.name,
   "verify-email": HREF["verify-email"],
   location: HREF.location,
   friends: HREF.friends,
@@ -47,8 +49,8 @@ export async function fetchResumeStep(): Promise<ResumeStep> {
 
 /**
  * The `onDone` for the auth step (sign-up and login alike): skip what the account already
- * set up. A new account has no home, so it continues verify email → location → calendar →
- * favorites → friends.
+ * set up. A new account has no name or home, so it continues name → verify email → location →
+ * calendar → favorites → friends.
  * Uses replace so Back can't return to the auth form (or, from (main), to onboarding).
  */
 export function useResumeAfterAuth(): () => void {
