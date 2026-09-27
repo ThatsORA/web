@@ -10,7 +10,9 @@ import type { ActivityCandidate } from "../venues/discover";
 
 const JEV_URL = "https://api.typesafe.ai";
 const JEV_MODEL = "jev-1.13.0";
-const LAYA_MODEL = "laya";
+// laya-serve maps "laya" to its stock English checkpoint; "typed-decisions" is the slot our
+// fine-tuned checkpoint is served under (scripts/laya/serve.py).
+export const LAYA_MODEL = "typed-decisions";
 
 export interface ChoiceQuestion {
   type: "choice";
@@ -46,7 +48,7 @@ export function parseDecision(raw: unknown, questions: DecisionQuestions): Decis
   return res;
 }
 
-async function callProvider(base: string, apiKey: string, model: string, state: unknown, questions: DecisionQuestions) {
+export async function callProvider(base: string, apiKey: string, model: string, state: unknown, questions: DecisionQuestions) {
   const r = await fetch(`${base}/v1/systemone`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },

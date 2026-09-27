@@ -58,7 +58,7 @@ describe("askDecision", () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("http://laya.test/v1/systemone");
     expect((init!.headers as Record<string, string>).Authorization).toBe("Bearer laya-key");
-    expect(JSON.parse(init!.body as string)).toEqual({ state: { task: "hangout scheduler" }, model: "laya", questions });
+    expect(JSON.parse(init!.body as string)).toEqual({ state: { task: "hangout scheduler" }, model: "typed-decisions", questions });
   });
 
   it("falls back to Jev when Laya errors or replies malformed", async () => {

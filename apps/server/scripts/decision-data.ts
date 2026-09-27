@@ -1,26 +1,38 @@
-// Owner: Ojas — Laya training data (#235). Gemini writes synthetic scenarios, Jev labels them
-// through the same request builders runtime uses, and we write the Laya notebook's format.
+// Owner: Ojas — Laya training data (#235, #274). Gemini writes synthetic scenarios; two teachers, Jev and
+// Gemini, answer every question through the same request builders runtime uses; the training target is
+// their average. Output is the Laya notebook's format (LocalLLaMA/typed-decisions).
 // Run: pnpm --filter @web/server decision-data [totalScenarios]   (needs GEMINI_API_KEY + JEV_API_KEY)
-// Resumable: every step appends to scripts/decision-data/ and skips ids already written.
+//      pnpm --filter @web/server decision-data eval               (held-out table; also Laya when LAYA_URL is set)
+// Resumable: scenarios and each teacher's answers append to scripts/decision-data/ and skip ids already
+// done; train.jsonl and heldout.jsonl are rebuilt from them on every run.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { VibeTag } from "@web/contract";
 import { env } from "../src/env";
-import { groupRequest, parseDecision, venueFitRequest, type DecisionRequest } from "../src/modules/intelligence/decision";
+import {
+  callProvider,
+  groupRequest,
+  LAYA_MODEL,
+  parseDecision,
+  venueFitRequest,
+  type DecisionQuestions,
+  type DecisionRequest,
+} from "../src/modules/intelligence/decision";
 
 const OUT = join(import.meta.dirname, "decision-data");
 const SCENARIOS = join(OUT, "scenarios.jsonl"); // every Gemini scenario, append-only
-const TRAIN = join(OUT, "train.jsonl");
-const GOLD_JEV = join(OUT, "gold-jev.jsonl");
-const GOLD_CSV = join(OUT, "gold.csv");
+const JEV = join(OUT, "jev.jsonl"); // Jev's answers, one row per scenario, append-only
+const GEMINI = join(OUT, "gemini.jsonl"); // Gemini's answers, one row per scenario, append-only
+const TRAIN = join(OUT, "train.jsonl"); // rebuilt: teacher consensus, notebook format
+const HELDOUT = join(OUT, "heldout.jsonl"); // rebuilt: the same for held-out scenarios
 
 const GEMINI_MODEL = "gemini-3.8-flash";
 const JEV_MODEL = "jev-1.13.0";
 const BATCH = 25;
-const GOLD_PER_KIND = 75; // 150 gold scenarios total
-const GOLD_EVERY = 15; // every 15th scenario of a kind is held out, so gold spans every batch theme
+const HELDOUT_EVERY = 10; // every 10th scenario of a kind is held out (~10%), so it spans every batch theme
+const KEEP_TOP = 0.6; // keep a question the teachers disagree on only when their averaged top answer is this sure
 
 // ---------- scenarios ----------
 
@@ -141,13 +153,13 @@ async function withRetry<T>(what: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
-async function askGemini(kind: Kind, prompt: string): Promise<unknown[]> {
+async function geminiJson(prompt: string, responseSchema: object, temperature: number, thinkingLevel?: "low"): Promise<unknown> {
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA[kind], temperature: 1.0 },
+      generationConfig: { responseMimeType: "application/json", responseSchema, temperature, ...(thinkingLevel && { thinkingConfig: { thinkingLevel } }) },
     }),
     signal: AbortSignal.timeout(120_000),
   });
@@ -158,7 +170,7 @@ async function askGemini(kind: Kind, prompt: string): Promise<unknown[]> {
   };
   usage.geminiIn += body.usageMetadata?.promptTokenCount ?? 0;
   usage.geminiOut += (body.usageMetadata?.candidatesTokenCount ?? 0) + (body.usageMetadata?.thoughtsTokenCount ?? 0);
-  return z.array(z.unknown()).parse(JSON.parse(body.candidates?.[0]?.content?.parts?.[0]?.text ?? ""));
+  return JSON.parse(body.candidates?.[0]?.content?.parts?.[0]?.text ?? "");
 }
 
 /** Content key for de-duplication (ignores the id). */
@@ -190,7 +202,8 @@ async function generateScenarios(targets: Record<Kind, number>) {
     }
     const before = count.group + count.venue;
     const results = await Promise.allSettled(
-      jobs.map((j) => withRetry(`Gemini ${j.kind}`, () => askGemini(j.kind, (j.kind === "group" ? groupPrompt : venuePrompt)(j.n, j.theme)))),
+      jobs.map((j) => withRetry(`Gemini ${j.kind}`, async () =>
+        z.array(z.unknown()).parse(await geminiJson((j.kind === "group" ? groupPrompt : venuePrompt)(j.n, j.theme), RESPONSE_SCHEMA[j.kind], 1.0)))),
     );
     results.forEach((res, i) => {
       const kind = jobs[i]!.kind;
@@ -220,33 +233,54 @@ export function buildCase(s: Scenario): DecisionRequest {
   return groupRequest({ size: s.size, when: s.when, lastHangout: s.last_hangout, favorites: s.shared_favorites, feasibleVibes: s.feasible_vibes });
 }
 
-/** Held-out gold: every GOLD_EVERY-th scenario of each kind, up to GOLD_PER_KIND. */
-export function isGold(id: string): boolean {
-  const n = Number(id.slice(1));
-  return n % GOLD_EVERY === 0 && n / GOLD_EVERY < GOLD_PER_KIND;
+/** Held out for eval: every HELDOUT_EVERY-th scenario of each kind. */
+export function isHeldOut(id: string): boolean {
+  return Number(id.slice(1)) % HELDOUT_EVERY === 0;
 }
 
-type Answers = Record<string, { choice: string; probabilities: Record<string, number> }>;
+export interface Answer {
+  choice: string;
+  probabilities: Record<string, number>;
+}
+type Answers = Record<string, Answer>;
+interface TeacherRow {
+  id: string;
+  answers: Answers;
+  input_tokens?: number; // Jev
+}
+
+const round4 = (x: number) => Math.round(x * 1e4) / 1e4;
+/** The key with the highest probability; ties go to the earlier key. */
+const argmax = (p: Record<string, number>, keys: string[]) => keys.reduce((best, k) => ((p[k] ?? 0) > (p[best] ?? 0) ? k : best));
+
+/**
+ * The training target for one question: the average of the two teachers' distributions over `keys`.
+ * Null (dropped) unless their top answers agree or the averaged top probability is ≥ KEEP_TOP.
+ */
+export function consensus(keys: string[], jev: Answer, gemini: Answer): Answer | null {
+  const probabilities = Object.fromEntries(keys.map((k) => [k, round4(((jev.probabilities[k] ?? 0) + (gemini.probabilities[k] ?? 0)) / 2)]));
+  const choice = argmax(probabilities, keys);
+  return jev.choice === gemini.choice || probabilities[choice]! >= KEEP_TOP ? { choice, probabilities } : null;
+}
 
 /**
  * One row in the shape `laya_finetune_typed_decisions` reads from LocalLLaMA/typed-decisions:
- * `state`, `questions` and `gold` are JSON strings; gold[qid] = { label, probabilities } (Jev's soft labels).
+ * `state`, `questions` and `gold` are JSON strings; gold[qid] = { label, probabilities }.
+ * `questions` stays byte-identical to runtime; a dropped question is simply absent from `gold`.
  */
-export function toRecord(s: Scenario, c: ReturnType<typeof buildCase>, answers: Answers, jevInputTokens: number) {
-  const gold = Object.fromEntries(
-    Object.keys(c.questions).map((qid) => [qid, { label: answers[qid]!.choice, probabilities: answers[qid]!.probabilities }]),
-  );
+export function toRecord(s: Scenario, c: DecisionRequest, gold: Answers) {
   return {
     id: s.id,
     workflow: s.kind === "group" ? "propose_vibe" : "venue_fit",
     state: JSON.stringify(c.state),
     questions: JSON.stringify(c.questions),
-    gold: JSON.stringify(gold),
-    jev_input_tokens: jevInputTokens,
+    gold: JSON.stringify(Object.fromEntries(Object.entries(gold).map(([qid, a]) => [qid, { label: a.choice, probabilities: a.probabilities }]))),
   };
 }
 
-async function askJev(c: ReturnType<typeof buildCase>) {
+// ---------- teachers ----------
+
+async function askJev(c: DecisionRequest): Promise<Omit<TeacherRow, "id">> {
   const r = await fetch("https://api.typesafe.ai/v1/systemone", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.JEV_API_KEY}` },
@@ -259,65 +293,175 @@ async function askJev(c: ReturnType<typeof buildCase>) {
   const inputTokens = raw.usage?.input_tokens ?? 0;
   usage.jevIn += inputTokens;
   usage.jevOut += raw.usage?.output_tokens ?? 0;
-  return { answers: res.answers, inputTokens };
+  const answers = Object.fromEntries(Object.entries(res.answers).map(([qid, a]) => [qid, { choice: a.choice, probabilities: a.probabilities }]));
+  return { answers, input_tokens: inputTokens };
 }
 
-async function labelAll(scenarios: Scenario[]) {
-  const done = new Set([...readJsonl<{ id: string }>(TRAIN), ...readJsonl<{ id: string }>(GOLD_JEV)].map((r) => r.id));
+/** Gemini sees exactly what Jev sees: the runtime request as JSON. */
+export function teacherPrompt(c: DecisionRequest): string {
+  return [
+    "You label decisions for a friend-hangout app. Read `state` and each question's `instructions`.",
+    "For every question, give your probability for each option in its `criteria`, using the option keys exactly. Each question's probabilities sum to 1.",
+    "Be calibrated: put nearly all the weight on one option only when the answer is clear.",
+    JSON.stringify({ state: c.state, questions: c.questions }),
+  ].join("\n");
+}
+
+const schemaObject = (properties: Record<string, object>) => ({ type: "OBJECT", properties, required: Object.keys(properties) });
+
+/** { qid: { optionKey: NUMBER } } for every question and option. */
+export function teacherSchema(questions: DecisionQuestions): object {
+  return schemaObject(
+    Object.fromEntries(
+      Object.entries(questions).map(([qid, q]) => [qid, schemaObject(Object.fromEntries(Object.keys(q.criteria).map((k) => [k, { type: "NUMBER" }])))]),
+    ),
+  );
+}
+
+const GeminiProbabilities = z.record(z.string(), z.record(z.string(), z.number().min(0)));
+
+/** Normalises Gemini's numbers per question; throws when a question has none. */
+export function geminiAnswers(raw: unknown, questions: DecisionQuestions): Answers {
+  const parsed = GeminiProbabilities.parse(raw);
+  return Object.fromEntries(
+    Object.entries(questions).map(([qid, q]) => {
+      const keys = Object.keys(q.criteria);
+      const sum = keys.reduce((a, k) => a + (parsed[qid]?.[k] ?? 0), 0);
+      if (!(sum > 0)) throw new Error(`Gemini: no probabilities for ${qid}`);
+      const probabilities = Object.fromEntries(keys.map((k) => [k, round4((parsed[qid]?.[k] ?? 0) / sum)]));
+      return [qid, { choice: argmax(probabilities, keys), probabilities }];
+    }),
+  );
+}
+
+async function askGeminiTeacher(c: DecisionRequest): Promise<Omit<TeacherRow, "id">> {
+  // Low thinking: ~1s and ~40% of the tokens of the default, with near-identical probabilities.
+  const raw = await geminiJson(teacherPrompt(c), teacherSchema(c.questions), 0, "low");
+  return { answers: geminiAnswers(raw, c.questions) };
+}
+
+async function labelWith(name: string, file: string, scenarios: Scenario[], workers: number, ask: (c: DecisionRequest) => Promise<Omit<TeacherRow, "id">>) {
+  const done = new Set(readJsonl<TeacherRow>(file).map((r) => r.id));
   const todo = scenarios.filter((s) => !done.has(s.id));
-  console.log(`labelling ${todo.length} scenarios with Jev (${done.size} already done)`);
+  console.log(`${name}: labelling ${todo.length} scenarios (${done.size} already done)`);
   let next = 0;
   let failed = 0;
-  // ponytail: 6 workers × ~0.7s/call ≈ 500 req/min, well under Jev's 1,200/min.
   await Promise.all(
-    Array.from({ length: 6 }, async () => {
+    Array.from({ length: workers }, async () => {
       while (next < todo.length) {
         const s = todo[next++]!;
-        const c = buildCase(s);
         try {
-          const { answers, inputTokens } = await withRetry(`Jev ${s.id}`, () => askJev(c));
-          appendFileSync(isGold(s.id) ? GOLD_JEV : TRAIN, JSON.stringify(toRecord(s, c, answers, inputTokens)) + "\n");
+          const row = await withRetry(`${name} ${s.id}`, () => ask(buildCase(s)));
+          appendFileSync(file, JSON.stringify({ id: s.id, ...row }) + "\n");
         } catch (e) {
           failed++;
-          console.warn(`Jev ${s.id} gave up: ${(e as Error).message}`);
+          console.warn(`${name} ${s.id} gave up: ${(e as Error).message}`);
         }
         if (next % 200 === 0) console.log(`  ${next}/${todo.length}`);
       }
     }),
   );
-  if (failed) console.warn(`${failed} scenarios failed; rerun to retry them`);
+  if (failed) console.warn(`${name}: ${failed} scenarios failed; rerun to retry them`);
 }
 
-// ---------- gold CSV for human labellers ----------
-
-export function csvRow(fields: (string | number)[]): string {
-  return fields.map((f) => `"${String(f).replaceAll('"', '""')}"`).join(",");
-}
-
-const HUMAN_QUESTION: Record<string, string> = {
-  propose: "Should the app suggest a hangout to this group now?",
-  vibe: "Which kind of hangout suits this group best?",
-  venue_fit: "Is this venue a good place for this hangout?",
-};
-
-/** Plain-English scenario text for a human labeller. */
-export function scenarioText(s: Scenario, c: ReturnType<typeof buildCase>): string {
-  if (s.kind === "group") return (c.questions.propose!.instructions as { facts: string[] }).facts.join(". ") + ".";
-  const ins = c.questions.venue_fit!.instructions as { venue: string[]; hangout: string };
-  const reviews = s.reviews.length ? ` Reviews: ${s.reviews.map((r) => `"${r}"`).join(" ")}` : " No reviews.";
-  return `Venue: ${ins.venue.join(". ")}.${reviews} Planned hangout: ${ins.hangout}.`;
-}
-
-export function goldCsv(scenarios: Scenario[]): string {
-  const rows = [csvRow(["id", "scenario", "question", "allowed_answers", "label"])];
-  for (const s of scenarios.filter((x) => isGold(x.id))) {
+/** Rebuilds train.jsonl and heldout.jsonl from both teachers' answers and logs what was dropped. */
+function buildDatasets(scenarios: Scenario[]) {
+  const jev = new Map(readJsonl<TeacherRow>(JEV).map((r) => [r.id, r.answers]));
+  const gemini = new Map(readJsonl<TeacherRow>(GEMINI).map((r) => [r.id, r.answers]));
+  const rows = { train: [] as string[], heldout: [] as string[] };
+  const stats: Record<string, { total: number; agree: number; kept: number }> = {};
+  for (const s of scenarios) {
+    const j = jev.get(s.id);
+    const g = gemini.get(s.id);
+    if (!j || !g) continue;
     const c = buildCase(s);
+    const gold: Answers = {};
     for (const [qid, q] of Object.entries(c.questions)) {
-      const allowed = Object.entries(q.criteria).map(([k, v]) => `${k} = ${v}`).join(" | ");
-      rows.push(csvRow([`${s.id}.${qid}`, scenarioText(s, c), HUMAN_QUESTION[qid]!, allowed, ""]));
+      const st = (stats[qid] ??= { total: 0, agree: 0, kept: 0 });
+      st.total++;
+      if (j[qid]!.choice === g[qid]!.choice) st.agree++;
+      const a = consensus(Object.keys(q.criteria), j[qid]!, g[qid]!);
+      if (a) {
+        gold[qid] = a;
+        st.kept++;
+      }
+    }
+    if (Object.keys(gold).length) rows[isHeldOut(s.id) ? "heldout" : "train"].push(JSON.stringify(toRecord(s, c, gold)));
+  }
+  writeFileSync(TRAIN, rows.train.map((r) => r + "\n").join(""));
+  writeFileSync(HELDOUT, rows.heldout.map((r) => r + "\n").join(""));
+  console.log(`\nrows: ${rows.train.length} train, ${rows.heldout.length} held out`);
+  for (const [qid, st] of Object.entries(stats)) {
+    console.log(`${qid}: kept ${st.kept}/${st.total} (dropped ${st.total - st.kept}); teachers' top answers agree on ${pct(st.agree / st.total)}`);
+  }
+}
+
+// ---------- held-out eval: accuracy against the teacher consensus, no humans ----------
+
+const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+const p50 = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? NaN;
+
+interface Gold {
+  id: string;
+  qid: string;
+  label: string;
+  firstKey: string;
+}
+
+type Ask = (c: DecisionRequest) => Promise<{ answers: Record<string, { choice: string }> }>;
+const viaSystemOne = (base: string, key: string, model: string): Ask => (c) => callProvider(base, key, model, c.state, c.questions);
+
+/** Asks once per held-out row, one call at a time so latency isn't queueing. */
+async function evalLive(rows: { id: string; state: string; questions: string }[], golds: Gold[], ask: Ask) {
+  const picks = new Map<string, string>();
+  const ms: number[] = [];
+  let failed = 0;
+  for (const r of rows) {
+    const t0 = performance.now();
+    try {
+      const res = await ask({ state: JSON.parse(r.state), questions: JSON.parse(r.questions) });
+      ms.push(performance.now() - t0);
+      for (const [qid, a] of Object.entries(res.answers)) picks.set(`${r.id}.${qid}`, a.choice);
+    } catch {
+      failed++;
     }
   }
-  return rows.join("\n") + "\n";
+  const acc = golds.filter((g) => picks.get(`${g.id}.${g.qid}`) === g.label).length / golds.length;
+  return { acc: pct(acc) + (failed ? ` (${failed} calls failed)` : ""), p50: `${Math.round(p50(ms))} ms` };
+}
+
+async function evaluate() {
+  if (!env.JEV_API_KEY) throw new Error("Set JEV_API_KEY");
+  const rows = readJsonl<{ id: string; state: string; questions: string; gold: string }>(HELDOUT);
+  const golds: Gold[] = rows.flatMap((r) => {
+    const questions = JSON.parse(r.questions) as DecisionQuestions;
+    return Object.entries(JSON.parse(r.gold) as Record<string, { label: string }>).map(([qid, g]) => ({
+      id: r.id,
+      qid,
+      label: g.label,
+      firstKey: Object.keys(questions[qid]!.criteria)[0]!,
+    }));
+  });
+  const heldOutIds = new Set(readJsonl<Scenario>(SCENARIOS).filter((s) => isHeldOut(s.id)).map((s) => s.id));
+  const jev = new Map(readJsonl<TeacherRow>(JEV).map((r) => [r.id, r.answers]));
+  // The ceiling: how often the teachers' top answers agree on every held-out question, dropped ones included.
+  const pairs = readJsonl<TeacherRow>(GEMINI)
+    .filter((g) => heldOutIds.has(g.id))
+    .flatMap((g) => Object.entries(g.answers).map(([qid, a]) => a.choice === jev.get(g.id)?.[qid]?.choice));
+
+  console.log(`held out: ${rows.length} scenarios, ${golds.length} questions with a consensus label\n`);
+  const table = [["Deterministic fallback (first option)", pct(golds.filter((g) => g.firstKey === g.label).length / golds.length), "0 ms"]];
+  const jevLive = await evalLive(rows, golds, viaSystemOne("https://api.typesafe.ai", env.JEV_API_KEY, JEV_MODEL));
+  table.push([`Jev (${JEV_MODEL})`, jevLive.acc, jevLive.p50]);
+  const geminiLive = await evalLive(rows, golds, askGeminiTeacher);
+  table.push([`Gemini (${GEMINI_MODEL}, low thinking)`, geminiLive.acc, geminiLive.p50]);
+  if (env.LAYA_URL) {
+    const laya = await evalLive(rows, golds, viaSystemOne(env.LAYA_URL, env.LAYA_API_KEY, LAYA_MODEL));
+    table.push([`Laya fine-tuned (deployed, over HTTPS)`, laya.acc, laya.p50]);
+  }
+  table.push(["Teachers agree (ceiling)", pct(pairs.filter(Boolean).length / pairs.length), "—"]);
+  console.log("| Model | Accuracy vs consensus | p50 latency |\n|---|---|---|");
+  for (const r of table) console.log(`| ${r.join(" | ")} |`);
 }
 
 // ---------- main ----------
@@ -325,24 +469,17 @@ export function goldCsv(scenarios: Scenario[]): string {
 async function main() {
   if (!env.GEMINI_API_KEY || !env.JEV_API_KEY) throw new Error("Set GEMINI_API_KEY and JEV_API_KEY");
   if (env.DEMO_MODE) throw new Error("Unset DEMO_MODE: this script calls the live APIs");
+  if (process.argv[2] === "eval") return evaluate();
   mkdirSync(OUT, { recursive: true });
-  // 2,330 scenarios: ~1,140 propose + ~960 vibe + ~1,040 venue-fit train questions, plus 75 + 75 gold scenarios.
+  // 2,330 scenarios: ~1,180 group + ~1,080 venue (plus rounding); every 10th of each kind is held out.
   const total = Number(process.argv[2] ?? 2330);
   await generateScenarios({ group: Math.ceil((total * 1180) / 2260), venue: Math.floor((total * 1080) / 2260) });
 
   const scenarios = readJsonl<Scenario>(SCENARIOS);
-  await labelAll(scenarios);
-  writeFileSync(GOLD_CSV, goldCsv(scenarios));
-
-  const train = readJsonl<{ questions: string; jev_input_tokens: number }>(TRAIN);
-  const gold = readJsonl<{ questions: string; jev_input_tokens: number }>(GOLD_JEV);
-  const qCount = (rows: { questions: string }[], qid: string) => rows.filter((r) => qid in JSON.parse(r.questions)).length;
-  const jevInAll = [...train, ...gold].reduce((a, r) => a + (r.jev_input_tokens), 0);
-  console.log(`\nscenarios: ${scenarios.length} (${scenarios.filter((s) => isGold(s.id)).length} gold)`);
-  console.log(`train questions: propose ${qCount(train, "propose")}, vibe ${qCount(train, "vibe")}, venue_fit ${qCount(train, "venue_fit")}`);
-  console.log(`gold questions: propose ${qCount(gold, "propose")}, vibe ${qCount(gold, "vibe")}, venue_fit ${qCount(gold, "venue_fit")}`);
+  await labelWith("Jev", JEV, scenarios, 6, askJev); // ponytail: 6 workers × ~0.7s ≈ 500 req/min, under Jev's 1,200/min
+  await labelWith("Gemini", GEMINI, scenarios, 8, askGeminiTeacher);
+  buildDatasets(scenarios);
   console.log(`this run: Gemini ${usage.geminiIn} in / ${usage.geminiOut} out tokens; Jev ${usage.jevIn} in / ${usage.jevOut} out tokens`);
-  console.log(`Jev input tokens across all records: ${jevInAll} ≈ $${((jevInAll / 1e6) * 0.042).toFixed(4)} at $0.042/Mtok`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
