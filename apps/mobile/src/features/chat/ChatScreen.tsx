@@ -12,13 +12,13 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import type { ChatMessage } from "@web/contract";
+import type { ChatMessage, ChatSuggestionKind } from "@web/contract";
 import { useToken } from "../../lib/api";
 import { displayName } from "../../lib/displayName";
 import { userIdFromToken } from "../../lib/session";
 import { Button, Callout, Txt, useTheme } from "../../ui";
-import { useEventSocket } from "../event-card/useEventSocket";
-import { getEventMessages, sendChatMessage } from "./chatApi";
+import { useChatSuggestions, useEventSocket } from "../event-card/useEventSocket";
+import { getEventMessages, runSuggestion, sendChatMessage, SUGGESTION_LABEL } from "./chatApi";
 
 type Props = {
   eventId: string;
@@ -52,6 +52,18 @@ export function ChatScreen({ eventId, isEnded = false, onBack }: Props) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  // #325: a suggested action per own message id, from `chat:suggestion` (sent only to me, never stored).
+  const [suggestions, setSuggestions] = useState<Record<string, ChatSuggestionKind | undefined>>({});
+  const dismiss = (messageId: string) => setSuggestions((s) => ({ ...s, [messageId]: undefined }));
+  const actOn = async (messageId: string, kind: ChatSuggestionKind) => {
+    dismiss(messageId);
+    const notice = await runSuggestion(eventId, kind);
+    if (notice) setError(notice);
+  };
+
+  useChatSuggestions((p) => {
+    if (p.event_id === eventId) setSuggestions((s) => ({ ...s, [p.message_id]: p.kind }));
+  });
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -208,6 +220,7 @@ export function ChatScreen({ eventId, isEnded = false, onBack }: Props) {
 
           {messages.map((m) => {
             const isMe = currentUserId ? m.user_id === currentUserId : false;
+            const suggestion = isMe ? suggestions[m.id] : undefined;
             return (
               <View
                 key={m.id}
@@ -246,6 +259,17 @@ export function ChatScreen({ eventId, isEnded = false, onBack }: Props) {
                     {m.body}
                   </Txt>
                 </View>
+                {suggestion ? (
+                  <View style={{ flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: t.spacing.xs }}>
+                    <Button
+                      label={SUGGESTION_LABEL[suggestion]}
+                      variant="outline"
+                      size="sm"
+                      onPress={() => void actOn(m.id, suggestion)}
+                    />
+                    <Button label="Dismiss" variant="ghost" size="sm" onPress={() => dismiss(m.id)} />
+                  </View>
+                ) : null}
               </View>
             );
           })}

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   chatMessageFindMany: vi.fn(),
   chatMessageCreate: vi.fn(),
   emitToUsers: vi.fn(),
+  askDecision: vi.fn(),
 }));
 
 vi.mock("../../lib/prisma", () => ({
@@ -27,7 +28,13 @@ vi.mock("../../realtime", () => ({
   emitToUsers: mocks.emitToUsers,
 }));
 
+vi.mock("../intelligence/decision", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../intelligence/decision")>()),
+  askDecision: mocks.askDecision,
+}));
+
 import { chatRouter } from "./router";
+import { chatIntentRequest } from "../intelligence/decision";
 import { signToken } from "../../lib/auth";
 
 const userId = "6f48fb35-1518-481d-ab60-cfd2dcc28acf";
@@ -76,6 +83,7 @@ beforeEach(() => {
   mocks.eventFindUnique.mockResolvedValue(makeEvent());
   mocks.participantFindMany.mockResolvedValue(participants);
   mocks.userFindUnique.mockResolvedValue({ id: userId, username: "ojas" });
+  mocks.askDecision.mockReturnValue(new Promise(() => {})); // the model never answers unless a test says so
 });
 
 const get = (query = "", token = signToken(userId)) =>
@@ -378,6 +386,60 @@ describe("chatRouter", () => {
       mocks.userFindUnique.mockResolvedValueOnce({ id: friendId, username: "riley" });
       expect((await post({ body: "Hi" }, signToken(friendId))).status).toBe(201);
       expect(mocks.emitToUsers).toHaveBeenCalledWith([userId], "event:message", { event_id: eventId });
+    });
+  });
+
+  // #325: after a message is saved, its intent is classified in the background and offered to the sender only.
+  describe("chat suggestions (#325)", () => {
+    const intent = (top: string, p: number) => ({
+      model: "jev-1.13.0",
+      answers: { intent: { type: "choice", choice: top, confidence: p, probabilities: { [top]: p, just_chatting: 1 - p } } },
+    });
+    const suggestionEmits = () => mocks.emitToUsers.mock.calls.filter((c) => c[1] === "chat:suggestion");
+    const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+    beforeEach(() => {
+      mocks.participantFindMany.mockResolvedValue(squadParticipants);
+      mocks.eventFindUnique.mockResolvedValue(makeEvent({ status: "voting", voteClosesAt: new Date(Date.now() + 60_000) }));
+      mocks.userFindUnique.mockResolvedValue({ id: friendId, username: "riley" });
+      mocks.chatMessageCreate.mockImplementation(async ({ data }) => ({ id: messageId2, ...data, createdAt: new Date() }));
+    });
+
+    it("sends the reply without waiting on the model", async () => {
+      // beforeEach's askDecision never settles.
+      const res = await post({ body: "ugh I can't make it" }, signToken(friendId));
+      expect(res.status).toBe(201);
+      expect(mocks.askDecision).toHaveBeenCalledWith(chatIntentRequest("ugh I can't make it"));
+      expect(suggestionEmits()).toEqual([]);
+    });
+
+    it("offers Pass to the sender only", async () => {
+      mocks.askDecision.mockResolvedValueOnce(intent("cant_make_it", 0.9));
+      expect((await post({ body: "ugh I can't make it" }, signToken(friendId))).status).toBe(201);
+      await vi.waitFor(() => expect(suggestionEmits()).toHaveLength(1));
+      expect(suggestionEmits()[0]).toEqual([
+        [friendId],
+        "chat:suggestion",
+        { event_id: eventId, message_id: messageId2, kind: "pass" },
+      ]);
+    });
+
+    it("offers nothing once the sender can no longer pass", async () => {
+      mocks.eventFindUnique.mockResolvedValue(makeEvent({ status: "chatted" }));
+      mocks.askDecision.mockResolvedValueOnce(intent("cant_make_it", 0.9));
+      expect((await post({ body: "ugh I can't make it" }, signToken(friendId))).status).toBe(201);
+      await settle();
+      expect(mocks.askDecision).toHaveBeenCalled();
+      expect(suggestionEmits()).toEqual([]);
+    });
+
+    it("does nothing but log when the decision call fails", async () => {
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      mocks.askDecision.mockRejectedValueOnce(new Error("Decision jev-1.13.0 503"));
+      expect((await post({ body: "ugh I can't make it" }, signToken(friendId))).status).toBe(201);
+      await vi.waitFor(() => expect(logged).toHaveBeenCalledWith("chat intent failed:", "Decision jev-1.13.0 503"));
+      expect(suggestionEmits()).toEqual([]);
+      logged.mockRestore();
     });
   });
 });

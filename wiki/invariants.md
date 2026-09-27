@@ -64,6 +64,14 @@ touches before you write code.
   validated IDs.
 - Decision input is plain words: no names, emails, calendar data or raw
   timestamps.
+- Chat intent (#325): after a chat message is saved, `askDecision` gets
+  `chatIntentRequest(text)`, which carries only that message (trimmed, max
+  300 chars) in `state`, as data under fixed instructions. It runs in the
+  background, never slows sending, and on failure does nothing. A
+  suggestion (`chat:suggestion`) goes only to the sender's own user id;
+  other members never learn a message was classified, and neither the
+  classification nor the suggestion is stored. Acting on it uses the
+  normal Pass / Change spot endpoints, so #210 and #214 still decide.
 - Yes/no questions are 2-option Choices with neutral keys `A`/`B`, never
   a Noul, because Laya's English Noul has label bias.
 - Thresholds use the answer's probability, not `confidence`; Laya and

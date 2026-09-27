@@ -726,6 +726,12 @@ deterministic fallback. A fine-tuned, self-hosted Laya in front of Jev is
 deferred to #274 (set `LAYA_URL` to turn it on). It makes three
 decisions: whether to propose to a group now, which feasible vibe to use
 (§5), and which venues fit the vibe (§8). Code computes every option it chooses from.
+It also reads each event-chat message's intent (#325: can't make it,
+running late, change spot, logistics, just chatting). When the top intent
+is at least 0.75 and actionable, only the sender is offered Pass (while
+they can still pass, #210), Change spot (while #214 allows it) or a
+running-late hint. It runs in the background, sees only that message's
+text, and nothing is stored.
 
 **Gemini, text only:** the vote blurbs and the card's `match_reason` (§8).
 It also writes the synthetic training scenarios (#235). It never makes a
@@ -851,6 +857,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-26 | **Event chat for squad hangouts (#212).** Squad hangouts (any squad invitee) get the existing chat (same messages, paging, `event:message` and `ChatScreen`) from creation: while voting, after confirmation, as `chatted`, and read-only after `ends_at`; `expired` closes it. Members are the creator and the squad, squad passers included. Direct invitees are never in a squad or mixed chat, as readers or posters: a poster's name reveals them to everyone in the room, and a direct invitee may only see themselves and the creator, so any room holding direct invitees next to squad members breaks §9. Direct-only events keep the `chatted` fallback exactly as before. One rule, `chatAudience()` on `eventAudience()`, feeds the routes, the socket recipients and the card's new `viewer.chat` (`open`/`read_only`/null), so the client never infers it (#217 shows "Open chat" from it). See §9 "Event chat". |
 | 2026-09-26 | **Decision models: Laya + Jev; Gemini writes text (#196, #227).** Decisions (propose gate, vibe, venue fit) go through `askDecision`: fine-tuned Laya (self-hosted) first, then Jev `jev-1.13.0`, then deterministic code. Gemini only writes blurbs and `match_reason`, and generates Laya's training scenarios; Jev labels them. `rankWithGemini` is removed (#231). Auto-proposals come back weekly (Mon 09:00 America/New_York) plus a "Find a hangout now" demo button (#232/#233), which replaces the close-friend star as the demo trigger. |
 | 2026-09-27 | **Laya deferred; scheduler ships on Jev (#196, #274).** We hit a GPU roadblock, so decisions run on Jev with the deterministic fallback. The training data (#235) and the format alignment (#256) stay. Fine-tuning, eval and hosting move to #274 (#236 and #237 closed). |
+| 2026-09-27 | **Chat intent suggestions (#325).** After a chat message is saved, `askDecision` classifies it in the background (`chatIntentRequest`: the message text only, capped at 300 chars). At ≥ 0.75 on `cant_make_it` or `change_spot` the sender alone gets `chat:suggestion` (`{ event_id, message_id, kind }`) and a chip that runs the existing Pass or Change spot action; `running_late` gets a hint chip; `logistics` and `just_chatting` get nothing. Sender-only because a direct invitee's Pass is a Ghost Pass. Nothing is stored; a failed call does nothing. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)
 
