@@ -25,11 +25,11 @@ describe("resolveManualSelection", () => {
       squadIds: ["first", "second"],
       memberIds: ["a", "b", "c", "d", "e"],
       participants: [
-        { userId: "a", inviteSource: "creator", sourceSquadIds: ["first", "second"] },
-        { userId: "b", inviteSource: "squad", sourceSquadIds: ["first"] },
-        { userId: "c", inviteSource: "squad", sourceSquadIds: ["first", "second"] },
-        { userId: "d", inviteSource: "squad", sourceSquadIds: ["second"] },
-        { userId: "e", inviteSource: "direct", sourceSquadIds: [] },
+        { userId: "a", inviteSource: "creator", sourceGroupIds: ["first", "second"] },
+        { userId: "b", inviteSource: "squad", sourceGroupIds: ["first"] },
+        { userId: "c", inviteSource: "squad", sourceGroupIds: ["first", "second"] },
+        { userId: "d", inviteSource: "squad", sourceGroupIds: ["second"] },
+        { userId: "e", inviteSource: "direct", sourceGroupIds: [] },
       ],
     });
   });

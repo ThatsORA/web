@@ -397,6 +397,33 @@ describe("createUserHangout", () => {
     expect(mocks.openVoting).toHaveBeenCalledWith("event-1");
   });
 
+  it("persists both selected squads and one participant per person with squad overlap winning", async () => {
+    const selection = {
+      squadIds: ["squad-1", "squad-2"], memberIds: IDS,
+      participants: [
+        { userId: IDS[0]!, inviteSource: "creator" as const, sourceGroupIds: ["squad-1", "squad-2"] },
+        { userId: IDS[1]!, inviteSource: "squad" as const, sourceGroupIds: ["squad-1", "squad-2"] },
+        { userId: IDS[2]!, inviteSource: "direct" as const, sourceGroupIds: [] },
+      ],
+    };
+    expect(await createUserHangout(IDS[0]!, [IDS[1]!, IDS[2]!], undefined, undefined, undefined, selection))
+      .toEqual({ eventId: "event-1" });
+    expect(mocks.eventCreate.mock.calls[0]![0].data).toMatchObject({
+      createdById: IDS[0], sourceGroupIds: ["squad-1", "squad-2"],
+      participants: { create: selection.participants.map((participant) => ({
+        ...participant, voteStatus: "invited",
+      })) },
+    });
+    expect(mocks.openVoting).toHaveBeenCalledWith("event-1");
+  });
+
+  it("does not create a duplicate open event for the same selected people", async () => {
+    mocks.eventFindFirst.mockResolvedValueOnce({ id: "existing" });
+    expect(await createUserHangout(IDS[0]!, [IDS[1]!, IDS[2]!])).toEqual({ error: "already_open" });
+    expect(mocks.eventCreate).not.toHaveBeenCalled();
+    expect(mocks.openVoting).not.toHaveBeenCalled();
+  });
+
   it("stores the curated match reason on the event", async () => {
     const curate = mocks.curateVenues.getMockImplementation()!;
     mocks.curateVenues.mockImplementationOnce(async (venues: RankedVenue[]) => ({ ...await curate(venues), matchReason: "Cozy pick" }));

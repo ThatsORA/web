@@ -7,7 +7,7 @@ type DirectFriendship = Pick<MatchingFriendship, "userLowId" | "userHighId" | "l
 export interface ManualParticipant {
   userId: string;
   inviteSource: InviteSource;
-  sourceSquadIds: string[];
+  sourceGroupIds: string[];
 }
 
 export type ManualSelection = {
@@ -15,6 +15,7 @@ export type ManualSelection = {
   participants: ManualParticipant[];
   memberIds: string[];
 } | { error: "invalid_squads" | "invalid_invitees" | "invalid_selection" };
+export type ResolvedManualSelection = Extract<ManualSelection, { memberIds: string[] }>;
 
 /** Selected squads bring every active member; direct picks must still satisfy the existing friend rule. */
 export function resolveManualSelection(
@@ -55,7 +56,7 @@ export function resolveManualSelection(
   const participants = memberIds.map((userId): ManualParticipant => ({
     userId,
     inviteSource: userId === callerId ? "creator" : sources.get(userId)!.size ? "squad" : "direct",
-    sourceSquadIds: [...sources.get(userId)!].sort(),
+    sourceGroupIds: [...sources.get(userId)!].sort(),
   }));
   return { squadIds: selectedSquadIds, memberIds, participants };
 }

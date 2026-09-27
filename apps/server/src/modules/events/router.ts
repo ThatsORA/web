@@ -7,6 +7,7 @@ import { EventCardPayload, EventsListResponse, Id, routes } from "@web/contract"
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { publicUserSelect } from "../auth/helpers";
+import { resolveManualSelection } from "../matching/manualSelection";
 import { assembleEventCard, canSeeEvent } from "./assembleEventCard";
 
 export const eventsRouter = Router();
@@ -17,33 +18,26 @@ eventsRouter.post(routes.events, requireAuth, express.json(), async (req, res) =
   if (!parsed.success) return res.status(400).json({ error: "bad_request" });
 
   const { invitee_ids, squad_ids, vibe_tag, earliest, latest } = parsed.data;
-  // #244 must land before mixed invitations can be stored without losing their privacy rules.
-  if (squad_ids?.length) return res.status(503).json({ error: "mixed_invites_unavailable" });
-
-  if (invitee_ids.includes(userId)) {
-    return res.status(400).json({ error: "invalid_invitees" });
+  const result = await withMatcherMutex(async () => {
+    const [squads, friendships] = await Promise.all([
+      squad_ids?.length ? prisma.explicitGroup.findMany({
+        where: { id: { in: squad_ids } }, include: { members: true },
+      }) : Promise.resolve([]),
+      invitee_ids.length ? prisma.friendship.findMany({
+        where: { OR: invitee_ids.map((invitee) => {
+          const [userLowId, userHighId] = userId < invitee ? [userId, invitee] : [invitee, userId];
+          return { userLowId, userHighId };
+        }) },
+      }) : Promise.resolve([]),
+    ]);
+    const selection = resolveManualSelection(userId, squad_ids ?? [], invitee_ids, squads, friendships);
+    if ("error" in selection) return selection;
+    return createUserHangout(userId, invitee_ids, vibe_tag, earliest, latest, selection);
+  });
+  if ("error" in result && ["invalid_squads", "invalid_invitees", "invalid_selection"].includes(result.error)) {
+    return res.status(400).json({ error: result.error });
   }
-
-  const friendships = await prisma.friendship.findMany({
-    where: {
-      OR: invitee_ids.map(invitee => {
-        const [low, high] = userId < invitee ? [userId, invitee] : [invitee, userId];
-        return { userLowId: low, userHighId: high };
-      })
-    }
-  });
-
-  const valid = invitee_ids.every(invitee => {
-    const [low, high] = userId < invitee ? [userId, invitee] : [invitee, userId];
-    const friendship = friendships.find(f => f.userLowId === low && f.userHighId === high);
-    if (!friendship) return false;
-    if ('status' in friendship && (friendship as any).status !== "accepted") return false;
-    return userId === low ? friendship.lowAddedHigh : friendship.highAddedLow;
-  });
-
-  if (!valid) return res.status(400).json({ error: "invalid_invitees" });
-
-  const result = await withMatcherMutex(() => createUserHangout(userId, invitee_ids, vibe_tag, earliest, latest));
+  if ("error" in result && result.error === "already_open") return res.status(409).json({ error: result.error });
   // 422 no_common_time: no shared free window. 422 no_venues: missing home location or too few places.
   if ("error" in result) return res.status(422).json({ error: result.error });
   const eventId = result.eventId;

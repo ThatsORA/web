@@ -9,6 +9,7 @@ import { scheduleDecisions } from "../intelligence/scheduleDecisions";
 import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
 import { openVoting } from "../voting/lifecycle";
 import { candidateGroups, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
+import type { ResolvedManualSelection } from "./manualSelection";
 import { classifySlot, earliestTimezone, feasibleSlots, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot } from "./timeMath";
 
 export { freeWindows, classifySlot } from "./timeMath";
@@ -279,8 +280,12 @@ export async function createUserHangout(
   vibeTag?: import("@web/contract").VibeTag,
   earliest?: string,
   latest?: string,
-): Promise<{ eventId: string } | { error: "no_common_time" | "no_venues" }> {
-  const memberIds = [...new Set([callerId, ...inviteeIds])].sort();
+  selection?: ResolvedManualSelection,
+): Promise<{ eventId: string } | { error: "no_common_time" | "no_venues" | "already_open" }> {
+  const memberIds = selection?.memberIds ?? [...new Set([callerId, ...inviteeIds])].sort();
+  const participants = selection?.participants ?? memberIds.map((userId) => ({
+    userId, inviteSource: userId === callerId ? "creator" as const : "direct" as const, sourceGroupIds: [],
+  }));
   const now = new Date();
 
   const [users, openEvents] = await Promise.all([
@@ -369,10 +374,15 @@ export async function createUserHangout(
     earliestTimezone(bestSlot.start, Object.values(timezones));
 
   const createdId = await prisma.$transaction(async (tx) => {
+    const duplicate = await tx.event.findFirst({
+      where: { groupKey, status: { in: ["voting", "confirmed"] } }, select: { id: true },
+    });
+    if (duplicate) return null;
     const event = await tx.event.create({
       data: {
         groupKey,
         createdById: callerId,
+        sourceGroupIds: selection?.squadIds ?? [],
         status: "voting",
         startsAt: bestSlot.start,
         endsAt: bestSlot.end,
@@ -382,7 +392,9 @@ export async function createUserHangout(
         backupVenues: unusedVenueSnapshots(rankedVenues, options),
         voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
         participants: {
-          create: memberIds.map((userId) => ({ userId, voteStatus: "invited" })),
+          create: participants.map(({ userId, inviteSource, sourceGroupIds }) => ({
+            userId, voteStatus: "invited", inviteSource, sourceGroupIds,
+          })),
         },
         options: { create: options.map(optionData) },
       },
@@ -391,6 +403,7 @@ export async function createUserHangout(
     return event.id;
   });
 
+  if (!createdId) return { error: "already_open" };
   await openVoting(createdId);
   return { eventId: createdId };
 }
