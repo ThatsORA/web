@@ -41,14 +41,15 @@ it("reads stored sources for mixed events and derives sources for legacy events"
   ]);
 });
 
-it("keeps only committed Mixer invitees after close and never opens their shared chat", () => {
+it("keeps only committed Mixer invitees after close and opens chat only for committed attendees", () => {
   const mixer = { isMixer: true, createdById: C, sourceGroupId: S1 };
   const invited = rows([C, D, E, O], { [C]: "confirmed", [D]: "voted", [E]: "invited", [O]: "ghost_passed" })
     .map((row) => invitedParticipant(mixer, row));
   expect(invited.map((row) => row.inviteSource)).toEqual(["direct", "direct", "direct", "direct"]);
   expect(eventAudience(invited, true)).toEqual([C, D, E, O]);
   expect(eventAudience(invited, false)).toEqual([C, D]);
-  expect(chatAudience("chatted", invited)).toEqual([]);
+  expect(chatAudience("voting", invited)).toEqual([]);
+  expect(chatAudience("chatted", invited)).toEqual([C, D]);
 });
 
 describe("passKind", () => {
@@ -194,18 +195,37 @@ describe("chatAudience / chatAccess (#212)", () => {
     expect(chatAudience("expired", squadRows)).toEqual([]);
   });
 
-  it("any other event only has the chatted fallback, where a Ghost Pass stays out", () => {
-    for (const status of ["voting", "confirmed", "expired", "completed"] as const) {
+  it("direct hangouts have no chat during voting, but grant chat to attending members on confirmed/completed/chatted events", () => {
+    for (const status of ["voting", "expired"] as const) {
       expect(chatAudience(status, directRows)).toEqual([]);
     }
-    expect(chatAudience("chatted", directRows)).toEqual([C, E]);
+    for (const status of ["confirmed", "completed", "chatted"] as const) {
+      expect(chatAudience(status, directRows)).toEqual([C, E]);
+    }
     const automated = invited({ createdById: null, sourceGroupId: null }, rows([D, E, O], { [D]: "ghost_passed" }));
     expect(chatAudience("chatted", automated)).toEqual([E, O]);
+    expect(chatAudience("confirmed", automated)).toEqual([E, O]);
   });
 
-  it("keeps every direct invitee out of a mixed hangout's chat, whether they voted or ghost passed", () => {
-    for (const status of ["voting", "confirmed", "chatted", "completed"] as const) {
-      expect(chatAudience(status, mixedRows)).toEqual([C, S, T]);
+  it("keeps direct invitees out of mixed chat during voting, but includes attending direct invitees once confirmed", () => {
+    expect(chatAudience("voting", mixedRows)).toEqual([C, S, T]);
+    for (const status of ["confirmed", "chatted", "completed"] as const) {
+      expect(chatAudience(status, mixedRows)).toEqual([C, S, T, D]);
+    }
+  });
+
+  it("mixer events have no chat during voting, but grant chat to confirmed attendees post-close", () => {
+    const mixerRows: InvitedParticipant[] = [
+      { userId: "m1", voteStatus: "confirmed", isMixer: true, inviteSource: "direct" },
+      { userId: "m2", voteStatus: "voted", isMixer: true, inviteSource: "direct" },
+      { userId: "m3", voteStatus: "ghost_passed", isMixer: true, inviteSource: "direct" },
+      { userId: "m4", voteStatus: "invited", isMixer: true, inviteSource: "direct" },
+    ];
+    for (const status of ["voting", "expired"] as const) {
+      expect(chatAudience(status, mixerRows)).toEqual([]);
+    }
+    for (const status of ["confirmed", "completed", "chatted"] as const) {
+      expect(chatAudience(status, mixerRows)).toEqual(["m1", "m2"]);
     }
   });
 
@@ -234,11 +254,23 @@ describe("chatAudience / chatAccess (#212)", () => {
     expect(chatAccess({ status: "voting", endsAt }, squadRows, S, before)).toBe("open");
     expect(chatAccess({ status: "confirmed", endsAt }, squadRows, O, before)).toBe("open");
     expect(chatAccess({ status: "completed", endsAt }, squadRows, O, endsAt)).toBe("read_only");
+    expect(chatAccess({ status: "confirmed", endsAt }, directRows, E, before)).toBe("open");
+    expect(chatAccess({ status: "confirmed", endsAt }, directRows, E, endsAt)).toBe("read_only");
+    expect(chatAccess({ status: "confirmed", endsAt }, directRows, D, before)).toBeNull(); // Ghost Pass
     expect(chatAccess({ status: "chatted", endsAt }, directRows, E, endsAt)).toBe("read_only");
     expect(chatAccess({ status: "chatted", endsAt }, directRows, D, before)).toBeNull(); // Ghost Pass
-    expect(chatAccess({ status: "voting", endsAt }, mixedRows, D, before)).toBeNull(); // direct invitee in a squad chat
-    expect(chatAccess({ status: "voting", endsAt }, directRows, E, before)).toBeNull(); // no chat yet
+    expect(chatAccess({ status: "voting", endsAt }, mixedRows, D, before)).toBeNull(); // direct invitee in a squad chat during voting
+    expect(chatAccess({ status: "confirmed", endsAt }, mixedRows, D, before)).toBe("open"); // direct invitee in confirmed mixed chat
+    expect(chatAccess({ status: "voting", endsAt }, directRows, E, before)).toBeNull(); // no chat yet during voting
     expect(chatAccess({ status: "voting", endsAt }, squadRows, "stranger", before)).toBeNull();
+
+    const mixerRows: InvitedParticipant[] = [
+      { userId: "m1", voteStatus: "confirmed", isMixer: true, inviteSource: "direct" },
+      { userId: "m3", voteStatus: "ghost_passed", isMixer: true, inviteSource: "direct" },
+    ];
+    expect(chatAccess({ status: "confirmed", endsAt }, mixerRows, "m1", before)).toBe("open");
+    expect(chatAccess({ status: "confirmed", endsAt }, mixerRows, "m1", endsAt)).toBe("read_only");
+    expect(chatAccess({ status: "confirmed", endsAt }, mixerRows, "m3", before)).toBeNull();
   });
 
   it("grants open chat access during voting and confirmation on squad hangouts so members can discuss plans and nominate new invitees", () => {
