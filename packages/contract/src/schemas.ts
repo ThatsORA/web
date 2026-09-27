@@ -207,6 +207,9 @@ export type SquadsResponse = z.infer<typeof SquadsResponse>;
 
 // ---------- favorites (Andy) ----------
 export const PutFavoritesRequest = z.object({ categories: z.array(z.string()).max(20) });
+export const GetFavoritesResponse = z.object({ categories: z.array(z.string()) });
+export type GetFavoritesResponse = z.infer<typeof GetFavoritesResponse>;
+export type PutFavoritesRequest = z.infer<typeof PutFavoritesRequest>;
 
 // ---------- venues / events ----------
 /** Riley's matcher output → Ojas's curateVenues() input. */
