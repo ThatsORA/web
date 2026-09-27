@@ -25,6 +25,7 @@ export function progress(statuses: readonly VoteStatus[]) {
 }
 
 export interface ResolveInput {
+  isMixer?: boolean;
   participants: readonly { userId: string; voteStatus: VoteStatus }[];
   votes: readonly { userId: string; optionId: string }[];
   options: readonly (EventOption & { id: string })[];
@@ -37,11 +38,17 @@ export type Resolution =
   | { status: "chatted" }
   | { status: "confirmed"; winner: EventOption & { id: string }; backups: EventOption[]; wasTiebreaker?: boolean };
 
-export function resolveEvent({ participants, votes, options, unusedVenues }: ResolveInput): Resolution {
+export function resolveEvent({ isMixer, participants, votes, options, unusedVenues }: ResolveInput): Resolution {
   const remaining = new Set(participants.filter((p) => p.voteStatus !== "ghost_passed").map((p) => p.userId));
+  const committed = new Set(participants.filter((p) => p.voteStatus === "voted" || p.voteStatus === "confirmed").map((p) => p.userId));
+  // On Mixers a venue vote is also an explicit commitment to attend. Invited people who did not
+  // commit at close do not count, even though they have not Ghost Passed.
+  if (isMixer && votes.filter((vote) => committed.has(vote.userId)).length < Math.ceil(participants.length * 0.75)) {
+    return { status: "expired" };
+  }
   if (remaining.size < 2) return { status: "expired" };
 
-  const counted = votes.filter((v) => remaining.has(v.userId));
+  const counted = votes.filter((v) => remaining.has(v.userId) && (!isMixer || committed.has(v.userId)));
   if (counted.length < 2) return { status: "expired" };
 
   const tally = new Map<string, number>();

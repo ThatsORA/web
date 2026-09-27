@@ -9,6 +9,7 @@ import type { EventChatAccess, EventStatus, EventViewer, InviteSource, PassKind,
 import { prisma } from "../../lib/prisma";
 
 export interface EventInvites {
+  isMixer?: boolean | null;
   createdById: string | null;
   sourceGroupId: string | null;
   sourceGroupIds?: readonly string[];
@@ -20,6 +21,7 @@ export interface EventInvites {
  * so everyone in them is direct.
  */
 export function inviteSource(event: EventInvites, userId: string, participant?: Pick<ParticipantRow, "inviteSource">): InviteSource {
+  if (event.isMixer) return "direct";
   if (userId === event.createdById) return "creator";
   if (participant?.inviteSource) return participant.inviteSource === "creator" ? "direct" : participant.inviteSource;
   // A mixed event missing one participant's provenance must not grant that person squad access.
@@ -37,6 +39,7 @@ function sourceSquads(event: EventInvites, participant: ParticipantRow): readonl
 export function invitedParticipant<T extends ParticipantRow>(event: EventInvites, participant: T): T & InvitedParticipant {
   return {
     ...participant,
+    isMixer: event.isMixer === true,
     inviteSource: inviteSource(event, participant.userId, participant),
     sourceGroupIds: sourceSquads(event, participant),
   };
@@ -48,6 +51,7 @@ export const passKind = (source: InviteSource): PassKind => (source === "direct"
 export interface ParticipantRow {
   userId: string;
   voteStatus: VoteStatus;
+  isMixer?: boolean;
   inviteSource?: InviteSource | null;
   sourceGroupIds?: readonly string[];
 }
@@ -67,6 +71,7 @@ export interface InvitedParticipant extends ParticipantRow {
  * selected squad brought in) keeps it, chat included.
  */
 export function keepsAccess(row: InvitedParticipant, votingOpen: boolean): boolean {
+  if (row.isMixer && !votingOpen) return row.voteStatus === "voted" || row.voteStatus === "confirmed";
   return votingOpen || !hasPassed(row) || passKind(row.inviteSource) === "visible";
 }
 
@@ -87,6 +92,7 @@ const SQUAD_CHAT_STATUSES: readonly EventStatus[] = ["voting", "confirmed", "cha
  * Chat always uses the after-close rule, so a Ghost Pass never enters it, even while voting is open.
  */
 export function chatAudience(status: EventStatus, rows: readonly InvitedParticipant[]): string[] {
+  if (rows.some((row) => row.isMixer)) return [];
   const squadRows = rows.filter((row) => row.inviteSource === "squad");
   if (squadRows.length) {
     if (!SQUAD_CHAT_STATUSES.includes(status)) return [];
@@ -118,7 +124,7 @@ export async function eventParticipants(eventId: string): Promise<InvitedPartici
     where: { eventId },
     select: {
       userId: true, voteStatus: true, inviteSource: true, sourceGroupIds: true,
-      event: { select: { createdById: true, sourceGroupId: true, sourceGroupIds: true } },
+      event: { select: { isMixer: true, createdById: true, sourceGroupId: true, sourceGroupIds: true } },
     },
   });
   return rows.map(({ event, ...p }) => invitedParticipant(event, p));
@@ -149,15 +155,15 @@ export function viewerScope(
   const me = event.participants.find((p) => p.userId === viewerId);
   if (!me) throw new Error("Event requested by non-participant");
   const mySource = inviteSource(event, viewerId, me);
-  const fullRoster = mySource === "creator";
+  const fullRoster = !event.isMixer && mySource === "creator";
   const mySquads = new Set(sourceSquads(event, me));
   const rows = event.participants.map((p) => ({ ...p, inviteSource: inviteSource(event, p.userId, p) }));
-  const visible = rows.filter((p) =>
-    p.userId === viewerId ||
-    fullRoster ||
-    p.inviteSource === "creator" ||
-    (p.inviteSource === "squad" && mySource === "squad" && sourceSquads(event, p).some((id) => mySquads.has(id))),
-  );
+  const visible = rows.filter((p) => {
+    if (p.userId === viewerId) return true;
+    if (event.isMixer) return false;
+    return fullRoster || p.inviteSource === "creator" ||
+      (p.inviteSource === "squad" && mySource === "squad" && sourceSquads(event, p).some((id) => mySquads.has(id)));
+  });
   return {
     viewer: { invite_source: mySource, pass_kind: passKind(mySource), full_roster: fullRoster },
     people: visible.map((p) => ({

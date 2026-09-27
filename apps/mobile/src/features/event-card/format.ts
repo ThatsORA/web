@@ -41,7 +41,7 @@ export const slotLabel = (card: Pick<EventCardPayload, "starts_at" | "ends_at" |
   `${timeLabel(card)} · ${vibeLabel(card.vibe_tag)}`;
 
 /** "2 of 3 responded". A ghost pass counts as responded (invariants: Privacy). */
-export const progressLabel = ({ responded, total }: EventCardPayload["progress"]) =>
+export const progressLabel = ({ responded, total }: NonNullable<EventCardPayload["progress"]>) =>
   `${responded} of ${total} responded`;
 
 /** "Swapped to Sergio's · max 11 min" */

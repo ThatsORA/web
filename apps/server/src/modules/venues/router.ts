@@ -40,7 +40,7 @@ async function handleVenueSwap(req: Request, res: Response, intent: "report_clos
     });
     if (!event) return { kind: "not_found" as const };
     const caller = event.participants.find((participant) => participant.userId === userId);
-    if (!caller || (intent === "change_spot" && caller.voteStatus !== "confirmed")) {
+    if (!caller || ((intent === "change_spot" || event.isMixer) && caller.voteStatus !== "confirmed")) {
       return { kind: "forbidden" as const };
     }
 
@@ -62,7 +62,7 @@ async function handleVenueSwap(req: Request, res: Response, intent: "report_clos
       kind: "updated" as const,
       transition: decision.kind,
       participantIds: event.participants
-        .filter((participant) => intent === "report_closed" || participant.voteStatus === "confirmed")
+        .filter((participant) => (intent === "report_closed" && !event.isMixer) || participant.voteStatus === "confirmed")
         .map((participant) => participant.userId),
     };
   });

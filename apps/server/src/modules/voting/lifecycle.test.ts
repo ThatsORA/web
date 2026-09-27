@@ -33,7 +33,7 @@ vi.mock("../../realtime", () => ({
 import { afterResponse, closeVoting, openVoting, sweepVoting } from "./lifecycle";
 
 // Participant rows as eventParticipants() reads them: invite source comes from the event (#206).
-const inEvent = (event: { createdById: string | null; sourceGroupId: string | null }, rows: { userId: string; voteStatus: string }[]) =>
+const inEvent = (event: { createdById: string | null; sourceGroupId: string | null; isMixer?: boolean }, rows: { userId: string; voteStatus: string }[]) =>
   rows.map((row) => ({ ...row, event }));
 
 beforeEach(() => vi.resetAllMocks());
@@ -237,5 +237,62 @@ describe("pass lifecycle (#210)", () => {
     expect(mocks.emitToUsers).toHaveBeenCalledOnce();
     expect(mocks.emitToUsers).toHaveBeenCalledWith([creator, direct, ghost], "event:progress", { event_id: evt, responded: 2, total: 3 });
     expect(mocks.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("Mixer lifecycle (#220)", () => {
+  const eventId = "99999999-9999-4999-8999-999999999999";
+  const optionId = "88888888-8888-4888-8888-888888888888";
+  const source = { createdById: null, sourceGroupId: null, isMixer: true };
+  const option = {
+    id: optionId, rank: 1, placeId: "p1", name: "Venue", lat: 25.7, lng: -80.3,
+    primaryType: "restaurant", priceLevel: 2, rating: 4.5, userRatingCount: 100,
+    travelMinutes: {}, maxTravelMin: 15, routeScore: 10, factsLine: "facts", aiBlurb: null,
+  };
+  const rows = (statuses: string[]) => inEvent(source, statuses.map((voteStatus, i) => ({ userId: `u${i}`, voteStatus })));
+  const closing = (statuses: string[]) => {
+    mocks.participantFindMany.mockResolvedValue(rows(statuses));
+    mocks.findUnique.mockResolvedValue({
+      id: eventId, isMixer: true, status: "voting", options: [option],
+      votes: statuses.flatMap((status, i) => status === "voted" ? [{ userId: `u${i}`, optionId }] : []),
+      backupVenues: [],
+    });
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    mocks.$transaction.mockImplementation(async (cb: (tx: any) => Promise<any>) => cb({
+      event: { updateMany }, eventParticipant: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    }));
+    return updateMany;
+  };
+
+  it("emits no response total and waits for the deadline while an invitee has not responded", async () => {
+    mocks.participantFindMany.mockResolvedValue(rows(["voted", "voted", "ghost_passed", "invited"]));
+    await afterResponse(eventId);
+    expect(mocks.emitToUsers).toHaveBeenCalledWith(["u0", "u1", "u2", "u3"], "event:progress", { event_id: eventId });
+    expect(mocks.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("expires below quorum at close and sends no confirmed push", async () => {
+    const updateMany = closing(["voted", "voted", "ghost_passed", "invited"]);
+    await closeVoting(eventId);
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "expired" }) }));
+    expect(mocks.emitToUsers).toHaveBeenCalledWith(["u0", "u1", "u2", "u3"], "event:resolved", { event_id: eventId, status: "expired" });
+    expect(mocks.pushEventResolved).not.toHaveBeenCalled();
+  });
+
+  it("expires an unanswered Mixer when the deadline sweep runs", async () => {
+    const updateMany = closing(["voted", "voted", "invited", "invited"]);
+    mocks.findMany.mockResolvedValueOnce([{ id: eventId }]).mockResolvedValueOnce([]);
+    await sweepVoting(new Date());
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "expired" }) }));
+    expect(mocks.pushEventResolved).not.toHaveBeenCalled();
+  });
+
+  it("confirms with quorum and notifies only committed attendees", async () => {
+    const updateMany = closing(["voted", "voted", "voted", "ghost_passed"]);
+    mocks.pushEventResolved.mockResolvedValue(undefined);
+    await closeVoting(eventId);
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "confirmed" }) }));
+    expect(mocks.emitToUsers).toHaveBeenCalledWith(["u0", "u1", "u2"], "event:resolved", { event_id: eventId, status: "confirmed" });
+    expect(mocks.pushEventResolved).toHaveBeenCalledWith(["u0", "u1", "u2"], eventId, "confirmed");
   });
 });

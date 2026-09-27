@@ -247,6 +247,7 @@ model UserFavorite {
 
 model Event {
   id            String      @id @default(uuid()) @map("_id")
+  isMixer       Boolean?    @default(false) @map("is_mixer") // null on legacy MongoDB documents
   groupKey      String      @map("group_key") // sorted member ids joined
   sourceGroupId String?     @map("source_group_id")
   sourceGroupIds String[]    @default([]) @map("source_group_ids") // selected squads in a mixed hangout

@@ -320,6 +320,7 @@ export type EventViewer = z.infer<typeof EventViewer>;
  */
 export const EventCardPayload = z.object({
   created_by: PublicUser.nullable().optional(), // the human creator; null on automated events
+  is_mixer: z.boolean().optional(), // absent on older cards; Mixer invitations never disclose group size
   id: Id,
   status: EventStatus,
   starts_at: Instant,
@@ -330,7 +331,7 @@ export const EventCardPayload = z.object({
   viewer: EventViewer,
   participants: z.array(EventParticipantView), // only people the caller may see, the caller included
   options: z.array(EventOption), // the 3 choices while voting
-  progress: z.object({ responded: z.number().int(), total: z.number().int() }),
+  progress: z.object({ responded: z.number().int(), total: z.number().int() }).nullable(),
   my_status: VoteStatus,
   my_option_id: Id.nullable(), // only the caller's own vote, never anyone else's
   vote_closes_at: Instant,
