@@ -1,0 +1,127 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { env } from "../../env";
+import { askDecision, parseDecision, proposeQuestion, venueFitQuestion, vibeQuestion } from "./decision";
+
+const originalEnv = {
+  DEMO_MODE: env.DEMO_MODE,
+  JEV_API_KEY: env.JEV_API_KEY,
+  LAYA_URL: env.LAYA_URL,
+  LAYA_API_KEY: env.LAYA_API_KEY,
+  DECISION_TIMEOUT_MS: env.DECISION_TIMEOUT_MS,
+};
+
+const questions = { gate: proposeQuestion(["4 friends", "last hangout was 3 weeks ago"]) };
+const answer = (model: string, a = 0.8) => ({
+  model,
+  answers: { gate: { type: "choice", choice: a >= 0.5 ? "A" : "B", confidence: 0.6, probabilities: { A: a, B: 1 - a } } },
+  usage: { input_tokens: 100, output_tokens: 10 },
+});
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+
+describe("parseDecision", () => {
+  it("accepts a valid choice answer", () => {
+    expect(parseDecision(answer("jev-1.13.0"), questions).answers.gate!.probabilities.A).toBe(0.8);
+  });
+
+  it("rejects malformed replies", () => {
+    expect(() => parseDecision({ model: "x" }, questions)).toThrow();
+    expect(() => parseDecision({ model: "x", answers: {} }, questions)).toThrow(); // missing answer
+    const offMenu = answer("x");
+    offMenu.answers.gate.choice = "C";
+    expect(() => parseDecision(offMenu, questions)).toThrow();
+    expect(() => parseDecision({ model: "x", answers: { gate: { type: "noul", noul: 0.9 } } }, questions)).toThrow();
+  });
+});
+
+describe("askDecision", () => {
+  const fetchMock = vi.fn<(url: string | URL, init?: RequestInit) => Promise<Response>>();
+
+  beforeEach(() => {
+    env.DEMO_MODE = false;
+    env.JEV_API_KEY = "jev-key";
+    env.LAYA_URL = "http://laya.test";
+    env.LAYA_API_KEY = "laya-key";
+    env.DECISION_TIMEOUT_MS = 50;
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => {
+    Object.assign(env, originalEnv);
+    vi.unstubAllGlobals();
+  });
+
+  it("uses Laya when it answers", async () => {
+    fetchMock.mockResolvedValueOnce(json(answer("laya")));
+    expect((await askDecision("hangout scheduler", questions)).model).toBe("laya");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("http://laya.test/v1/systemone");
+    expect((init!.headers as Record<string, string>).Authorization).toBe("Bearer laya-key");
+    expect(JSON.parse(init!.body as string)).toEqual({ state: "hangout scheduler", model: "laya", questions });
+  });
+
+  it("falls back to Jev when Laya errors or replies malformed", async () => {
+    fetchMock.mockResolvedValueOnce(json({ error: "down" }, 503)).mockResolvedValueOnce(json(answer("jev-1.13.0")));
+    expect((await askDecision("s", questions)).model).toBe("jev-1.13.0");
+    fetchMock.mockResolvedValueOnce(json({ nope: true })).mockResolvedValueOnce(json(answer("jev-1.13.0")));
+    expect((await askDecision("s", questions)).model).toBe("jev-1.13.0");
+    const [url, init] = fetchMock.mock.calls[3]!;
+    expect(url).toBe("https://api.typesafe.ai/v1/systemone");
+    expect((init!.headers as Record<string, string>).Authorization).toBe("Bearer jev-key");
+    expect(JSON.parse(init!.body as string).model).toBe("jev-1.13.0");
+  });
+
+  it("falls back to Jev when Laya times out", async () => {
+    fetchMock
+      .mockImplementationOnce((_url, init) => new Promise((_, reject) => init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason))))
+      .mockResolvedValueOnce(json(answer("jev-1.13.0")));
+    expect((await askDecision("s", questions)).model).toBe("jev-1.13.0");
+  });
+
+  it("goes straight to Jev when LAYA_URL is unset", async () => {
+    env.LAYA_URL = "";
+    fetchMock.mockResolvedValueOnce(json(answer("jev-1.13.0")));
+    await askDecision("s", questions);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]![0]).toBe("https://api.typesafe.ai/v1/systemone");
+  });
+
+  it("throws when both providers fail", async () => {
+    fetchMock.mockResolvedValue(json({}, 500));
+    await expect(askDecision("s", questions)).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws without calling out when no provider is configured", async () => {
+    env.LAYA_URL = "";
+    env.JEV_API_KEY = "";
+    await expect(askDecision("s", questions)).rejects.toThrow("no provider configured");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("question builders", () => {
+  it("proposeQuestion is a neutral A/B choice carrying the facts", () => {
+    const q = proposeQuestion(["3 friends"]);
+    expect(q.type).toBe("choice");
+    expect(Object.keys(q.criteria)).toEqual(["A", "B"]);
+    expect(q.criteria.A).toMatch(/yes/i);
+    expect(q.instructions).toMatchObject({ facts: ["3 friends"] });
+  });
+
+  it("vibeQuestion offers only the feasible vibes, each described", () => {
+    const q = vibeQuestion(["Friday evening"], ["dinner", "night_out"]);
+    expect(Object.keys(q.criteria)).toEqual(["dinner", "night_out"]);
+    expect(Object.values(q.criteria).every((d) => d.length > 10)).toBe(true);
+  });
+
+  it("venueFitQuestion describes the venue in plain words", () => {
+    const q = venueFitQuestion({ name: "Blue Cup", primary_type: "coffee_shop", price_level: 1, rating: 4.62 }, "quick_coffee");
+    expect(Object.keys(q.criteria)).toEqual(["A", "B"]);
+    expect(q.instructions).toMatchObject({
+      venue: ["Name: Blue Cup", "Type: coffee shop", "Price: $ out of $$$$", "Rating: 4.6 out of 5"],
+    });
+    const bare = venueFitQuestion({ name: "X", primary_type: null, price_level: null, rating: null }, "dinner");
+    expect(bare.instructions).toMatchObject({ venue: ["Name: X"] });
+  });
+});
