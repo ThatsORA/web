@@ -442,16 +442,17 @@ The hard limits apply first: one open proposal per group, and the
 `COOLDOWN_HOURS` (48) cooldown.
 
 **Decision gate + vibe (#231).** One `askDecision` call (Laya, then Jev)
-covers the shortlist. Each candidate gets two questions in plain words
-(size, "Fri 7:00pm", "last hangout: over 2 weeks ago", shared favorites;
-no names, no raw timestamps):
-- `propose_<i>`: a 2-option Choice, `A` = suggest a hangout now, `B` = not
+per shortlisted candidate, in parallel, built by `groupRequest` in the same
+format as Laya's training data (#235). The questions carry plain-word facts
+(size, "Fri 7:00pm", "Last hangout: 3 weeks ago", shared favorites; no
+names, no raw timestamps):
+- `propose`: a 2-option Choice, `A` = suggest a hangout now, `B` = not
   now. Keep the candidate when P(`A`) ≥ 0.6.
-- `vibe_<i>`: a Choice over that window's feasible vibes only; use the
-  chosen vibe's slot.
+- `vibe` (only when more than one vibe is feasible): a Choice over that
+  window's feasible vibes; use the chosen vibe's slot.
 
 A forced run (the demo button) skips the gate but still lets the model
-pick the vibe. If the decision call fails, only the top-ranked candidate
+pick the vibe. If any decision call fails, only the top-ranked candidate
 is proposed, with the priority vibe. `rankWithGemini` is removed;
 `match_reason` now comes from §8.
 
@@ -514,8 +515,9 @@ belongs to an open event whose slot overlaps.
 - Context: the vibe tag, the slot's local time, and counts of the group's
   favorite categories.
 
-**Fit filter (#230):** one `askDecision` call with a `venueFitQuestion`
-per venue, a 2-option Choice (`A` fits the vibe / `B` doesn't) that sees
+**Fit filter (#230):** one `askDecision` call per venue, in parallel,
+built by `venueFitRequest` in the Laya training format (#235): `venue_fit`,
+a 2-option Choice (`A` fits the vibe / `B` doesn't) that sees
 only the name, primary type and review snippets. It catches reviews that
 contradict the vibe, for example a steakhouse tagged casual. Code keeps
 the venues where P(`A`) ≥ 0.5, takes the top 3 by `route_score`, and tops
@@ -526,7 +528,7 @@ the 3 blurbs and the card's `match_reason` (90 characters or fewer each),
 using only facts from the input. The place IDs must match the 3 chosen
 venues.
 
-**Fallback:** if the decision call fails, use the top 3 by `route_score`.
+**Fallback:** if any decision call fails, use the top 3 by `route_score`.
 If Gemini fails or misses `GEMINI_TIMEOUT_MS` (8 seconds), `ai_blurb` and
 `match_reason` are null. The card always shows the deterministic
 `facts_line`, so it never looks broken. Both callers (the matcher and

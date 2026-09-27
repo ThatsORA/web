@@ -1,5 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildCase, csvRow, isGold, toRecord, type Scenario } from "./decision-data";
+
+const jsonl = <T>(file: string): T[] =>
+  readFileSync(join(import.meta.dirname, "decision-data", file), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as T);
 
 const group: Scenario = {
   id: "g00001",
@@ -29,6 +34,16 @@ describe("decision-data", () => {
       propose: { label: "A", probabilities: { A: 0.9, B: 0.1 } },
       vibe: { label: "dinner", probabilities: { dinner: 0.7, night_out: 0.3 } },
     });
+  });
+
+  it("rebuilds every committed record byte-for-byte with the shared runtime builders", () => {
+    const scenarios = new Map(jsonl<Scenario>("scenarios.jsonl").map((sc) => [sc.id, sc]));
+    const rows = [...jsonl<{ id: string; state: string; questions: string }>("train.jsonl"), ...jsonl<{ id: string; state: string; questions: string }>("gold-jev.jsonl")];
+    expect(rows.length).toBeGreaterThan(2000);
+    for (const row of rows) {
+      const c = buildCase(scenarios.get(row.id)!);
+      expect([row.id, JSON.stringify(c.state), JSON.stringify(c.questions)]).toEqual([row.id, row.state, row.questions]);
+    }
   });
 
   it("holds out every 15th scenario per kind, capped at 75", () => {

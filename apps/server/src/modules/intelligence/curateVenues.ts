@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { CurateContext, EventOption, RankedVenue } from "@web/contract";
 import { env } from "../../env";
 import { withFixture } from "../../lib/demoMode";
-import { askDecision, venueFitQuestion } from "./decision";
+import { askDecision, venueFitRequest } from "./decision";
 
 const PRICE = ["", "$", "$$", "$$$", "$$$$"];
 const GEMINI_MODEL = "gemini-3.8-flash";
@@ -146,11 +146,9 @@ export async function curateVenues(venues: RankedVenue[], ctx: CurateContext): P
   let picks = top.slice(0, 3);
   let decided = false;
   try {
-    const res = await askDecision(
-      { venues: top.map((v, i) => ({ name: v.name, primary_type: v.primary_type, reviews: reviews[i] })) },
-      Object.fromEntries(top.map((v, i) => [`fit_${i}`, venueFitQuestion(v, ctx.vibe_tag)])),
-    );
-    picks = pickVenues(top, top.map((_, i) => res.answers[`fit_${i}`]!.probabilities.A!));
+    // One request per venue, in the Laya training format; any failure → keep the top 3.
+    const replies = await Promise.all(top.map((v, i) => askDecision(venueFitRequest({ ...v, reviews: reviews[i]! }, ctx.vibe_tag))));
+    picks = pickVenues(top, replies.map((r) => r.answers.venue_fit!.probabilities.A!));
     decided = true;
   } catch {
     // keep the top 3 by route_score

@@ -120,8 +120,8 @@ function resetData() {
 const declineWithVibe = {
   model: "jev-1.13.0",
   answers: {
-    propose_0: { type: "choice", choice: "B", confidence: 0.9, probabilities: { A: 0.1, B: 0.9 } },
-    vibe_0: { type: "choice", choice: "casual_hangout", confidence: 0.9, probabilities: { casual_hangout: 0.8, dinner: 0.2 } },
+    propose: { type: "choice", choice: "B", confidence: 0.9, probabilities: { A: 0.1, B: 0.9 } },
+    vibe: { type: "choice", choice: "casual_hangout", confidence: 0.9, probabilities: { casual_hangout: 0.8, dinner: 0.2 } },
   },
 };
 
