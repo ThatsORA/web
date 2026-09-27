@@ -60,6 +60,7 @@ export function mixerCandidates(
           memberIds: ids,
           memberTimezones: Object.fromEntries(ids.map((id) => [id, zones.get(id)!])),
           sourceGroupId: null,
+          isMixer: true,
         },
         score,
       });

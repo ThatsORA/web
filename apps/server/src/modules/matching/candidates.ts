@@ -15,6 +15,7 @@ export interface CandidateGroup {
   memberIds: string[];
   memberTimezones: Record<string, string>;
   sourceGroupId: string | null;
+  isMixer?: boolean;
 }
 export interface GroupSlot {
   group: CandidateGroup;
