@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { candidateGroups, groupKey, onCooldown, rankCandidates, selectCandidates, selectRankedCandidates, type MatchingFriendship, type MatchingEvent, type GroupSlot } from "./candidates";
+import { candidateGroups, groupKey, onCooldown, onePairPerPerson, rankCandidates, selectCandidates, selectRankedCandidates, type MatchingFriendship, type MatchingEvent, type GroupSlot } from "./candidates";
 const now = new Date("2026-09-26T12:00:00Z");
 const hour = 3_600_000;
 const at = (hours: number) => new Date(now.getTime() + hours * hour);
@@ -159,5 +159,23 @@ describe("greedy selection", () => {
   it("suppresses a pair while either member has an overlapping open group event", () => {
     const pair = candidate(["a", "b"]);
     expect(selectCandidates([pair], [edge("a", "b")], [event(["b", "c", "d"], "voting", 25, 27)], now)).toEqual([]);
+  });
+});
+
+describe("close-friend 1-on-1s (#404)", () => {
+  const keys = (picks: GroupSlot[]) => onePairPerPerson(picks).map(p => p.group.groupKey);
+
+  it("gives each person at most one new 1-on-1 per run, keeping rank order", () => {
+    expect(keys([candidate(["me", "a"]), candidate(["me", "b"], 40), candidate(["a", "b"], 60), candidate(["c", "d"])]))
+      .toEqual(["a,me", "c,d"]);
+  });
+
+  it("drops a pair whose member was already picked for a squad or Mixer, but never drops the group", () => {
+    expect(keys([candidate(["me", "a", "b"]), candidate(["me", "a"], 40), candidate(["b", "c"], 60), candidate(["c", "d", "e"], 80)]))
+      .toEqual(["a,b,me", "c,d,e"]);
+  });
+
+  it("lets two groups that share a person both through (the squad rules already cover them)", () => {
+    expect(keys([candidate(["a", "b", "c"]), candidate(["c", "d", "e"], 40)])).toEqual(["a,b,c", "c,d,e"]);
   });
 });

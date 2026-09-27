@@ -121,6 +121,20 @@ export function rankCandidates(candidates: readonly GroupSlot[], friendships: re
   }).sort((a, b) => b.score - a.score || a.slot.start.getTime() - b.slot.start.getTime() || lexical(a.group.groupKey, b.group.groupKey));
 }
 
+/**
+ * Mutual close-friend 1-on-1s (#404) get one new proposal per person per run: a pair is dropped when either
+ * person is already in an earlier pick (a squad, a Mixer or another pair). Squads and Mixers pass through, so
+ * a squad of close friends still gets one squad card, not extra 1-on-1s. Order is kept.
+ */
+export function onePairPerPerson<T extends { group: CandidateGroup }>(picks: readonly T[]): T[] {
+  const used = new Set<string>();
+  return picks.filter(({ group }) => {
+    if (group.memberIds.length === 2 && group.memberIds.some((id) => used.has(id))) return false;
+    for (const id of group.memberIds) used.add(id);
+    return true;
+  });
+}
+
 /** Rank then reserve each selection, so candidates cannot conflict with each other. */
 export function selectCandidates(candidates: readonly GroupSlot[], friendships: readonly MatchingFriendship[], events: readonly MatchingEvent[], now: Date, cooldownHours = env.COOLDOWN_HOURS): RankedGroupSlot[] {
   return selectRankedCandidates(rankCandidates(candidates, friendships, now), events, now, cooldownHours);

@@ -352,12 +352,16 @@ payloads are deliberately thin: on any event, the client refetches
 
 ### 2. Candidate groups (Riley)
 
-**Automated proposals use whole squads and Mixers (#320, #215).**
-`runPipeline` keeps the explicit-group candidates whose members are
-exactly the squad's active members (3–6), plus Riley's anonymous Mixers
-(`mixerCandidates`, 4–6 mutual friends within two hops). Friend pairs,
-cliques and one-drop subsets stay in `candidateGroups()` but are filtered
-out there. Manual hangouts (`createUserHangout`) don't use this step.
+**Automated proposals use whole squads, Mixers and close-friend 1-on-1s
+(#320, #215, #404).** `runPipeline` keeps the explicit-group candidates
+whose members are exactly the squad's active members (3–6), Riley's
+anonymous Mixers (`mixerCandidates`, 4–6 mutual friends within two hops),
+and mutual close-friend pairs (both starred, friendship accepted). Priority
+is squads, then Mixers, then pairs, and `onePairPerPerson()` gives each
+person at most one new proposal per run, so a squad of close friends still
+gets one squad card. Cliques and one-drop subsets stay in
+`candidateGroups()` but are filtered out there. Manual hangouts
+(`createUserHangout`) don't use this step.
 
 A candidate group has 2–6 members and comes from one of four sources:
 - **Explicit groups:** every member of each explicit group.
@@ -974,6 +978,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-27 | **Invite into an existing hangout (#345).** Any participant who still has the event and hasn't passed can invite accepted friends into a voting or confirmed hangout until it starts (not Mixers), from "Invite friends" on the card. Squad and friend hangouts use the same path; #218 nominations are untouched. Late invitees are always `direct`, so §9 holds unchanged: they see themselves and the creator, their pass is a Ghost Pass, and they never join a squad chat. Inviting someone already in the event returns the same 204, so the response can't reveal a hidden direct invitee. After close a direct invitee who hasn't responded can still say "Can't make it" (`POST /events/:id/decline`, stored as `ghost_passed`) until the start; otherwise they count as attending, like any non-responder. |
 | 2026-09-27 | **Preference fit picks the options (#311).** Each squad member's private profile (#310) goes to the decision model as one `fit` Choice over the discovered candidates (no names or ids, profile text as data). Code sums the members' probabilities and takes the top 3 distinct activities; the squad is proposed only when `propose` P(A) ≥ 0.6 and `squadAppeal` (the #1 pick's mean probability) ≥ 0.2, and `force` skips both. Any member call fails → the 3 best by commute. The automated flow drops the group `vibe` question and venue fit; Gemini never sees the profiles. |
 | 2026-09-27 | **Laya is live (#274).** The fine-tuned checkpoint `TheKnack/laya-web-decisions` runs on a CPU droplet (`scripts/laya/serve.py` behind Caddy at `https://174-138-33-82.sslip.io`). The deploy sets `LAYA_URL`, so `askDecision` tries Laya first, then Jev, then code. |
+| 2026-09-27 | **Close-friend 1-on-1s are back (#404, partly supersedes #320).** With squads only, someone whose squad already had a live hangout and who had fewer than 4 people for a Mixer got nothing from the scheduler or **Find a hangout now**, which contradicted the MVP scope (mutual close-friend pairs + squads). Mutual close-friend pairs are candidates again at the lowest priority, with one new proposal per person per run (`onePairPerPerson()`), so the squad demo still gets exactly one squad card. Closeness stays deferred in ranking. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)
 
