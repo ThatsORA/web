@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifySlot,
   earliestTimezone,
+  feasibleSlots,
   formatTimeHHMM,
   freeWindows,
   getLocalParts,
@@ -170,6 +171,23 @@ describe("classifySlot — plan §4 required unit tests verbatim", () => {
     expect(formatSlot(classifySlot({ start, end }, TZ, "casual_hangout"))).toBe("casual_hangout 10:00–12:00");
     const evening = { start: localToUtc(2026, 9, 29, 21, 0, TZ), end };
     expect(classifySlot(evening, TZ, "quick_coffee")).toBeNull();
+  });
+
+  it("feasibleSlots lists every vibe that fits the window (#229)", () => {
+    const start = localToUtc(2026, 9, 29, 8, 0, TZ);
+    const end = localToUtc(2026, 9, 30, 0, 0, TZ);
+    expect(feasibleSlots({ start, end }, TZ).map(slot => formatSlot(slot))).toEqual([
+      "quick_coffee 08:00–09:00",
+      "casual_hangout 10:00–12:00",
+      "dinner 17:30–19:30",
+      "night_out 20:00–23:00",
+    ]);
+    const evening = { start: localToUtc(2026, 9, 29, 19, 0, TZ), end };
+    expect(feasibleSlots(evening, TZ).map(slot => formatSlot(slot))).toEqual([
+      "casual_hangout 19:00–21:00",
+      "dinner 19:00–21:00",
+      "night_out 20:00–23:00",
+    ]);
   });
 });
 
