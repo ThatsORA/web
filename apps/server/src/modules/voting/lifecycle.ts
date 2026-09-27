@@ -5,6 +5,7 @@ import { EventOption, optionFromRow } from "@web/contract";
 import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
 import { emitToUsers, pushEventCreated, pushEventResolved } from "../../realtime";
+import { eventAudience, eventParticipants } from "../events/invitations";
 import { progress, resolveEvent, voteClosesAt } from "./resolution";
 
 export async function openVoting(eventId: string): Promise<void> {
@@ -28,7 +29,10 @@ export async function openVoting(eventId: string): Promise<void> {
   ).catch((e: unknown) => console.error("pushEventCreated error", e));
 }
 
-/** After a vote or ghost pass: broadcast responded/total, and close early once everyone has responded. */
+/**
+ * After a vote or pass: broadcast responded/total to everyone (voting is still open, so a Ghost Pass looks like
+ * a vote), and close early once everyone has responded, which makes every response final.
+ */
 export async function afterResponse(eventId: string): Promise<void> {
   const participants = await prisma.eventParticipant.findMany({ where: { eventId } });
   const p = progress(participants.map((x) => x.voteStatus));
@@ -39,13 +43,14 @@ export async function afterResponse(eventId: string): Promise<void> {
 export async function closeVoting(eventId: string): Promise<void> {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    include: { participants: true, options: true, votes: true },
+    include: { options: true, votes: true },
   });
   if (!event || event.status !== "voting") return;
+  const participants = await eventParticipants(eventId);
 
   const unused = EventOption.array().safeParse(event.backupVenues);
   const r = resolveEvent({
-    participants: event.participants,
+    participants,
     votes: event.votes,
     options: event.options.map(optionFromRow),
     unusedVenues: unused.success ? unused.data : [],
@@ -77,10 +82,12 @@ export async function closeVoting(eventId: string): Promise<void> {
     return count > 0;
   });
   if (claimed) {
-    emitToUsers(event.participants.map((p) => p.userId), "event:resolved", { event_id: eventId, status: r.status });
+    // Voting is closed now: a Ghost Pass is final, so its passer stops getting this event (#210).
+    const audience = eventAudience(participants, false);
+    emitToUsers(audience, "event:resolved", { event_id: eventId, status: r.status });
     if (r.status === "confirmed") {
       void pushEventResolved(
-        event.participants.map((p) => p.userId),
+        audience,
         eventId,
         r.status,
       ).catch((e: unknown) => console.error("pushEventResolved error", e));
@@ -99,10 +106,13 @@ export async function sweepVoting(now = new Date()): Promise<void> {
 
   const ended = await prisma.event.findMany({
     where: { status: "confirmed", endsAt: { lte: now } },
-    include: { participants: { select: { userId: true } } },
+    select: { id: true },
   });
   for (const event of ended) {
     const { count } = await prisma.event.updateMany({ where: { id: event.id, status: "confirmed" }, data: { status: "completed" } });
-    if (count) emitToUsers(event.participants.map((p) => p.userId), "event:resolved", { event_id: event.id, status: "completed" });
+    if (count) {
+      const audience = eventAudience(await eventParticipants(event.id), false);
+      emitToUsers(audience, "event:resolved", { event_id: event.id, status: "completed" });
+    }
   }
 }

@@ -252,6 +252,49 @@ describe("events router", () => {
     ]);
   });
 
+  it("lets a ghost passer keep the card while voting is open, so they can return and vote (#210)", async () => {
+    const open = { ...event(), voteClosesAt: new Date(Date.now() + 60_000) };
+    mocks.findFirst.mockResolvedValueOnce(open);
+    const body = EventCardPayload.parse(await (await get(`/events/${eventId}`, ghost)).json());
+    expect(body.my_status).toBe("ghost_passed");
+    expect(body.viewer.pass_kind).toBe("ghost");
+    mocks.findMany.mockResolvedValueOnce([open]);
+    expect(EventsListResponse.parse(await (await get("/events", ghost)).json()).events).toHaveLength(1);
+  });
+
+  it("denies a ghost passer the event on detail and list once voting has closed, early or at the deadline (#210)", async () => {
+    const closed = [
+      { ...event(), status: "confirmed", venuePlaceId: "place-1" },
+      { ...event(), status: "expired" },
+      { ...event(), voteClosesAt: new Date(Date.now() - 1) }, // deadline passed, sweep not run yet
+    ];
+    for (const e of closed) {
+      mocks.findFirst.mockResolvedValueOnce(e);
+      const response = await get(`/events/${eventId}`, ghost);
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: "not_found" }); // same as a stranger
+      mocks.findMany.mockResolvedValueOnce([e]);
+      expect(EventsListResponse.parse(await (await get("/events", ghost)).json()).events).toEqual([]);
+    }
+    // Everyone else still gets it.
+    mocks.findMany.mockResolvedValueOnce(closed);
+    expect(EventsListResponse.parse(await (await get("/events", bob)).json()).events).toHaveLength(3);
+  });
+
+  it("keeps a squad passer's card after close and leaves them out of attendees (#210)", async () => {
+    const squadEvent = {
+      ...event(), status: "confirmed", venuePlaceId: "place-1",
+      sourceGroupId: "s1", // a squad's hangout: bob and ghost came in with the squad
+    };
+    mocks.findFirst.mockResolvedValueOnce(squadEvent);
+    const response = await get(`/events/${eventId}`, ghost);
+    expect(response.status).toBe(200);
+    const body = EventCardPayload.parse(await response.json());
+    expect(body.viewer.pass_kind).toBe("visible");
+    expect(body.participants.find((p) => p.id === ghost)?.passed).toBe(true);
+    expect(body.outcome?.attendees.map((person) => person.id)).not.toContain(ghost);
+  });
+
   it("requires authentication and hides events from nonparticipants", async () => {
     expect((await fetch(`${base}/events`)).status).toBe(401);
     expect((await get("/events/not-a-uuid")).status).toBe(404);
