@@ -23,6 +23,7 @@ describe("cardKind", () => {
       ["Swapped", "confirmed"],
       ["Chatted", "chatted"],
       ["Expired", "expired"],
+      ["Completed (ended event)", "completed"],
     ]);
   });
 

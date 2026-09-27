@@ -104,4 +104,14 @@ export const FIXTURES: { label: string; card: EventCardPayload; swapped?: boolea
       outcome: { venue: null, venue_status: "open", attendees: [], tallies: null },
     },
   },
+  {
+    label: "Completed (ended event)",
+    card: {
+      ...confirmed,
+      status: "completed",
+      starts_at: "2026-09-20T18:30:00-04:00",
+      ends_at: "2026-09-20T20:30:00-04:00",
+      viewer: { ...confirmed.viewer, chat: "read_only" },
+    },
+  },
 ];
