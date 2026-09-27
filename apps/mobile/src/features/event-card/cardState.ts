@@ -14,7 +14,7 @@ export function cardKind(card: Pick<EventCardPayload, "status" | "my_status">): 
   return card.my_status === "invited" ? "voting" : "waiting";
 }
 
-/** True when a confirmed event's venue changed between two fetches (someone tapped "It's closed"). */
+/** True when a confirmed event's venue changed between two fetches (someone tapped "Change spot"). */
 export function detectSwap(prev: EventCardPayload | undefined, next: EventCardPayload): boolean {
   const before = prev?.outcome?.venue?.place_id;
   const after = next.outcome?.venue?.place_id;
@@ -33,8 +33,9 @@ export function travelRows(card: EventCardPayload): { id: string; username: stri
   }));
 }
 
-/** "It's closed" is offered on a confirmed event with a venue (the server enforces the time window). */
-export const canReportClosed = (card: EventCardPayload) => card.status === "confirmed" && !!card.outcome?.venue;
+/** "Change spot" is for confirmed attendees of a confirmed event with a venue (the server enforces the time window). */
+export const canChangeSpot = (card: EventCardPayload) =>
+  card.status === "confirmed" && card.my_status === "confirmed" && !!card.outcome?.venue;
 
 /** Who a `chatted` card lists as free: the people still in after ghost passes. */
 export const freePeople = (card: EventCardPayload) => card.outcome?.attendees ?? card.participants;
