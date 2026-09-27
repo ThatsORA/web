@@ -3,15 +3,15 @@
 // participants for voting, chat and realtime. Every event payload goes through viewerScope() and every
 // post-close audience through keepsAccess(); chat membership (#212, chatAudience()) is built on eventAudience().
 //
-// Invite source is derived from fields the event already has, not stored per participant: the schema is
-// the steward's (Ojas), and every event that exists today has one squad at most. Mixed events with several
-// squads (#207) need stored provenance; see the `schema` issue that follows #206.
+// Older events derive invite source from the creator and single source squad. Mixed events store source
+// and squad IDs per participant so one squad cannot see members of another squad (#244).
 import type { EventChatAccess, EventStatus, EventViewer, InviteSource, PassKind, VoteStatus } from "@web/contract";
 import { prisma } from "../../lib/prisma";
 
 export interface EventInvites {
   createdById: string | null;
   sourceGroupId: string | null;
+  sourceGroupIds?: readonly string[];
 }
 
 /**
@@ -19,9 +19,27 @@ export interface EventInvites {
  * with that squad; everyone else is a direct invite. Automated close-friend proposals have neither field,
  * so everyone in them is direct.
  */
-export function inviteSource(event: EventInvites, userId: string): InviteSource {
+export function inviteSource(event: EventInvites, userId: string, participant?: Pick<ParticipantRow, "inviteSource">): InviteSource {
   if (userId === event.createdById) return "creator";
+  if (participant?.inviteSource) return participant.inviteSource === "creator" ? "direct" : participant.inviteSource;
+  // A mixed event missing one participant's provenance must not grant that person squad access.
+  if (event.sourceGroupIds?.length) return "direct";
   return event.sourceGroupId ? "squad" : "direct";
+}
+
+function sourceSquads(event: EventInvites, participant: ParticipantRow): readonly string[] {
+  if (inviteSource(event, participant.userId, participant) !== "squad") return [];
+  if (participant.sourceGroupIds?.length) return participant.sourceGroupIds;
+  return event.sourceGroupIds?.length ? [] : event.sourceGroupId ? [event.sourceGroupId] : [];
+}
+
+/** Normalize stored and legacy provenance before access and chat checks. */
+export function invitedParticipant<T extends ParticipantRow>(event: EventInvites, participant: T): T & InvitedParticipant {
+  return {
+    ...participant,
+    inviteSource: inviteSource(event, participant.userId, participant),
+    sourceGroupIds: sourceSquads(event, participant),
+  };
 }
 
 /** A direct invite's pass is a Ghost Pass; the creator's and a squad member's pass is a visible "can't make it". */
@@ -30,6 +48,8 @@ export const passKind = (source: InviteSource): PassKind => (source === "direct"
 export interface ParticipantRow {
   userId: string;
   voteStatus: VoteStatus;
+  inviteSource?: InviteSource | null;
+  sourceGroupIds?: readonly string[];
 }
 
 // Every pass is stored as `ghost_passed`; its kind comes from the invite source (passKind), so a squad
@@ -60,15 +80,19 @@ const SQUAD_CHAT_STATUSES: readonly EventStatus[] = ["voting", "confirmed", "cha
 /**
  * Who is in the event's chat (#212): everyone here may read it, post until `ends_at`, and gets `event:message`.
  * A chat shows every poster to every member, so its members must all be allowed to see each other (viewerScope()):
- * - a squad hangout (it has a squad invitee) has chat from creation for the creator and the squad, passes
- *   included (theirs are visible Passes, so keepsAccess() keeps them). Direct invitees are never in it: they may
- *   see only themselves and the creator, and squad members may not see them;
+ * - a squad hangout has chat from creation for the creator and squad members only when all squad members
+ *   share a selected squad. One room cannot safely hold people from separate squads who cannot see each other.
+ *   Direct invitees are never in that room;
  * - every other event has chat only as the `chatted` fallback, for everyone who keeps access after close.
  * Chat always uses the after-close rule, so a Ghost Pass never enters it, even while voting is open.
  */
 export function chatAudience(status: EventStatus, rows: readonly InvitedParticipant[]): string[] {
-  if (rows.some((row) => row.inviteSource === "squad")) {
+  const squadRows = rows.filter((row) => row.inviteSource === "squad");
+  if (squadRows.length) {
     if (!SQUAD_CHAT_STATUSES.includes(status)) return [];
+    const sharedSquad = squadRows[0]?.sourceGroupIds?.some((id) =>
+      squadRows.every((row) => row.sourceGroupIds?.includes(id)));
+    if (!sharedSquad) return [];
     return eventAudience(rows.filter((row) => row.inviteSource !== "direct"), false);
   }
   return status === "chatted" ? eventAudience(rows, false) : [];
@@ -87,14 +111,17 @@ export function chatAccess(
 
 /**
  * Every participant of an event with their invite source and vote status. Voting, chat and realtime read
- * participants only through here, so storing provenance later (the #207 schema issue) changes one place.
+ * participants only through here, using stored provenance when present and legacy derivation otherwise.
  */
 export async function eventParticipants(eventId: string): Promise<InvitedParticipant[]> {
   const rows = await prisma.eventParticipant.findMany({
     where: { eventId },
-    select: { userId: true, voteStatus: true, event: { select: { createdById: true, sourceGroupId: true } } },
+    select: {
+      userId: true, voteStatus: true, inviteSource: true, sourceGroupIds: true,
+      event: { select: { createdById: true, sourceGroupId: true, sourceGroupIds: true } },
+    },
   });
-  return rows.map(({ event, ...p }) => ({ ...p, inviteSource: inviteSource(event, p.userId) }));
+  return rows.map(({ event, ...p }) => invitedParticipant(event, p));
 }
 
 export interface ViewerScope {
@@ -112,7 +139,7 @@ export interface ViewerScope {
  * What `viewerId` may see of an event:
  * - the human creator sees everyone (and `full_roster`); automated events have no creator;
  * - everyone sees the creator, and the creator's pass;
- * - squad members see the other squad members, and their passes;
+ * - squad members see people invited by at least one of the same squads, and their visible passes;
  * - nobody but the creator sees a direct invitee, and nobody ever sees a Ghost Pass.
  */
 export function viewerScope(
@@ -121,14 +148,15 @@ export function viewerScope(
 ): ViewerScope {
   const me = event.participants.find((p) => p.userId === viewerId);
   if (!me) throw new Error("Event requested by non-participant");
-  const mySource = inviteSource(event, viewerId);
+  const mySource = inviteSource(event, viewerId, me);
   const fullRoster = mySource === "creator";
-  const rows = event.participants.map((p) => ({ ...p, inviteSource: inviteSource(event, p.userId) }));
+  const mySquads = new Set(sourceSquads(event, me));
+  const rows = event.participants.map((p) => ({ ...p, inviteSource: inviteSource(event, p.userId, p) }));
   const visible = rows.filter((p) =>
     p.userId === viewerId ||
     fullRoster ||
     p.inviteSource === "creator" ||
-    (p.inviteSource === "squad" && mySource === "squad"),
+    (p.inviteSource === "squad" && mySource === "squad" && sourceSquads(event, p).some((id) => mySquads.has(id))),
   );
   return {
     viewer: { invite_source: mySource, pass_kind: passKind(mySource), full_roster: fullRoster },

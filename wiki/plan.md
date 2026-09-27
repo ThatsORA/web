@@ -558,9 +558,9 @@ manual New hangout) always get exactly 3 options.
 
 ### Who sees what (#206)
 
-How each person got in (`invite_source`) is derived from fields the
-event already has, not stored per participant (`inviteSource()` in
-`invitations.ts`):
+How each person got in (`invite_source`) is stored per participant for mixed
+events. Older events still derive it from the event's `created_by_id` and
+`source_group_id` (`inviteSource()` in `invitations.ts`):
 
 - **`creator`**: the participant who is the event's `created_by_id`.
   Automated hangouts have no creator and no creator view.
@@ -570,10 +570,17 @@ event already has, not stored per participant (`inviteSource()` in
   automated proposals outside a squad (close-friend cliques, later Mixers
   #215/#220).
 
-Every event that exists today has one squad at most, so this is exact.
-Mixed events (several squads plus people, #207) need stored provenance
-per participant. That's a schema change for the schema steward, tracked in
-its own `schema` issue; until it lands, #207 can't record several squads.
+Mixed events store all selected squad IDs in `events.source_group_ids` and
+each participant's invitation source and contributing squad IDs in
+`event_participants`. A person selected directly and through a squad has
+one participant row with squad rules. The legacy `source_group_id` remains
+for older events and automated single-squad proposals. A mixed event's
+member sees peers from shared selected squads only; a direct guest sees
+only themselves and the creator.
+
+A mixed event gets one chat room only when all squad invitees share a
+selected squad. Otherwise chat stays closed: a shared room would reveal
+people from separate squads who cannot see each other on the card.
 
 Pass kind follows the source: a direct invite's pass is a **Ghost Pass**
 (looks exactly like a vote, never shown to anyone); the creator's and a
@@ -585,7 +592,7 @@ viewer gets on the card, list, and any future chat membership or presence
 | Viewer | Sees these people | Sees these passes | Tallies after close |
 | --- | --- | --- | --- |
 | Human creator | Everyone (`viewer.full_roster`) | Visible passes; attendees after close, so they alone can infer a Ghost Pass | Yes |
-| Squad member | Themselves, the creator, and the other squad members | Those people's visible passes | Only if they can see everyone |
+| Squad member | Themselves, the creator, and members of selected squads they share | Those people's visible passes | Only if they can see everyone |
 | Direct invitee | Themselves and the creator | The creator's visible pass | Only if they can see everyone |
 | Anyone, automated hangout | As above, with no creator | As above | As above |
 
