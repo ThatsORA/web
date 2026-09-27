@@ -24,6 +24,7 @@ import { isUniqueViolation, roundCoord, toMe, usernameRetryAt } from "./helpers"
 import { hashPassword, verifyPassword } from "./passwordHash";
 import { passwordResetRouter } from "./passwordReset";
 import { loginLimiter } from "./loginLimiter";
+import { deleteAccount } from "./deleteAccount";
 
 // Compared against when the email is unknown, so login timing doesn't reveal which accounts exist.
 const DUMMY_HASH = hashPassword("not-a-real-password");
@@ -156,6 +157,12 @@ authRouter.patch(routes.me, requireAuth, async (req, res) => {
     if (isUniqueViolation(err)) return res.status(409).json({ error: "username_taken" });
     throw err;
   }
+});
+
+authRouter.delete(routes.me, requireAuth, async (req, res) => {
+  const userId = (req as AuthedRequest).userId;
+  await deleteAccount(userId);
+  return res.status(204).end();
 });
 
 // Email change: prove the password, then prove the new address with a code sent to it.
