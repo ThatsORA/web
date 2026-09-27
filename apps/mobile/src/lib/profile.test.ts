@@ -1,7 +1,7 @@
 import { PatchMeRequest } from "@web/contract";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { buildChangeEmailRequest, buildProfilePatch, profileErrorMessage, usernameProblem } from "./profile";
+import { buildChangeEmailRequest, buildPrefsPatch, buildProfilePatch, profileErrorMessage, usernameProblem } from "./profile";
 
 describe("buildProfilePatch", () => {
   const me = { display_name: "Andy", bio: "Coffee first." };
@@ -85,5 +85,16 @@ describe("profileErrorMessage", () => {
   it("falls back for network and unknown errors", () => {
     expect(profileErrorMessage(new TypeError("Network request failed"), now)).toMatch(/reach the server/);
     expect(profileErrorMessage(new ApiError(500, {}), now)).toMatch(/went wrong/);
+  });
+});
+
+describe("buildPrefsPatch", () => {
+  const me = { pref_activities: "bouldering", pref_personality: null };
+
+  it("sends only changed, trimmed fields and clears blanks", () => {
+    expect(buildPrefsPatch(me, { activities: " bouldering ", personality: "" })).toBeNull();
+    const patch = buildPrefsPatch(me, { activities: "  ", personality: " early bird " });
+    expect(patch).toEqual({ pref_activities: null, pref_personality: "early bird" });
+    expect(PatchMeRequest.parse(patch)).toEqual(patch);
   });
 });

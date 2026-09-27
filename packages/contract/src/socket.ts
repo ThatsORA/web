@@ -15,8 +15,8 @@ export const SocketEvents = {
 export const EventCreatedPayload = z.object({ event_id: Id });
 export const EventProgressPayload = z.object({
   event_id: Id,
-  responded: z.number().int(),
-  total: z.number().int(),
+  responded: z.number().int().optional(),
+  total: z.number().int().optional(),
 });
 export const EventResolvedPayload = z.object({ event_id: Id, status: EventStatus });
 export const EventVenueChangedPayload = z.object({ event_id: Id });

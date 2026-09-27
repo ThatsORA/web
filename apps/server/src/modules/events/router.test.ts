@@ -156,7 +156,8 @@ const event = () => ({
   // alice made it and invited bob and ghost directly; invite source comes from createdById/sourceGroupId (#206).
   participants: [
     { userId: alice, voteStatus: "voted", user: { id: alice, username: "alice" } },
-    { userId: bob, voteStatus: "voted", user: { id: bob, username: "bob" } },
+    // A private matching profile (#310) the card must never carry, even if a row came back with it.
+    { userId: bob, voteStatus: "voted", user: { id: bob, username: "bob", prefActivities: "secret-activities", prefPersonality: "secret-personality" } },
     { userId: ghost, voteStatus: "ghost_passed", user: { id: ghost, username: "ghost" } },
   ],
   options: [option(firstOption, 1), option(secondOption, 2)],
@@ -183,6 +184,41 @@ beforeEach(() => {
 const get = (path: string, userId = alice) => fetch(`${base}${path}`, { headers: { authorization: `Bearer ${signToken(userId)}` } });
 
 describe("events router", () => {
+  it("shows a Mixer invitee only their own identity and choice, with no response count, roster or tallies", async () => {
+    for (const status of ["voting", "confirmed"] as const) {
+      mocks.findFirst.mockResolvedValueOnce({ ...event(), isMixer: true, status, venuePlaceId: status === "confirmed" ? "place-1" : null });
+      const body = EventCardPayload.parse(await (await get(`/events/${eventId}`, bob)).json());
+      expect(body.is_mixer).toBe(true);
+      expect(body.status).toBe(status);
+      expect(body.created_by).toBeNull();
+      expect(body.viewer).toMatchObject({ invite_source: "direct", pass_kind: "ghost", full_roster: false, chat: null });
+      expect(body.participants.map((p) => p.id)).toEqual([bob]);
+      expect(body.progress).toBeNull();
+      expect(body.options.every((o) => Object.keys(o.travel_minutes).every((id) => id === bob))).toBe(true);
+      expect(body.outcome?.tallies ?? null).toBeNull();
+      expect(body.outcome?.attendees.map((p) => p.id) ?? [bob]).toEqual([bob]);
+      expect(JSON.stringify(body)).not.toContain(alice);
+      expect(JSON.stringify(body)).not.toContain(ghost);
+    }
+  });
+
+  it("removes a failed Mixer from detail and list for invitees who had voted", async () => {
+    const failed = { ...event(), isMixer: true, status: "expired" };
+    mocks.findFirst.mockResolvedValueOnce(failed);
+    expect((await get(`/events/${eventId}`, bob)).status).toBe(404);
+    mocks.findMany.mockResolvedValueOnce([failed]);
+    expect(EventsListResponse.parse(await (await get("/events", bob)).json()).events).toEqual([]);
+  });
+
+  it("removes a confirmed Mixer from an invitee who did not commit", async () => {
+    const confirmed = { ...event(), isMixer: true, status: "confirmed", venuePlaceId: "place-1",
+      participants: event().participants.map((p) => ({ ...p, voteStatus: p.userId === bob ? "invited" : p.voteStatus })) };
+    mocks.findFirst.mockResolvedValueOnce(confirmed);
+    expect((await get(`/events/${eventId}`, bob)).status).toBe(404);
+    mocks.findMany.mockResolvedValueOnce([confirmed]);
+    expect(EventsListResponse.parse(await (await get("/events", bob)).json()).events).toEqual([]);
+  });
+
   it("lists only the caller's open or recent events", async () => {
     const response = await get("/events");
     expect(response.status).toBe(200);
@@ -195,6 +231,15 @@ describe("events router", () => {
         votes: { select: { userId: true, optionId: true } },
       },
     }));
+  });
+
+  it("never puts the private matching profile on the card (#310)", async () => {
+    for (const path of ["/events", `/events/${eventId}`]) {
+      expect(await (await get(path, alice)).text()).not.toMatch(/secret|pref_/);
+    }
+    const select = mocks.findFirst.mock.calls[0]![0].include.participants.include.user.select;
+    expect(select).not.toHaveProperty("prefActivities");
+    expect(select).not.toHaveProperty("prefPersonality");
   });
 
   it("keeps voter identities hidden in GET /events response", async () => {

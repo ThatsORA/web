@@ -36,9 +36,19 @@ it("reads stored sources for mixed events and derives sources for legacy events"
       event: { createdById: null, sourceGroupId: S1, sourceGroupIds: [] } },
   ] as never);
   expect(await eventParticipants("event-1")).toEqual([
-    { userId: S, voteStatus: "invited", inviteSource: "squad", sourceGroupIds: [S1] },
-    { userId: T, voteStatus: "invited", inviteSource: "squad", sourceGroupIds: [S1] },
+    { userId: S, voteStatus: "invited", isMixer: false, inviteSource: "squad", sourceGroupIds: [S1] },
+    { userId: T, voteStatus: "invited", isMixer: false, inviteSource: "squad", sourceGroupIds: [S1] },
   ]);
+});
+
+it("keeps only committed Mixer invitees after close and never opens their shared chat", () => {
+  const mixer = { isMixer: true, createdById: C, sourceGroupId: S1 };
+  const invited = rows([C, D, E, O], { [C]: "confirmed", [D]: "voted", [E]: "invited", [O]: "ghost_passed" })
+    .map((row) => invitedParticipant(mixer, row));
+  expect(invited.map((row) => row.inviteSource)).toEqual(["direct", "direct", "direct", "direct"]);
+  expect(eventAudience(invited, true)).toEqual([C, D, E, O]);
+  expect(eventAudience(invited, false)).toEqual([C, D]);
+  expect(chatAudience("chatted", invited)).toEqual([]);
 });
 
 describe("passKind", () => {
@@ -238,4 +248,3 @@ describe("chatAudience / chatAccess (#212)", () => {
     expect(chatAccess({ status: "confirmed", endsAt }, squadRows, O, now)).toBe("open");
   });
 });
-

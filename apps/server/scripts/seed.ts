@@ -29,6 +29,8 @@ async function seed() {
           homeLat: demoUser.homeLat,
           homeLng: demoUser.homeLng,
           travelMode: "DRIVE",
+          prefActivities: demoUser.prefActivities,
+          prefPersonality: demoUser.prefPersonality,
         },
         create: {
           username: demoUser.username,
@@ -39,6 +41,8 @@ async function seed() {
           homeLat: demoUser.homeLat,
           homeLng: demoUser.homeLng,
           travelMode: "DRIVE",
+          prefActivities: demoUser.prefActivities,
+          prefPersonality: demoUser.prefPersonality,
         },
       });
       users.push(user);

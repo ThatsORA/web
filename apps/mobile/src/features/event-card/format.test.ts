@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FIXTURES } from "./fixtures";
-import { mapsUrl, progressLabel, slotLabel, swapLabel, timeLabel } from "./format";
+import { mapsUrl, optionLabel, placeTitle, progressLabel, slotLabel, swapLabel, timeLabel } from "./format";
 
 const card = FIXTURES[0]!.card;
 
@@ -44,5 +44,29 @@ describe("labels", () => {
     expect(mapsUrl({ lat: 25.761, lng: -80.37, place_id: "abc 1" })).toBe(
       "https://www.google.com/maps/search/?api=1&query=25.761,-80.37&query_place_id=abc%201",
     );
+  });
+});
+
+describe("option lines (#321)", () => {
+  const timed = FIXTURES.find((f) => f.label === "Voting (activities, own times)")!.card;
+
+  it("shows activity at place and the option's own time in the event's timezone", () => {
+    expect(timed.options.map((o) => optionLabel(o, timed.timezone))).toEqual([
+      "Bouldering at Movement · Thu 6:30pm",
+      "Karaoke at Sing Sing · Fri 8pm",
+      "Dinner at Latin House Grill · Sat 7pm",
+    ]);
+    expect(optionLabel(timed.options[0]!, "America/Los_Angeles")).toBe("Bouldering at Movement · Thu 3:30pm");
+  });
+
+  it("old options show just the place (the headline carries the event's time)", () => {
+    expect(optionLabel(card.options[1]!, card.timezone)).toBe("Sergio's");
+    expect(placeTitle(card.options[1]!)).toBe("Sergio's");
+  });
+
+  it("the confirmed card's event time is the winner's time", () => {
+    const confirmed = FIXTURES.find((f) => f.label === "Confirmed (activity winner)")!.card;
+    expect(placeTitle(confirmed.outcome!.venue!)).toBe("Karaoke at Sing Sing");
+    expect(timeLabel(confirmed)).toBe("Fri · 8–10pm");
   });
 });

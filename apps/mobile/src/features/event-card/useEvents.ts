@@ -2,7 +2,7 @@
 import { EventCardPayload, EventsListResponse, routes, VoteRequest } from "@web/contract";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { api } from "../../lib/api";
+import { api, ApiError } from "../../lib/api";
 import { runCardAction } from "./cardAction";
 import { byStart, detectSwap } from "./cardState";
 import { changeSpotNotice, requestChangeSpot } from "./changeSpot";
@@ -22,7 +22,17 @@ export function useEvents() {
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async (id: string) => {
-    const next = await api(routes.event(id), EventCardPayload);
+    let next: EventCardPayload;
+    try {
+      next = await api(routes.event(id), EventCardPayload);
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 404) throw error;
+      const updated = { ...cardsRef.current };
+      delete updated[id];
+      cardsRef.current = updated;
+      setCards(updated);
+      return;
+    }
     if (detectSwap(cardsRef.current[id], next)) setSwapped((s) => ({ ...s, [id]: true }));
     cardsRef.current = { ...cardsRef.current, [id]: next };
     setCards(cardsRef.current);

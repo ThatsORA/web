@@ -10,6 +10,7 @@ import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
 import { openVoting } from "../voting/lifecycle";
 import { candidateGroups, groupKey, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
 import type { ResolvedManualSelection } from "./manualSelection";
+import { mixerCandidates } from "./mixerCandidates";
 import { classifySlot, earliestTimezone, feasibleSlots, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot } from "./timeMath";
 
 export { freeWindows, classifySlot } from "./timeMath";
@@ -92,7 +93,7 @@ export function timezoneClosestToVenueCentroid(
     .sort((a, b) => a.distance - b.distance || a.member.id.localeCompare(b.member.id))[0]?.member.timezone ?? null;
 }
 
-function optionData(option: EventOption) {
+export function optionData(option: EventOption) {
   return {
     rank: option.rank,
     placeId: option.place_id,
@@ -108,6 +109,9 @@ function optionData(option: EventOption) {
     routeScore: option.route_score,
     factsLine: option.facts_line,
     aiBlurb: option.ai_blurb,
+    activity: option.activity,
+    startsAt: option.starts_at ? new Date(option.starts_at) : undefined,
+    endsAt: option.ends_at ? new Date(option.ends_at) : undefined,
   };
 }
 
@@ -117,19 +121,29 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
     prisma.explicitGroup.findMany({ include: { members: true } }),
   ]);
 
-  // ponytail: discovery reads lightweight identities for squad members, then loads
+  // ponytail: discovery reads lightweight identities for relationship endpoints, then loads
   // busy blocks and favorites only for users who can form a candidate group.
-  const referencedUserIds = [...new Set(explicitGroups.flatMap((group) => group.members.map((member) => member.userId)))].sort();
+  const referencedUserIds = [...new Set([
+    ...friendships.flatMap((friendship) => [friendship.userLowId, friendship.userHighId]),
+    ...explicitGroups.flatMap((group) => group.members.map((member) => member.userId)),
+  ])].sort();
   if (!referencedUserIds.length) return;
   const identities = await prisma.user.findMany({
     where: { id: { in: referencedUserIds } },
     select: { id: true, timezone: true },
   });
-  // Squads only (#320): propose to whole squads (3–6 active members). Friend pairs, cliques and
-  // one-drop subsets are skipped; friendships only feed staleness. Manual hangouts never come through here.
+  // Squads + Mixers (#320): whole squads (3–6 active members) and Riley's Mixers (#215). Friend pairs,
+  // cliques and one-drop subsets are skipped. Manual hangouts never come through here.
   const squadKeys = new Set(explicitGroups.map((group) =>
     groupKey(group.members.filter((member) => member.status === "active").map((member) => member.userId))));
-  const groups = candidateGroups(identities, [], explicitGroups).filter((group) => squadKeys.has(group.groupKey));
+  const squads = candidateGroups(identities, [], explicitGroups).filter((group) => squadKeys.has(group.groupKey));
+  const possibleMixers = mixerCandidates(identities, friendships, [], now);
+  const groupsByKey = new Map(squads.map((group) => [group.groupKey, group]));
+  for (const { group } of possibleMixers) {
+    // A selected Squad keeps its provenance; otherwise a 4–6 person eligible group is a Mixer.
+    if (!groupsByKey.get(group.groupKey)?.sourceGroupId) groupsByKey.set(group.groupKey, group);
+  }
+  const groups = [...groupsByKey.values()];
   if (!groups.length) return;
 
   const candidateUserIds = [...new Set(groups.flatMap((group) => group.memberIds))].sort();
@@ -160,12 +174,15 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
   ]);
 
   const usersById = new Map(users.map((user) => [user.id, user]));
+  const eligibleMixerKeys = new Set(mixerCandidates(identities, friendships, [...openEvents, ...cooldownEvents], now)
+    .map(({ group }) => group.groupKey));
   const favoritesByUser = new Map(users.map((user) => [user.id, user.favorites]));
   const eventsByParticipant = openEventsByParticipant(openEvents);
   const groupSlots: GroupSlot[] = [];
   const feasibleBySlot = new Map<ClassifiedSlot, ClassifiedSlot[]>();
 
   for (const group of groups) {
+    if (group.isMixer && !eligibleMixerKeys.has(group.groupKey)) continue;
     const members = group.memberIds.map((id) => usersById.get(id)).filter((user) => user !== undefined);
     if (members.length !== group.memberIds.length) continue;
     const availability = members.map((user) => ({
@@ -187,8 +204,12 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
     }
   }
 
+  const ranked = rankCandidates(groupSlots, friendships, now);
+  // Preserve squad precedence, then offer anonymous Mixers before ordinary direct proposals.
+  const priority = (group: typeof ranked[number]["group"]) => group.sourceGroupId ? 2 : group.isMixer ? 1 : 0;
+  ranked.sort((a, b) => priority(b.group) - priority(a.group));
   const shortlist = selectRankedCandidates(
-    rankCandidates(groupSlots, friendships, now),
+    ranked,
     [...openEvents, ...cooldownEvents],
     now,
     env.COOLDOWN_HOURS,
@@ -232,6 +253,7 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
         data: {
           groupKey: candidate.group.groupKey,
           sourceGroupId: candidate.group.sourceGroupId,
+          isMixer: candidate.group.isMixer ?? false,
           status: "voting",
           startsAt: candidate.slot.start,
           endsAt: candidate.slot.end,
@@ -241,7 +263,9 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
           backupVenues: unusedVenueSnapshots(rankedVenues, options),
           voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
           participants: {
-            create: candidate.group.memberIds.map((userId) => ({ userId, voteStatus: "invited" })),
+            create: candidate.group.memberIds.map((userId) => ({
+              userId, voteStatus: "invited", ...(candidate.group.isMixer ? { inviteSource: "direct" as const } : {}),
+            })),
           },
           options: { create: options.map(optionData) },
         },

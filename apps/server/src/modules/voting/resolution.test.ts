@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EventOption, VoteStatus } from "@web/contract";
-import { progress, resolveEvent, voteClosesAt, votingOpen } from "./resolution";
+import { progress, resolveEvent, voteClosesAt, votingOpen, winnerTime } from "./resolution";
 
 const opt = (id: string, rank: number, route_score: number) =>
   ({
@@ -44,6 +44,23 @@ describe("progress", () => {
 });
 
 describe("resolveEvent", () => {
+  it.each([
+    [4, 3], [5, 4], [6, 5],
+  ])("requires %i Mixer invitees to have %i attendance commitments", (invited, quorum) => {
+    const participants = Array.from({ length: invited }, (_, i) => ({
+      userId: `u${i}`, voteStatus: i < quorum ? "voted" as const : "invited" as const,
+    }));
+    const votes = participants.slice(0, quorum).map(({ userId }) => ({ userId, optionId: "a" }));
+    expect(resolveEvent({ isMixer: true, participants, votes, options, unusedVenues: [] }).status).toBe("confirmed");
+    expect(resolveEvent({ isMixer: true, participants, votes: votes.slice(0, -1), options, unusedVenues: [] }).status).toBe("expired");
+  });
+
+  it("does not count a Ghost Pass or a stale vote as a Mixer commitment", () => {
+    const participants = people("voted", "voted", "ghost_passed", "invited");
+    const votes = [0, 1, 2, 3].map((i) => ({ userId: `u${i}`, optionId: "a" }));
+    expect(resolveEvent({ isMixer: true, participants, votes, options, unusedVenues: [] })).toEqual({ status: "expired" });
+  });
+
   it("expires when fewer than 2 remain after ghost passes", () => {
     const r = resolveEvent({ participants: people("voted", "ghost_passed", "ghost_passed"), votes: [{ userId: "u0", optionId: "a" }], options, unusedVenues: unused });
     expect(r).toEqual({ status: "expired" });
@@ -84,5 +101,33 @@ describe("resolveEvent", () => {
     expect(r.winner.id).toBe("b");
     expect(r.wasTiebreaker).toBe(true);
     expect(r.backups.map((o) => o.name)).toEqual(["a", "c"]);
+  });
+});
+
+describe("per-option times (#321)", () => {
+  const timed = (id: string, rank: number, route_score: number, starts_at: string, ends_at: string) =>
+    ({ ...opt(id, rank, route_score), activity: `Activity ${id}`, starts_at, ends_at });
+  const T = [
+    timed("a", 1, 20, "2026-10-01T22:30:00Z", "2026-10-02T00:30:00Z"),
+    timed("b", 2, 15, "2026-10-02T23:00:00Z", "2026-10-03T01:00:00Z"),
+  ];
+
+  it("the winner's own time becomes the event's time", () => {
+    const r = resolveEvent({
+      participants: people("voted", "voted", "voted"),
+      votes: [{ userId: "u0", optionId: "a" }, { userId: "u1", optionId: "a" }, { userId: "u2", optionId: "b" }],
+      options: T, unusedVenues: [],
+    });
+    if (r.status !== "confirmed") throw new Error(r.status);
+    expect(r.winner.activity).toBe("Activity a");
+    expect(winnerTime(r.winner)).toEqual({
+      startsAt: new Date("2026-10-01T22:30:00Z"),
+      endsAt: new Date("2026-10-02T00:30:00Z"),
+    });
+  });
+
+  it("old options without times leave the event's time alone", () => {
+    expect(winnerTime(A)).toEqual({});
+    expect(winnerTime({ ...A, starts_at: "2026-10-01T22:30:00Z" })).toEqual({}); // needs both ends
   });
 });

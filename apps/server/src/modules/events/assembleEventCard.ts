@@ -14,8 +14,9 @@ export type EventWithCardData = Prisma.EventGetPayload<{
 
 /** Whether `userId` still gets this event's card (#210): once voting closes, a Ghost Pass loses it. */
 export function canSeeEvent(event: EventWithCardData, userId: string, now: Date): boolean {
+  if (event.isMixer && event.status === "expired") return false;
   const mine = event.participants.find((participant) => participant.userId === userId);
-  return !!mine && keepsAccess({ ...mine, inviteSource: inviteSource(event, userId, mine) }, votingOpen(event, now));
+  return !!mine && keepsAccess(invitedParticipant(event, mine), votingOpen(event, now));
 }
 
 /** Keeps travel times only for people the viewer may see; the keys would otherwise leak the roster. */
@@ -45,18 +46,19 @@ export function assembleEventCard(event: EventWithCardData, userId: string, now 
     ? EventOption.parse(event.venueSnapshot)
     : event.venuePlaceId ? options.find((option) => option.place_id === event.venuePlaceId) ?? null : null;
   // Tallies beside a roster the viewer can't fully see would let them count hidden passes.
-  const tallies = resolved && scope.seesEveryone
+  const tallies = !event.isMixer && resolved && scope.seesEveryone
     ? Object.fromEntries(options.map((option) => [option.id!, event.votes.filter((vote) => vote.optionId === option.id).length]))
     : null;
-  const creator = event.createdById ? users.get(event.createdById) : undefined;
+  const creator = !event.isMixer && event.createdById ? users.get(event.createdById) : undefined;
   const invited = event.participants.map((participant) => invitedParticipant(event, participant));
 
-  const effectiveStatus = (event.status === "confirmed" || event.status === "chatted") && scope.attendeeIds.length < 2
+  const effectiveStatus = !event.isMixer && (event.status === "confirmed" || event.status === "chatted") && scope.attendeeIds.length < 2
     ? "expired"
     : event.status;
 
   return EventCardPayload.parse({
     id: event.id,
+    is_mixer: event.isMixer === true,
     status: effectiveStatus,
     starts_at: event.startsAt.toISOString(),
     ends_at: event.endsAt.toISOString(),
@@ -69,7 +71,7 @@ export function assembleEventCard(event: EventWithCardData, userId: string, now 
       passed: person.passed,
     })),
     options: options.map((option) => scopedTravel(option, visible)),
-    progress: { responded, total: event.participants.length },
+    progress: event.isMixer ? null : { responded, total: event.participants.length },
     my_status: myStatus,
     my_option_id: mine.voteStatus === "ghost_passed" ? null : myVote?.optionId ?? null,
     vote_closes_at: event.voteClosesAt.toISOString(),
