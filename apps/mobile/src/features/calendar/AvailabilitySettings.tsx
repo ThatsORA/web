@@ -7,7 +7,7 @@ import type { z } from "zod";
 import { api } from "../../lib/api";
 import { roundedHome } from "../../lib/geo";
 import { createDeviceCalendarSync } from "./device";
-import { GoogleCalendarConnect } from "./GoogleCalendarConnect";
+import { GoogleCalendarSyncButton } from "./GoogleCalendarConnect";
 import { ManualAvailability } from "./ManualAvailability";
 import { UnifiedCalendarView } from "./UnifiedCalendarView";
 
@@ -93,55 +93,18 @@ export function AvailabilitySettings() {
         />
       </Card>
 
-      {/* Consolidate Calendar & Availability Section */}
       <Card>
-        <Txt variant="section">Calendar & Availability</Txt>
-        <Txt variant="small" color="textMuted">
-          Sync external calendars or enter manual busy times to highlight when you are free.
-        </Txt>
+        <Txt variant="section">Availability</Txt>
 
-        {/* Subtle Sync Controls Status Bar */}
-        <View
-          style={{
-            backgroundColor: theme.colors.surfaceMuted,
-            borderRadius: theme.radius.md,
-            padding: theme.spacing.sm,
-            gap: theme.spacing.sm,
-            borderWidth: 1,
-            borderColor: theme.colors.border,
-          }}
-        >
-          {/* Device Calendar Row */}
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: theme.spacing.xs,
-            }}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.xs }}>
-              <Txt variant="small" color="textMuted">
-                Device Calendar:
-              </Txt>
-              <Txt variant="small" color="heading">
-                Local Sync
-              </Txt>
-            </View>
-            <Button
-              label={syncing ? "Syncing..." : "Sync Device"}
-              variant="outline"
-              size="sm"
-              onPress={handleSyncDeviceCalendar}
-              disabled={syncing}
-            />
-          </View>
-
-          <View style={{ height: 1, backgroundColor: theme.colors.border, opacity: 0.5 }} />
-
-          {/* Google Calendar Row */}
-          <GoogleCalendarConnect />
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.sm }}>
+          <Button
+            label={syncing ? "Syncing..." : "Sync with device calendar"}
+            variant="outline"
+            size="sm"
+            onPress={handleSyncDeviceCalendar}
+            disabled={syncing}
+          />
+          <GoogleCalendarSyncButton onSynced={() => setScheduleKey((k) => k + 1)} />
         </View>
 
         {/* Manual Availability */}

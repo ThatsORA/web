@@ -57,7 +57,7 @@ export function UnifiedScheduleView({
           borderBottomColor: theme.colors.border,
         }}
       >
-        <Txt variant="title">Upcoming Schedule</Txt>
+        <Txt variant="section">Schedule</Txt>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.sm, alignItems: "center" }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
             <View
