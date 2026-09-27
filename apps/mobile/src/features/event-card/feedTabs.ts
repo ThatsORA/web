@@ -3,11 +3,16 @@ import type { EventCardPayload } from "@web/contract";
 
 export type HangoutTab = "pending" | "confirmed" | "past";
 
-/** Filter event cards by feed sub-tab: Pending (voting), Confirmed (confirmed/chatted), Past (completed/expired). */
+/** Filter event cards by feed sub-tab: Pending (voting/invited), Confirmed (confirmed/chatted), Past (completed/expired). */
 export function filterHangoutsByTab(cards: EventCardPayload[], tab: HangoutTab): EventCardPayload[] {
   return cards.filter((card) => {
     if (tab === "pending") {
-      return card.status === "voting";
+      return (
+        card.status === "voting" ||
+        (card.my_status === "invited" &&
+          card.status !== "completed" &&
+          card.status !== "expired")
+      );
     }
     if (tab === "confirmed") {
       return card.status === "confirmed" || card.status === "chatted";
@@ -19,14 +24,22 @@ export function filterHangoutsByTab(cards: EventCardPayload[], tab: HangoutTab):
   });
 }
 
-/** True if there is at least one pending voting hangout where the caller hasn't voted yet. */
-export function hasPendingNotification(cards: EventCardPayload[]): boolean {
-  return cards.some((card) => card.status === "voting" && card.my_status === "invited");
+/** Whether this card represents an active hangout with a pending invite awaiting response before its start time. */
+export function isPendingInvite(card: EventCardPayload, now = Date.now()): boolean {
+  if (card.my_status !== "invited") return false;
+  if (card.status === "completed" || card.status === "expired") return false;
+  if (card.starts_at && Date.parse(card.starts_at) <= now) return false;
+  return true;
 }
 
-/** Count of unvoted pending hangouts. */
-export function pendingNotificationCount(cards: EventCardPayload[]): number {
-  return cards.filter((card) => card.status === "voting" && card.my_status === "invited").length;
+/** True if there is at least one active hangout where the caller has a pending invite before its start time. */
+export function hasPendingNotification(cards: EventCardPayload[], now = Date.now()): boolean {
+  return cards.some((card) => isPendingInvite(card, now));
+}
+
+/** Count of active hangouts with pending invites before start time. */
+export function pendingNotificationCount(cards: EventCardPayload[], now = Date.now()): number {
+  return cards.filter((card) => isPendingInvite(card, now)).length;
 }
 
 /**

@@ -18,14 +18,26 @@ describe("feedTabs", () => {
     mockCard("c6", "expired", "ghost_passed"),
   ] as EventCardPayload[];
 
-  it("filters cards into Pending tab (voting status)", () => {
+  it("filters cards into Pending tab (voting status or pending late invites)", () => {
     const pending = filterHangoutsByTab(cards, "pending");
     expect(pending.map((c) => c.id)).toEqual(["c1", "c2"]);
+
+    const lateInvite = mockCard("c7", "confirmed", "invited") as EventCardPayload;
+    const withLate = filterHangoutsByTab([...cards, lateInvite], "pending");
+    expect(withLate.map((c) => c.id)).toEqual(["c1", "c2", "c7"]);
+
+    const pastInvite = { ...mockCard("c8", "completed", "invited") } as EventCardPayload;
+    const expiredInvite = { ...mockCard("c9", "expired", "invited") } as EventCardPayload;
+    expect(filterHangoutsByTab([pastInvite, expiredInvite], "pending")).toEqual([]);
   });
 
   it("filters cards into Confirmed tab (confirmed or chatted status)", () => {
     const confirmed = filterHangoutsByTab(cards, "confirmed");
     expect(confirmed.map((c) => c.id)).toEqual(["c3", "c4"]);
+
+    const lateInvite = mockCard("c7", "confirmed", "invited") as EventCardPayload;
+    const withLate = filterHangoutsByTab([...cards, lateInvite], "confirmed");
+    expect(withLate.map((c) => c.id)).toEqual(["c3", "c4", "c7"]);
   });
 
   it("filters cards into Past tab (completed or expired status)", () => {
@@ -44,6 +56,31 @@ describe("feedTabs", () => {
 
     expect(hasPendingNotification(noUnvotedCards)).toBe(false);
     expect(pendingNotificationCount(noUnvotedCards)).toBe(0);
+  });
+
+  it("includes active late invites before start time in notification count", () => {
+    const now = 1700000000000;
+    const futureConfirmed = {
+      ...mockCard("c-future", "confirmed", "invited"),
+      starts_at: new Date(now + 3600000).toISOString(),
+    } as EventCardPayload;
+    const pastConfirmed = {
+      ...mockCard("c-past", "confirmed", "invited"),
+      starts_at: new Date(now - 3600000).toISOString(),
+    } as EventCardPayload;
+    const completedInvite = {
+      ...mockCard("c-completed", "completed", "invited"),
+      starts_at: new Date(now + 3600000).toISOString(),
+    } as EventCardPayload;
+
+    expect(hasPendingNotification([futureConfirmed], now)).toBe(true);
+    expect(pendingNotificationCount([futureConfirmed], now)).toBe(1);
+
+    expect(hasPendingNotification([pastConfirmed], now)).toBe(false);
+    expect(pendingNotificationCount([pastConfirmed], now)).toBe(0);
+
+    expect(hasPendingNotification([completedInvite], now)).toBe(false);
+    expect(pendingNotificationCount([completedInvite], now)).toBe(0);
   });
 
   describe("getRecentlyCancelledCards", () => {
