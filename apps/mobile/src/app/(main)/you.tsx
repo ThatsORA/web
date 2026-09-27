@@ -6,7 +6,7 @@ import type { z } from "zod";
 import { api } from "../../lib/api";
 import { displayName } from "../../lib/displayName";
 import { unregisterPushToken } from "../../lib/push";
-import { PROFILE_HREF } from "../../lib/routes";
+import { PREFERENCES_HREF, PROFILE_HREF } from "../../lib/routes";
 import { session } from "../../lib/secureSession";
 import { AvailabilitySettings } from "../../features/calendar";
 import { FavoritesSettings } from "../../features/favorites";
@@ -65,6 +65,7 @@ export default function You() {
           <Txt variant="small">@{me.username}</Txt>
           {me.email ? <Txt variant="small" color="textMuted">{me.email}</Txt> : null}
           <Button label="Edit profile" variant="outline" onPress={() => router.push(PROFILE_HREF)} />
+          <Button label="Preferences" variant="outline" onPress={() => router.push(PREFERENCES_HREF)} />
         </Card>
       ) : null}
 

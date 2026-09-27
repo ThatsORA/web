@@ -56,6 +56,8 @@ export default function MainLayout() {
       <Tabs.Screen name="settings" options={{ href: null }} />
       {/* My profile (#97): opened from You and Settings, never a bottom tab. */}
       <Tabs.Screen name="profile" options={{ href: null }} />
+      {/* Private matching profile (#310): opened from You, never a bottom tab. */}
+      <Tabs.Screen name="preferences" options={{ href: null }} />
       {/* "+ New hangout" (#70): opened from the Hangouts feed, never a bottom tab. */}
       <Tabs.Screen name="new-hangout" options={{ href: null }} />
       {/* Fallback group chat (#147): opened from a chatted card's "Open chat", never a bottom tab. */}

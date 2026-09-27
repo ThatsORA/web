@@ -23,6 +23,8 @@ export type VoteStatus = z.infer<typeof VoteStatus>;
 export const Username = z.string().min(3).max(24).regex(/^[a-z0-9_]+$/);
 export const DisplayName = z.string().trim().min(1).max(40);
 export const Bio = z.string().trim().max(160);
+/** Private matching profile (#310): only the owner (via Me) and the server-side decision model see it. */
+export const PrefText = z.string().trim().max(300);
 
 export const SignupRequest = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -58,6 +60,8 @@ export const Me = z.object({
   email_verified: z.boolean(),
   display_name: z.string().nullable(), // as set (null = not set); others see it via PublicUser
   bio: z.string().nullable(),
+  pref_activities: z.string().nullable(), // private: never in PublicUser/PublicProfile/event/chat/socket
+  pref_personality: z.string().nullable(),
 });
 export const VerifyEmailRequest = z.object({ code: z.string().regex(/^\d{6}$/) });
 export const PatchMeRequest = z
@@ -68,6 +72,8 @@ export const PatchMeRequest = z
     travel_mode: TravelMode,
     display_name: DisplayName.nullable(), // null clears it
     bio: Bio.nullable(),
+    pref_activities: PrefText.nullable(), // null or "" clears it
+    pref_personality: PrefText.nullable(),
     username: Username, // at most once per 30 days; 409 username_taken / username_cooldown
   })
   .partial();

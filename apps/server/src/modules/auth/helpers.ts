@@ -30,6 +30,8 @@ export function toMe(user: User): MeT {
     email_verified: isFindable(user), // true for everyone when verification is off, so the app skips the step
     display_name: user.displayName,
     bio: user.bio,
+    pref_activities: user.prefActivities,
+    pref_personality: user.prefPersonality,
   };
 }
 

@@ -201,6 +201,7 @@ users
   created_at
   email_verified_at null     -- null = unverified; sign-up writes null, seed/legacy accounts are backfilled as verified
   display_name null (1–40), bio null (≤ 160), username_changed_at null   -- #96; username changes once per 30 days
+  pref_activities null (≤ 300), pref_personality null (≤ 300)   -- #310; private matching profile, owner + decision model only
 
 email_codes                -- one live code per (user, purpose); 6 digits, stored as HMAC-SHA256, never plain
   id, user_id fk, purpose ('verify'|'reset'|'change_email'), code_hash, new_email null,
@@ -284,7 +285,7 @@ Every route except signup and login requires `Authorization: Bearer <JWT>`.
 | POST | /auth/login | Ojas | Return JWT |
 | POST | /auth/verify-email/send | Ojas | Email a new 6-digit code. 204, or 429 + `Retry-After` within 60 s, or 409 if already verified |
 | POST | /auth/verify-email | Ojas | `{ code }` → `Me`. `400 wrong_code` burns an attempt; `400 code_expired` means send a new one |
-| GET / PATCH | /me | Ojas | Profile: timezone, home_lat/lng, travel_mode, `display_name`, `bio`, `username` (once per 30 days; 409 `username_taken` / `username_cooldown`), `email_verified` (read-only) |
+| GET / PATCH | /me | Ojas | Profile: timezone, home_lat/lng, travel_mode, `display_name`, `bio`, `pref_activities` / `pref_personality` (private, ≤ 300, #310), `username` (once per 30 days; 409 `username_taken` / `username_cooldown`), `email_verified` (read-only) |
 | POST | /me/email | Ojas | `{ new_email, password }` → emails a code to the new address (409 if taken) |
 | POST | /me/email/confirm | Ojas | `{ code }` → switches the email, marks it verified, tells the old address → `Me` |
 | GET | /users/:id | Ojas | Public profile: `{ id, username, display_name, bio, friendship: none\|requested\|incoming\|friends, squads }` (shared active squads). Never email or close-friend status |
