@@ -22,6 +22,10 @@ touches before you write code.
   receives a direct invitee they can't see, a Ghost Pass marker, or an
   attendee list, travel time or tally that reveals one. Build every event
   payload (card, list, chat membership, presence) on `viewerScope()`.
+- Once voting closes, a direct invitee's Ghost Pass is final and they lose
+  the event: card, list, chat, socket events and pushes (#210, plan §9
+  "Pass lifecycle"). Pick every post-close recipient with `keepsAccess()` /
+  `eventAudience()`, never "all participants".
 - Friend status (pending/accepted) is visible to both people. Close-friend
   status never is: no endpoint or socket payload reveals whether someone
   marked you close, and a declined friend request is never announced.

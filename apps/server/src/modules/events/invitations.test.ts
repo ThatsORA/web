@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { VoteStatus } from "@web/contract";
-import { inviteSource, passKind, viewerScope, type ParticipantRow } from "./invitations";
+import { eventAudience, inviteSource, keepsAccess, passKind, viewerScope, type ParticipantRow } from "./invitations";
 
 const [C, D, E, O, S, T] = ["c", "d", "e", "o", "s", "t"];
 const S1 = "squad-1";
@@ -72,5 +72,42 @@ describe("viewerScope", () => {
 
   it("refuses a viewer who isn't in the event", () => {
     expect(() => viewerScope(hangout, "stranger")).toThrow("non-participant");
+  });
+});
+
+describe("keepsAccess / eventAudience (#210)", () => {
+  // Squad S1's hangout made by C with members S, O, T; C (creator), S and O passed (visible Passes).
+  const squadEvent = { createdById: C, sourceGroupId: S1 };
+  const squadRows = rows([C, O, S, T], { [C]: "ghost_passed", [O]: "ghost_passed", [S]: "ghost_passed" })
+    .map((r) => ({ ...r, inviteSource: inviteSource(squadEvent, r.userId) }));
+  // C's direct hangout with D and E; D ghost passed.
+  const directEvent = { createdById: C, sourceGroupId: null };
+  const directRows = rows([C, D, E], { [D]: "ghost_passed" })
+    .map((r) => ({ ...r, inviteSource: inviteSource(directEvent, r.userId) }));
+  const row = (list: typeof directRows, id: string) => list.find((p) => p.userId === id)!;
+
+  it("keeps everyone while voting is open, so a ghost passer can still return and vote", () => {
+    expect(eventAudience(directRows, true)).toEqual([C, D, E]);
+    expect(keepsAccess(row(directRows, D), true)).toBe(true);
+  });
+
+  it("after close, a Ghost Pass is final and loses the event; a visible Pass keeps it", () => {
+    expect(keepsAccess(row(directRows, D), false)).toBe(false);
+    expect(eventAudience(directRows, false)).toEqual([C, E]);
+    expect(keepsAccess(row(squadRows, S), false)).toBe(true);
+    expect(keepsAccess(row(squadRows, C), false)).toBe(true);
+    expect(eventAudience(squadRows, false)).toEqual([C, O, S, T]);
+  });
+
+  it("someone in the event through its squad uses squad rules, even if they'd also have been a direct pick", () => {
+    expect(row(squadRows, O).inviteSource).toBe("squad");
+    expect(keepsAccess(row(squadRows, O), false)).toBe(true);
+  });
+
+  it("a squad Pass is excluded from attendees but stays visible to their squad", () => {
+    const scope = viewerScope({ ...squadEvent, participants: squadRows }, T);
+    expect(scope.people.find((p) => p.userId === S)?.passed).toBe(true);
+    expect(scope.attendeeIds).not.toContain(S);
+    expect(scope.attendeeIds).not.toContain(O);
   });
 });

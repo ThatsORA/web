@@ -7,7 +7,7 @@ import { EventCardPayload, EventsListResponse, Id, routes } from "@web/contract"
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { publicUserSelect } from "../auth/helpers";
-import { assembleEventCard } from "./assembleEventCard";
+import { assembleEventCard, canSeeEvent } from "./assembleEventCard";
 
 export const eventsRouter = Router();
 
@@ -76,8 +76,9 @@ eventsRouter.get(routes.events, requireAuth, async (req, res) => {
       votes: { select: { userId: true, optionId: true } },
     },
   });
+  const now = new Date();
   res.json(EventsListResponse.parse({
-    events: events.map((event) => assembleEventCard(event, userId)),
+    events: events.filter((event) => canSeeEvent(event, userId, now)).map((event) => assembleEventCard(event, userId)),
   }));
 });
 
@@ -89,6 +90,7 @@ eventsRouter.get(routes.event(":id"), requireAuth, async (req, res) => {
     where: { id: id.data, participants: { some: { userId } } },
     include: { participants: { include: { user: { select: publicUserSelect } } }, options: true, votes: { select: { userId: true, optionId: true } } },
   });
-  if (!event) return res.status(404).json({ error: "not_found" });
+  // A ghost passer after close gets the same 404 as a stranger (#210).
+  if (!event || !canSeeEvent(event, userId, new Date())) return res.status(404).json({ error: "not_found" });
   res.json(EventCardPayload.parse(assembleEventCard(event, userId)));
 });

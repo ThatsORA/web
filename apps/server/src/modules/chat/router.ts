@@ -1,5 +1,6 @@
 // Owner: Ojas — fallback group chat for chatted events.
-// Only participants may read or post; ghost-passers are excluded.
+// Only participants may read or post. A Ghost Pass (direct invite) is excluded; a visible Pass (creator,
+// squad) keeps chat (#210, keepsAccess in events/invitations.ts).
 // Posting only works while Event.status === "chatted" and before endsAt.
 import { Router } from "express";
 import {
@@ -11,6 +12,10 @@ import {
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { emitToUsers } from "../../realtime";
+import { eventAudience, eventParticipants } from "../events/invitations";
+
+/** Who may read and post. Chat uses the after-close rule even while voting is open, so a Ghost Pass never enters it (#210, #212). */
+const chatMembers = async (eventId: string) => eventAudience(await eventParticipants(eventId), false);
 
 export const chatRouter = Router();
 chatRouter.use(requireAuth);
@@ -19,16 +24,10 @@ chatRouter.get(routes.eventMessages(":id"), async (req, res) => {
   const me = (req as AuthedRequest).userId;
   const eventId = String(req.params.id);
 
-  const event = await prisma.event.findUnique({
-    where: { id: eventId },
-    include: {
-      participants: { select: { userId: true, voteStatus: true } },
-    },
-  });
+  const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) return res.status(404).json({ error: "not_found" });
 
-  const participant = event.participants.find((p) => p.userId === me);
-  if (!participant || participant.voteStatus === "ghost_passed") {
+  if (!(await chatMembers(eventId)).includes(me)) {
     return res.status(403).json({ error: "forbidden", message: "Only active participants may read chat" });
   }
 
@@ -75,16 +74,11 @@ chatRouter.post(routes.eventMessages(":id"), async (req, res) => {
     return res.status(400).json({ error: "invalid_body", message: body.error.message });
   }
 
-  const event = await prisma.event.findUnique({
-    where: { id: eventId },
-    include: {
-      participants: { select: { userId: true, voteStatus: true } },
-    },
-  });
+  const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) return res.status(404).json({ error: "not_found" });
 
-  const participant = event.participants.find((p) => p.userId === me);
-  if (!participant || participant.voteStatus === "ghost_passed") {
+  const members = await chatMembers(eventId);
+  if (!members.includes(me)) {
     return res.status(403).json({ error: "forbidden", message: "Only active participants may post in chat" });
   }
 
@@ -110,9 +104,7 @@ chatRouter.post(routes.eventMessages(":id"), async (req, res) => {
     },
   });
 
-  const otherActiveUserIds = event.participants
-    .filter((p) => p.userId !== me && p.voteStatus !== "ghost_passed")
-    .map((p) => p.userId);
+  const otherActiveUserIds = members.filter((id) => id !== me);
 
   if (otherActiveUserIds.length > 0) {
     emitToUsers(otherActiveUserIds, "event:message", { event_id: eventId });

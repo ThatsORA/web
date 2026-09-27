@@ -77,6 +77,16 @@ const VIBE_DESCRIPTIONS: Record<VibeTag, string> = {
   night_out: "A night out of two to three hours at a bar, club or bowling alley",
 };
 
+/** Plain-word group facts for `proposeQuestion`/`vibeQuestion`. Runtime (#231) and the training data (#235) share this format. */
+export function groupFacts(g: { size: number; when: string; lastHangout: string; favorites: string[] }): string[] {
+  return [
+    `Group of ${g.size} friends`,
+    `Shared free time: ${g.when}`,
+    `Last hangout: ${g.lastHangout}`,
+    `Shared favorites: ${g.favorites.length ? g.favorites.map((f) => f.replaceAll("_", " ")).join(", ") : "none"}`,
+  ];
+}
+
 /** Should we suggest a hangout to this group now? `facts` are plain-word lines, e.g. "last hangout was 3 weeks ago". */
 export function proposeQuestion(facts: string[]): ChoiceQuestion {
   return {

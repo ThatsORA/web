@@ -64,4 +64,17 @@ describe("voting router", () => {
     expect(mocks.deleteMany).toHaveBeenCalledWith({ where: { eventId: "e1", userId } });
     expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ data: { voteStatus: "ghost_passed" } }));
   });
+  it("lets a ghost passer return with a vote while voting is open (#210)", async () => {
+    expect((await post("ghost-pass")).status).toBe(204);
+    expect((await post("vote", { option_id: optionId })).status).toBe(204);
+    expect(mocks.update).toHaveBeenLastCalledWith(expect.objectContaining({ data: { voteStatus: "voted" } }));
+    expect(mocks.upsert).toHaveBeenCalledOnce();
+  });
+  it("makes a pass final once voting closed early or at the deadline (#210)", async () => {
+    for (const closed of [{ status: "confirmed" }, { status: "expired" }, { voteClosesAt: new Date(Date.now() - 1) }]) {
+      mocks.findUnique.mockResolvedValueOnce({ ...openEvent(), ...closed });
+      expect((await post("vote", { option_id: optionId })).status).toBe(409);
+    }
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
 });
