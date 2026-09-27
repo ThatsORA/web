@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { ActionSheetIOS, ActivityIndicator, Linking, Platform, View } from "react-native";
 import { CHAT_PATHNAME } from "../../lib/routes";
-import { Badge, Button, Callout, Card, Txt, useTheme } from "../../ui";
+import { Avatar, Badge, Button, Callout, Card, Txt, useTheme } from "../../ui";
 import { ExpenseForm } from "../expenses";
 import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calendarSync";
 import { canReportClosed, cardKind, freePeople, hasEnded, travelRows } from "./cardState";
@@ -79,6 +79,11 @@ function Header({ card, eyebrow, badge, onBrand }: { card: EventCardPayload; eye
           <Txt variant="headline" accessibilityRole="header">
             {timeLabel(card)}
           </Txt>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.xs }}>
+            {card.participants.map((p) => (
+              <Avatar key={p.id} name={p.display_name ?? p.username} size="sm" />
+            ))}
+          </View>
           <Txt variant="small">{card.participants.map((p) => p.display_name ?? p.username).join(" · ")}</Txt>
           {card.match_reason ? <Txt variant="small">{card.match_reason}</Txt> : null}
         </>
@@ -257,8 +262,11 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
           {venue.facts_line}
         </Txt>
         {travelRows(card).map((r) => (
-          <View key={r.id} style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Txt>{r.display_name ?? r.username}</Txt>
+          <View key={r.id} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: t.spacing.sm, flexShrink: 1 }}>
+              <Avatar name={r.display_name ?? r.username} size="sm" />
+              <Txt>{r.display_name ?? r.username}</Txt>
+            </View>
             <Txt numeric color="heading">
               {r.minutes === null ? "—" : `${Math.round(r.minutes)} min`}
             </Txt>
