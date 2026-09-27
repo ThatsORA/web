@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { VoteStatus } from "@web/contract";
 import { prisma } from "../../lib/prisma";
-import { chatAccess, chatAudience, eventAudience, eventParticipants, invitedParticipant, inviteSource, keepsAccess, passKind, viewerScope, type InvitedParticipant, type ParticipantRow } from "./invitations";
+import { chatAccess, chatAudience, eventAudience, eventParticipants, invitedParticipant, inviteSource, inviterId, keepsAccess, passKind, viewerScope, type InvitedParticipant, type ParticipantRow } from "./invitations";
 
 vi.mock("../../lib/prisma", () => ({ prisma: { eventParticipant: { findMany: vi.fn() } } }));
 
@@ -125,8 +125,36 @@ describe("viewerScope", () => {
     expect(viewerScope(mixed, S).attendeeIds).toEqual([C, S]);
   });
 
+  it("late invitee sees creator and who invited them; inviter sees their late invitees; peers do not", () => {
+    const event = {
+      createdById: C,
+      sourceGroupId: S1,
+      sourceGroupIds: [S1],
+      participants: [
+        { userId: C, voteStatus: "voted" as const, inviteSource: "creator" as const, sourceGroupIds: [] },
+        { userId: S, voteStatus: "voted" as const, inviteSource: "squad" as const, sourceGroupIds: [S1] },
+        { userId: T, voteStatus: "voted" as const, inviteSource: "squad" as const, sourceGroupIds: [S1] },
+        { userId: D, voteStatus: "invited" as const, inviteSource: "direct" as const, sourceGroupIds: [`invited_by:${S}`] },
+      ],
+    };
+    // D (invitee) sees themselves, creator (C), and S (who invited them), but not peer T
+    expect(viewerScope(event, D).people.map((p) => p.userId)).toEqual([C, S, D]);
+    // S (inviter) sees creator (C), themselves (S), peer (T), and D (their direct invitee)
+    expect(viewerScope(event, S).people.map((p) => p.userId)).toEqual([C, S, T, D]);
+    // T (other squad member) sees creator (C), S, themselves (T), but NOT D
+    expect(viewerScope(event, T).people.map((p) => p.userId)).toEqual([C, S, T]);
+  });
+
   it("refuses a viewer who isn't in the event", () => {
     expect(() => viewerScope(hangout, "stranger")).toThrow("non-participant");
+  });
+});
+
+describe("inviterId", () => {
+  it("extracts the inviter from sourceGroupIds", () => {
+    expect(inviterId({ userId: "u1", voteStatus: "invited", sourceGroupIds: ["invited_by:u2"] })).toBe("u2");
+    expect(inviterId({ userId: "u1", voteStatus: "invited", sourceGroupIds: ["squad-1"] })).toBeNull();
+    expect(inviterId(undefined)).toBeNull();
   });
 });
 
