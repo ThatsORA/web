@@ -45,6 +45,18 @@ describe("feedTabs", () => {
     expect(past.map((c) => c.id)).toEqual(["c5", "c6"]);
   });
 
+  it("excludes dismissed expired cards from Past tab when dismissedIds is provided", () => {
+    // c6 is expired status in mockCard setup
+    const pastWithDismissedArray = filterHangoutsByTab(cards, "past", ["c6"]);
+    expect(pastWithDismissedArray.map((c) => c.id)).toEqual(["c5"]);
+
+    const pastWithDismissedSet = filterHangoutsByTab(cards, "past", new Set(["c6"]));
+    expect(pastWithDismissedSet.map((c) => c.id)).toEqual(["c5"]);
+
+    const pastAllDismissed = filterHangoutsByTab(cards, "past", ["c5", "c6"]);
+    expect(pastAllDismissed).toEqual([]);
+  });
+
   it("detects when a notification badge is needed for unvoted pending hangouts", () => {
     expect(hasPendingNotification(cards)).toBe(true);
     expect(pendingNotificationCount(cards)).toBe(1);
