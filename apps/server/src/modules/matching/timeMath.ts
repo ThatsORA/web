@@ -418,37 +418,30 @@ export function freeWindows(
 }
 
 /**
- * Core matching time math: classifySlot (plan §4).
+ * Core matching time math: feasibleSlots (plan §4).
  *
  * Evaluates template feasibility for a free window in every member's local time:
  * - s = the latest of W.start and each member's template earliest start, rounded up to 15 min.
  * - len = min(template max duration, W.end - s).
  * - Feasible if s <= every member's template latest start and len >= template min duration.
- * - Choose by priority based on the weekday of the earliest local timezone:
- *   - Fri/Sat: night_out > dinner > casual_hangout > quick_coffee
- *   - Sun–Thu: dinner > night_out > casual_hangout > quick_coffee
- * - Returns the slot [s, s + len] or null if discarded.
- * - With `vibe`, only that template counts: its slot is returned whenever it is feasible.
+ * - Returns the slot [s, s + len] of every feasible template, in VIBE_TEMPLATES order.
  */
-export function classifySlot(
+export function feasibleSlots(
   window: TimeWindowInput,
   timezone: string | readonly string[] = "America/New_York",
-  vibe?: VibeTag,
-): ClassifiedSlot | null {
+): ClassifiedSlot[] {
   const start = new Date(window.start);
   const end = new Date(window.end);
 
   if (isNaN(start.getTime()) || isNaN(end.getTime()) || start.getTime() >= end.getTime()) {
-    return null;
+    return [];
   }
 
   const timezones = typeof timezone === "string" ? [timezone] : [...new Set(timezone)];
-  if (!timezones.length) return null;
-  const priorityTimezone = earliestTimezone(start, timezones);
-  const weekday = getLocalParts(start, priorityTimezone).weekday;
+  if (!timezones.length) return [];
 
   const FIFTEEN_MIN_MS = 15 * 60 * 1000;
-  const feasible: Partial<Record<VibeTag, ClassifiedSlot>> = {};
+  const feasible: ClassifiedSlot[] = [];
 
   for (const [tag, tmpl] of Object.entries(VIBE_TEMPLATES) as Array<[VibeTag, VibeTemplate]>) {
     let rawStartMs = start.getTime();
@@ -475,21 +468,45 @@ export function classifySlot(
 
     if (sMs <= latestStartMs && lenMinutes >= tmpl.minDurationMinutes) {
       const slotEnd = new Date(sMs + lenMinutes * 60 * 1000);
-      feasible[tag] = {
+      feasible.push({
         vibe_tag: tag,
         start: s,
         end: slotEnd,
         durationMinutes: lenMinutes,
-      };
+      });
     }
   }
+
+  return feasible;
+}
+
+/**
+ * Core matching time math: classifySlot (plan §4).
+ *
+ * Picks one of `feasibleSlots` by priority, based on the weekday of the earliest local timezone:
+ *   - Fri/Sat: night_out > dinner > casual_hangout > quick_coffee
+ *   - Sun–Thu: dinner > night_out > casual_hangout > quick_coffee
+ * - Returns the slot [s, s + len] or null if discarded.
+ * - With `vibe`, only that template counts: its slot is returned whenever it is feasible.
+ */
+export function classifySlot(
+  window: TimeWindowInput,
+  timezone: string | readonly string[] = "America/New_York",
+  vibe?: VibeTag,
+): ClassifiedSlot | null {
+  const feasible = feasibleSlots(window, timezone);
+  if (!feasible.length) return null;
+
+  const start = new Date(window.start);
+  const timezones = typeof timezone === "string" ? [timezone] : timezone;
+  const weekday = getLocalParts(start, earliestTimezone(start, timezones)).weekday;
 
   // Priority is chosen by the local weekday of s
   const isWeekend = weekday === "Fri" || weekday === "Sat";
   const priority = vibe ? [vibe] : isWeekend ? WEEKEND_PRIORITY : WEEKDAY_PRIORITY;
 
   for (const tag of priority) {
-    const slot = feasible[tag];
+    const slot = feasible.find((f) => f.vibe_tag === tag);
     if (slot) {
       return slot;
     }
