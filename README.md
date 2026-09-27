@@ -96,6 +96,7 @@ spec, GitHub, logs, or a PR:
 | `INTERNAL_SECRET` | Different random secret for internal endpoints |
 | `GOOGLE_MAPS_API_KEY` | Riley's restricted Places (New) and Routes key, when available |
 | `GEMINI_API_KEY` | Ojas's Gemini key |
+| `LAYA_API_KEY` | The key `serve.py` was started with on Ojas's Laya droplet (#274) |
 
 The remaining demo values are in `.do/app.yaml` and mirror `.env.example`:
 `VOTE_TIMEOUT_SEC=90`, `COOLDOWN_HOURS=0`,
