@@ -38,10 +38,18 @@ export default function Profile() {
     void Promise.resolve().then(load);
   }, [load]);
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/(main)/you");
+    }
+  };
+
   return (
     <Screen
       title="My profile"
-      headerRight={<Button label="← Back" variant="ghost" onPress={() => router.back()} />}
+      headerRight={<Button label="← Back" variant="ghost" onPress={handleBack} />}
     >
       {loadError ? (
         <>
