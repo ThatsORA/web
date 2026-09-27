@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 import { stepEyebrow, type OnboardingStepProps } from "../../lib/onboarding";
-import { Button, Chip, Screen, Txt, useTheme } from "../../ui";
+import { Avatar, Button, Chip, Screen, Txt, useTheme } from "../../ui";
 import { FriendSearch } from "./FriendSearch";
 import {
   getFriendRequests,
@@ -87,7 +87,10 @@ export function FriendsStep({ onDone }: OnboardingStepProps) {
                   paddingVertical: t.spacing.xs,
                 }}
               >
-                <Txt variant="body">@{f.username}</Txt>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: t.spacing.sm, flexShrink: 1 }}>
+                  <Avatar name={f.username} size="sm" />
+                  <Txt variant="body">@{f.username}</Txt>
+                </View>
                 <Chip
                   label={f.close ? "★ Close" : "☆ Close"}
                   selected={f.close}
