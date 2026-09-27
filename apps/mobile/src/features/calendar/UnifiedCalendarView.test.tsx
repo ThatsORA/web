@@ -134,6 +134,17 @@ describe("UnifiedCalendarView & UnifiedScheduleView", () => {
     expect(texts).toContain("Busy");
     expect(texts).toContain("Hangout");
 
+    const txtElements = rendered.filter((el) => el.type === Txt);
+    const freeLegend = txtElements.find(
+      (el) => Children.toArray((el.props as { children: ReactNode }).children).join("") === "Free"
+    );
+    expect((freeLegend?.props as { color?: string })?.color).toBe("textMuted");
+
+    const busyLegend = txtElements.find(
+      (el) => Children.toArray((el.props as { children: ReactNode }).children).join("") === "Busy"
+    );
+    expect((busyLegend?.props as { color?: string })?.color).toBe("textMuted");
+
     // Day label
     expect(texts).toContain("Today");
 

@@ -45,25 +45,27 @@ export function UnifiedScheduleView({
           flexDirection: "row",
           justifyContent: "space-between",
           alignItems: "center",
+          flexWrap: "wrap",
+          gap: theme.spacing.xs,
           paddingBottom: theme.spacing.xs,
           borderBottomWidth: 1,
           borderBottomColor: theme.colors.border,
         }}
       >
         <Txt variant="title">Upcoming Schedule</Txt>
-        <View style={{ flexDirection: "row", gap: theme.spacing.sm, alignItems: "center" }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.sm, alignItems: "center" }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
             <View
               style={{
                 width: 8,
                 height: 8,
                 borderRadius: theme.radius.pill,
-                backgroundColor: theme.colors.primarySoft,
+                backgroundColor: theme.colors.primarySofter,
                 borderWidth: 1,
-                borderColor: theme.colors.primary,
+                borderColor: theme.colors.primarySoft,
               }}
             />
-            <Txt variant="small" color="primary">Free</Txt>
+            <Txt variant="small" color="textMuted">Free</Txt>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
             <View
@@ -73,7 +75,8 @@ export function UnifiedScheduleView({
                 borderRadius: theme.radius.pill,
                 backgroundColor: theme.colors.surfaceMuted,
                 borderWidth: 1,
-                borderColor: theme.colors.borderStrong,
+                borderColor: theme.colors.border,
+                opacity: 0.6,
               }}
             />
             <Txt variant="small" color="textMuted">Busy</Txt>
@@ -113,10 +116,10 @@ export function UnifiedScheduleView({
                       borderColor: theme.colors.primarySoft,
                     }}
                   >
-                    <Txt variant="body" color="primary">
+                    <Txt variant="body" color="textMuted">
                       {item.title}
                     </Txt>
-                    <Txt variant="small" color="primary" numeric>
+                    <Txt variant="small" color="textMuted" numeric>
                       {item.subtitle}
                     </Txt>
                   </View>
@@ -133,7 +136,7 @@ export function UnifiedScheduleView({
                       backgroundColor: theme.colors.surfaceMuted,
                       borderWidth: 1,
                       borderColor: theme.colors.border,
-                      opacity: 0.8,
+                      opacity: 0.6,
                     }}
                   >
                     <Txt variant="body" color="textMuted">
@@ -158,26 +161,42 @@ export function UnifiedScheduleView({
                     }
                   }}
                   style={({ pressed }) => ({
-                    opacity: pressed ? 0.9 : 1.0,
+                    opacity: pressed ? 0.8 : 1.0,
                   })}
                 >
                   <Card tint={!isConfirmed} brand={isConfirmed}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                      <Txt variant="label" style={{ color: isConfirmed ? theme.colors.onPrimary : theme.colors.heading }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: theme.spacing.xs,
+                      }}
+                    >
+                      <Txt
+                        variant="label"
+                        style={{
+                          color: isConfirmed ? theme.colors.onPrimary : theme.colors.heading,
+                          flexShrink: 1,
+                        }}
+                      >
                         ✨ {item.title}
                       </Txt>
                       {item.status ? (
                         <Badge label={item.status.toUpperCase()} tone={isConfirmed ? "new" : badgeTone} />
                       ) : null}
                     </View>
-                    <Txt variant="body" numeric style={{ color: isConfirmed ? theme.colors.onPrimary : theme.colors.primary }}>
+                    <Txt
+                      variant="body"
+                      numeric
+                      style={{
+                        color: isConfirmed ? theme.colors.onPrimary : theme.colors.primary,
+                        flexShrink: 1,
+                      }}
+                    >
                       {item.subtitle}
                     </Txt>
-                    <View style={{ marginTop: theme.spacing.xs, flexDirection: "row", justifyContent: "flex-end" }}>
-                      <Txt variant="small" style={{ color: isConfirmed ? theme.colors.onPrimary : theme.colors.link }}>
-                        View Event Card →
-                      </Txt>
-                    </View>
                   </Card>
                 </Pressable>
               );
