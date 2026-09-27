@@ -1,9 +1,67 @@
 import { useState, useCallback, useEffect } from "react";
 import { View, Alert, ActivityIndicator } from "react-native";
 import { Button, Txt, useTheme } from "../../ui";
-import { GoogleCalendarStatusResponse, GoogleCalendarStartResponse } from "@web/contract";
+import { GoogleCalendarStatusResponse, GoogleCalendarStartResponse, routes } from "@web/contract";
 import { api } from "../../lib/api";
 import { z } from "zod";
+
+
+/** Runs Google's sign-in and consent in a browser session. True once the server has stored the connection. */
+async function connectGoogleCalendar(): Promise<boolean> {
+  const Linking = await import("expo-linking");
+  const redirectUri = Linking.createURL("google-connected");
+  const res = await api("/calendar/google/start", GoogleCalendarStartResponse, {
+    method: "POST",
+    body: { redirect_uri: redirectUri }
+  });
+
+  const WebBrowser = await import("expo-web-browser");
+  const result = await WebBrowser.openAuthSessionAsync(res.url, redirectUri);
+
+  if (result.type !== "success" || !result.url) return false;
+  const parsed = Linking.parse(result.url);
+  if (parsed.queryParams?.error) {
+    Alert.alert("Connection Failed", String(parsed.queryParams.error));
+    return false;
+  }
+  return Boolean(parsed.queryParams?.ok);
+}
+
+/**
+ * One button for the You tab: connects Google Calendar the first time (or after access was revoked),
+ * otherwise pulls its busy times now. `onSynced` runs after either, so the schedule can refresh.
+ */
+export function GoogleCalendarSyncButton({ onSynced }: { onSynced?: () => void }) {
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    void import("expo-web-browser").then(wb => wb.maybeCompleteAuthSession()).catch(() => {});
+  }, []);
+
+  const handlePress = async () => {
+    setLoading(true);
+    try {
+      const status = await api(routes.googleCalendar, GoogleCalendarStatusResponse);
+      if ((!status.connected || status.revoked) && !(await connectGoogleCalendar())) return;
+      await api(routes.googleCalendarSync, z.unknown(), { method: "POST" });
+      onSynced?.();
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Google Calendar sync failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Button
+      label={loading ? "Syncing..." : "Sync with Google Calendar"}
+      variant="outline"
+      size="sm"
+      onPress={() => void handlePress()}
+      disabled={loading}
+    />
+  );
+}
 
 export function GoogleCalendarConnect() {
   const [status, setStatus] = useState<GoogleCalendarStatusResponse | null>(null);
@@ -40,24 +98,7 @@ export function GoogleCalendarConnect() {
   const handleConnect = async () => {
     setLoading(true);
     try {
-      const Linking = await import("expo-linking");
-      const redirectUri = Linking.createURL("google-connected");
-      const res = await api("/calendar/google/start", GoogleCalendarStartResponse, {
-        method: "POST",
-        body: { redirect_uri: redirectUri }
-      });
-      
-      const WebBrowser = await import("expo-web-browser");
-      const result = await WebBrowser.openAuthSessionAsync(res.url, redirectUri);
-      
-      if (result.type === "success" && result.url) {
-        const parsed = Linking.parse(result.url);
-        if (parsed.queryParams?.ok) {
-          await fetchStatus();
-        } else if (parsed.queryParams?.error) {
-          Alert.alert("Connection Failed", String(parsed.queryParams.error));
-        }
-      }
+      if (await connectGoogleCalendar()) await fetchStatus();
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Connection failed");
     } finally {

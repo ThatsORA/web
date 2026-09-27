@@ -16,6 +16,11 @@ vi.mock("expo-symbols", () => ({
 vi.mock("expo-router", () => ({
   router: { push: vi.fn(), replace: vi.fn() },
 }));
+vi.mock("@react-native-community/datetimepicker", () => ({
+  default: "DateTimePicker",
+  DateTimePickerAndroid: { open: vi.fn() },
+}));
+vi.mock("expo-localization", () => ({ getCalendars: () => [{ uses24hourClock: false }] }));
 
 import { AvailabilitySettings } from "../calendar";
 import { FavoritesSettings } from "./FavoritesSettings";

@@ -1,44 +1,24 @@
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { Button, Callout, Txt } from "../../ui";
+import { Button, Callout, Modal } from "../../ui";
 import {
-  formatManualDate,
-  formatManualTimeRange,
-  ManualAvailability,
+  busyBlockRange,
+  combineDayAndTime,
+  formatPickerValue,
   ManualAvailabilityView,
-  parseDateTime,
-  TIME_PRESETS,
+  type ManualAvailabilityViewProps,
 } from "./ManualAvailability";
 
-vi.mock("react-native", () => ({
-  View: "View",
-  ActivityIndicator: "ActivityIndicator",
-  TextInput: "TextInput",
-  Pressable: "Pressable",
-}));
+vi.mock("react-native", () => ({ View: "View", Platform: { OS: "ios" } }));
+vi.mock("@react-native-community/datetimepicker", () => ({ default: "DateTimePicker", DateTimePickerAndroid: { open: vi.fn() } }));
+vi.mock("expo-localization", () => ({ getCalendars: () => [{ uses24hourClock: false }] }));
 
 vi.mock("../../ui", () => ({
   Button: (props: any) => ({ type: Button, props }),
   Callout: (props: any) => ({ type: Callout, props }),
-  Card: (props: any) => ({ type: "Card", props }),
-  TextField: (props: any) => ({ type: "TextField", props }),
-  Txt: (props: any) => ({ type: Txt, props }),
-  useTheme: () => ({
-    colors: {
-      primary: "#6A00F4",
-      primarySoft: "#EBDDFF",
-      primarySofter: "#F6F0FF",
-      surfaceMuted: "#EFEAFB",
-      surface: "#FFFFFF",
-      border: "#E4DDF5",
-      borderStrong: "#CBC2E3",
-      heading: "#140A2E",
-      textMuted: "#6B6584",
-      danger: "#D12420",
-    },
-    spacing: { xs: 4, sm: 8, md: 16, lg: 24 },
-    radius: { sm: 4, pill: 999 },
-  }),
+  Modal: (props: any) => ({ type: Modal, props }),
+  Txt: (props: any) => ({ type: "Txt", props }),
+  useTheme: () => ({ spacing: { xs: 4, sm: 8, md: 16, lg: 24 } }),
 }));
 
 function elements(node: ReactNode): ReactElement[] {
@@ -47,105 +27,60 @@ function elements(node: ReactNode): ReactElement[] {
   );
 }
 
-describe("ManualAvailability datetime helpers", () => {
-  it("parses 24h and 12h time formats correctly", () => {
-    const d1 = parseDateTime("2026-10-01", "14:30");
-    expect(d1).not.toBeNull();
-    expect(d1?.getFullYear()).toBe(2026);
-    expect(d1?.getMonth()).toBe(9); // October is 9
-    expect(d1?.getDate()).toBe(1);
-    expect(d1?.getHours()).toBe(14);
-    expect(d1?.getMinutes()).toBe(30);
+const day = new Date(2026, 9, 1); // Thu, Oct 1 2026
+const at = (h: number, m = 0) => new Date(2020, 0, 1, h, m);
 
-    const d2 = parseDateTime("2026-10-01", "9:15 AM");
-    expect(d2?.getHours()).toBe(9);
-    expect(d2?.getMinutes()).toBe(15);
-
-    const d3 = parseDateTime("2026-10-01", "12:00 PM");
-    expect(d3?.getHours()).toBe(12);
-
-    const d4 = parseDateTime("2026-10-01", "12:00 AM");
-    expect(d4?.getHours()).toBe(0);
-
-    const d5 = parseDateTime("2026-10-01", "3 PM");
-    expect(d5?.getHours()).toBe(15);
+describe("manual busy time helpers", () => {
+  it("puts the picked time on the picked day", () => {
+    const d = combineDayAndTime(day, at(14, 30));
+    expect([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()]).toEqual([2026, 9, 1, 14, 30]);
   });
 
-  it("returns null for invalid inputs", () => {
-    expect(parseDateTime("", "10:00")).toBeNull();
-    expect(parseDateTime("2026-10-01", "")).toBeNull();
-    expect(parseDateTime("invalid-date", "10:00")).toBeNull();
-    expect(parseDateTime("2026-10-01", "25:00")).toBeNull();
-    expect(parseDateTime("2026-10-01", "invalid-time")).toBeNull();
+  it("builds the busy range on the picked day, and refuses an end at or before the start", () => {
+    const range = busyBlockRange(day, at(9), at(17));
+    expect(range).toEqual({ startsAt: new Date(2026, 9, 1, 9), endsAt: new Date(2026, 9, 1, 17) });
+    expect(busyBlockRange(day, at(17), at(9))).toEqual({ error: "Start time must be before end time." });
+    expect(busyBlockRange(day, at(9), at(9))).toEqual({ error: "Start time must be before end time." });
   });
 
-  it("formats date and time range properly", () => {
-    const s = "2026-10-01T14:00:00.000Z";
-    const e = "2026-10-01T16:00:00.000Z";
-    expect(formatManualDate(s)).toBeDefined();
-    expect(formatManualTimeRange(s, e)).toContain("–");
+  it("shows times in 12-hour form unless the phone uses a 24-hour clock", () => {
+    expect(formatPickerValue(at(17, 5), "time", false)).toMatch(/5:05\s?PM/i);
+    expect(formatPickerValue(at(17, 5), "time", true)).toMatch(/^17:05$/);
+    expect(formatPickerValue(day, "date", false)).toMatch(/Oct/);
   });
 });
 
 describe("ManualAvailabilityView", () => {
-  it("exports ManualAvailability, ManualAvailabilityView and TIME_PRESETS", () => {
-    expect(typeof ManualAvailability).toBe("function");
-    expect(typeof ManualAvailabilityView).toBe("function");
-    expect(TIME_PRESETS.length).toBe(4);
-    expect(TIME_PRESETS.map((p) => p.label)).toEqual([
-      "Morning 9am-12pm",
-      "Afternoon 12pm-5pm",
-      "Evening 5pm-9pm",
-      "Full Day 9am-5pm",
-    ]);
+  const props = (overrides: Partial<ManualAvailabilityViewProps> = {}): ManualAvailabilityViewProps => ({
+    open: false, onOpen: vi.fn(), onClose: vi.fn(), day, onChangeDay: vi.fn(),
+    start: at(9), onChangeStart: vi.fn(), end: at(17), onChangeEnd: vi.fn(), onSave: vi.fn(), ...overrides,
   });
 
-  it("renders error callout when error prop is provided", () => {
-    const rendered = elements(
-      ManualAvailabilityView({
-        error: "Network failure",
-        onSave: vi.fn(),
-      })
-    );
-    const callouts = rendered.filter((el) => el.type === Callout);
-    expect(callouts.length).toBeGreaterThan(0);
+  it("opens its own modal from the '+ Manually add busy time' button", () => {
+    const onOpen = vi.fn();
+    const rendered = elements(ManualAvailabilityView(props({ onOpen })));
+    const add = rendered.find((el) => el.type === Button && (el.props as { label: string }).label === "+ Manually add busy time");
+    (add?.props as { onPress: () => void }).onPress();
+    expect(onOpen).toHaveBeenCalled();
+    expect((rendered.find((el) => el.type === Modal)?.props as { visible: boolean }).visible).toBe(false);
   });
 
-  it("renders add block form with date and time presets when isAdding is true", () => {
+  it("asks for a date and start and end times with native pickers, then saves", () => {
     const onSave = vi.fn();
-    const onChangeStart = vi.fn();
-    const onChangeEnd = vi.fn();
-
-    const rendered = elements(
-      ManualAvailabilityView({
-        isAdding: true,
-        onSave,
-        onChangeStartTimeStr: onChangeStart,
-        onChangeEndTimeStr: onChangeEnd,
-      })
-    );
-    const texts = rendered
-      .filter((el) => el.type === Txt)
-      .map((el) => Children.toArray((el.props as { children: ReactNode }).children).join(""));
-    expect(texts).toContain("Add Busy Block");
-    expect(texts).toContain("Date Presets");
-    expect(texts).toContain("Time Presets");
-
-    const buttons = rendered.filter((el) => el.type === Button);
-    const morningBtn = buttons.find(
-      (el) => (el.props as { label: string }).label === "Morning 9am-12pm"
-    );
-    expect(morningBtn).toBeDefined();
-
-    (morningBtn?.props as { onPress?: () => void }).onPress?.();
-    expect(onChangeStart).toHaveBeenCalledWith("09:00");
-    expect(onChangeEnd).toHaveBeenCalledWith("12:00");
-
-    const saveBtn = buttons.find(
-      (el) => (el.props as { label: string }).label === "Save Busy Time"
-    );
-    expect(saveBtn).toBeDefined();
-    (saveBtn?.props as { onPress?: () => void }).onPress?.();
+    const rendered = elements(ManualAvailabilityView(props({ open: true, onSave })));
+    const modal = rendered.find((el) => el.type === Modal)!;
+    expect(modal.props).toMatchObject({ visible: true, title: "Add busy time" });
+    const fields = rendered.filter((el) => typeof el.type === "function" && "mode" in (el.props as object));
+    expect(fields.map((el) => [(el.props as { label: string }).label, (el.props as { mode: string }).mode])).toEqual([
+      ["Date", "date"], ["Start", "time"], ["End", "time"],
+    ]);
+    const save = rendered.find((el) => el.type === Button && (el.props as { label: string }).label === "Save busy time");
+    (save?.props as { onPress: () => void }).onPress();
     expect(onSave).toHaveBeenCalled();
+  });
+
+  it("shows why a busy time can't be saved", () => {
+    const rendered = elements(ManualAvailabilityView(props({ open: true, validationError: "Start time must be before end time." })));
+    expect(rendered.some((el) => el.type === Callout)).toBe(true);
   });
 });
