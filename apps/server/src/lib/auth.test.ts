@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ findUnique: vi.fn() }));
 vi.mock("./prisma", () => ({ prisma: { user: mocks } }));
-import { requireAuth, signToken, verifyToken } from "./auth";
+import { requireAuth, signToken } from "./auth";
 import { env } from "../env";
 
 let base: string;
@@ -31,7 +31,6 @@ describe("password-reset JWT revocation", () => {
     const fresh = signToken("user");
     expect((await call(old)).status).toBe(401);
     expect((await call(fresh)).status).toBe(200);
-    expect(verifyToken(fresh)).toBe("user"); // socket helper's existing return contract
   });
   it("converts legacy iat seconds and permits accounts that have never reset", async () => {
     const second = Math.floor(Date.now() / 1000);

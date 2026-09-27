@@ -13,15 +13,6 @@ export function signToken(userId: string): string {
   return jwt.sign({ sub: userId, iat: Math.floor(now / 1000), issued_at_ms: now }, env.JWT_SECRET, { expiresIn: "7d" });
 }
 
-export function verifyToken(token: string): string | null {
-  try {
-    const payload = jwt.verify(token, env.JWT_SECRET);
-    return typeof payload === "object" && typeof payload.sub === "string" ? payload.sub : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Verify signature, expiry, account existence and password-reset freshness. */
 export async function verifySessionToken(token: string): Promise<string | null> {
   let payload: jwt.JwtPayload | null = null;
