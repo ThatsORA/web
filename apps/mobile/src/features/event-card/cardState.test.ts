@@ -123,6 +123,9 @@ describe("helpers", () => {
     expect(isSquadHangout({ viewer: null })).toBe(false);
     expect(isSquadHangout({})).toBe(false);
   });
+
+  it("allows squad members to open chat during voting and confirmation on squad hangouts", () => {
+    expect(canOpenChat(get("Voting"))).toBe(true);
+    expect(canOpenChat(get("Confirmed"))).toBe(true);
+  });
 });
-
-

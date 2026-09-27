@@ -230,4 +230,12 @@ describe("chatAudience / chatAccess (#212)", () => {
     expect(chatAccess({ status: "voting", endsAt }, directRows, E, before)).toBeNull(); // no chat yet
     expect(chatAccess({ status: "voting", endsAt }, squadRows, "stranger", before)).toBeNull();
   });
+
+  it("grants open chat access during voting and confirmation on squad hangouts so members can discuss plans and nominate new invitees", () => {
+    const endsAt = new Date(Date.now() + 3600_000);
+    const now = new Date();
+    expect(chatAccess({ status: "voting", endsAt }, squadRows, S, now)).toBe("open");
+    expect(chatAccess({ status: "confirmed", endsAt }, squadRows, O, now)).toBe("open");
+  });
 });
+
