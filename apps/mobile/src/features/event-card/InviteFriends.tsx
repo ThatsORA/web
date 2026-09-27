@@ -45,6 +45,7 @@ export function InviteFriendsModal({ card, onClose, onSent }: { card: EventCardP
   }, []);
 
   const rows = friends ? inviteSearch(friends, card, query) : [];
+  const picked = (friends ?? []).filter((friend) => selected.includes(friend.id));
   const toggle = (id: string) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length < MAX_INVITES ? [...s, id] : s));
 
@@ -76,16 +77,16 @@ export function InviteFriendsModal({ card, onClose, onSent }: { card: EventCardP
           autoCorrect={false}
           returnKeyType="search"
         />
-        {friends === null && !error ? <Txt variant="small">Loading friends…</Txt> : null}
-        {friends && rows.length === 0 ? (
-          <Txt variant="small">{query.trim() ? "No friends match that search." : "Everyone you’re friends with is already here."}</Txt>
-        ) : null}
+        {friends && query.trim() && rows.length === 0 ? <Txt variant="small">No friends match that search.</Txt> : null}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm }}>
-          {rows.map(({ friend, inGroup }) => (
+          {/* Picks stay visible after the search changes, so they can be removed. */}
+          {picked.map((friend) => (
+            <Chip key={friend.id} label={displayName(friend)} selected onPress={() => toggle(friend.id)} />
+          ))}
+          {rows.filter(({ friend }) => !selected.includes(friend.id)).map(({ friend, inGroup }) => (
             <Chip
               key={friend.id}
               label={inGroup ? `${displayName(friend)} · Already in the group` : displayName(friend)}
-              selected={!inGroup && selected.includes(friend.id)}
               disabled={inGroup}
               onPress={() => toggle(friend.id)}
             />

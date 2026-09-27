@@ -169,14 +169,14 @@ describe("late invites (#345)", () => {
     expect(canDeclineInvite({ ...lateInvite, status: "voting" }, before)).toBe(false);
   });
 
-  it("lists only friends not on the card until you search, then marks people already in the group", () => {
+  it("shows nobody until you search, then marks people already in the group", () => {
     const card = get("Voting");
     const inGroup = card.participants.find((p) => p.id !== ME.id)!;
     const newbie = { id: "00000000-0000-4000-8000-0000000000ff", username: "newbie", display_name: "Nadia Q" };
     const friends = [inGroup, newbie];
-    expect(inviteSearch(friends, card, "")).toEqual([{ friend: newbie, inGroup: false }]);
+    expect(inviteSearch(friends, card, "")).toEqual([]);
+    expect(inviteSearch(friends, card, "   ")).toEqual([]);
     expect(inviteSearch(friends, card, "  NADIA ")).toEqual([{ friend: newbie, inGroup: false }]);
     expect(inviteSearch(friends, card, inGroup.username.slice(0, 3))).toEqual([{ friend: inGroup, inGroup: true }]);
-    expect(inviteSearch([inGroup], card, "")).toEqual([]);
   });
 });

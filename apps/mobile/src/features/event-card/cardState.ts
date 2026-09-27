@@ -112,9 +112,9 @@ export const canInvite = (card: EventCardPayload, now = Date.now()) =>
   card.my_status !== "ghost_passed" && Date.parse(card.starts_at) > now;
 
 /**
- * The invite picker's rows (#345). No query: friends not already on the card. A query matches every friend by
- * name or username, and anyone already visible on the card comes back `inGroup` (shown faded, not selectable).
- * Hidden participants look like anyone else; the server skips them silently.
+ * The invite picker's search results (#345): nothing until you type, then every friend whose name or username
+ * matches. Anyone already visible on the card comes back `inGroup` (shown faded, not selectable). Hidden
+ * participants look like anyone else; the server skips them silently.
  */
 export function inviteSearch<F extends { id: string; username: string; display_name?: string | null }>(
   friends: readonly F[],
@@ -122,8 +122,8 @@ export function inviteSearch<F extends { id: string; username: string; display_n
   query: string,
 ): { friend: F; inGroup: boolean }[] {
   const q = query.trim().toLowerCase();
-  const rows = friends.map((friend) => ({ friend, inGroup: card.participants.some((p) => p.id === friend.id) }));
-  if (!q) return rows.filter((row) => !row.inGroup);
-  return rows.filter(({ friend }) =>
-    friend.username.toLowerCase().includes(q) || !!friend.display_name?.toLowerCase().includes(q));
+  if (!q) return [];
+  return friends
+    .filter((friend) => friend.username.toLowerCase().includes(q) || !!friend.display_name?.toLowerCase().includes(q))
+    .map((friend) => ({ friend, inGroup: card.participants.some((p) => p.id === friend.id) }));
 }
