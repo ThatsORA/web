@@ -9,6 +9,7 @@ import {
 } from "./demoSeed";
 
 const prisma = new PrismaClient();
+const DEMO_SQUAD = "Thursday crew";
 
 async function seed() {
   const now = new Date();
@@ -61,6 +62,15 @@ async function seed() {
         lastHangoutAt: schedule.lastHangoutAt,
       },
     });
+
+    // Squads only (#320): the scheduler proposes to squads, so Riley and Ojas share one.
+    // Riley invites the presenter to it live (demo step 5).
+    const squad = await tx.explicitGroup.findFirst({ where: { name: DEMO_SQUAD, createdBy: users[0]!.id } });
+    if (!squad) {
+      await tx.explicitGroup.create({
+        data: { name: DEMO_SQUAD, createdBy: users[0]!.id, members: { create: users.map((user) => ({ userId: user.id })) } },
+      });
+    }
 
     for (const user of users) {
       await tx.busyBlock.deleteMany({ where: { userId: user.id, source: "seed" } });

@@ -24,7 +24,6 @@ function candidate(key: string, window: { start: Date; end: Date }, daysSinceLas
     group: { groupKey: key, memberIds: IDS, memberTimezones: Object.fromEntries(IDS.map((id) => [id, TZ])), sourceGroupId: null },
     slot: classifySlot(window, TZ)!,
     feasible: feasibleSlots(window, TZ),
-    closeness: 0.8,
     daysSinceLastHangout,
     staleness: 1,
     soonness: 0.5,

@@ -8,7 +8,7 @@ import { curateVenues, factsLine } from "../intelligence/curateVenues";
 import { scheduleDecisions } from "../intelligence/scheduleDecisions";
 import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
 import { openVoting } from "../voting/lifecycle";
-import { candidateGroups, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
+import { candidateGroups, groupKey, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
 import type { ResolvedManualSelection } from "./manualSelection";
 import { classifySlot, earliestTimezone, feasibleSlots, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot } from "./timeMath";
 
@@ -117,18 +117,19 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
     prisma.explicitGroup.findMany({ include: { members: true } }),
   ]);
 
-  // ponytail: discovery reads lightweight identities for relationship endpoints, then loads
+  // ponytail: discovery reads lightweight identities for squad members, then loads
   // busy blocks and favorites only for users who can form a candidate group.
-  const referencedUserIds = [...new Set([
-    ...friendships.flatMap((friendship) => [friendship.userLowId, friendship.userHighId]),
-    ...explicitGroups.flatMap((group) => group.members.map((member) => member.userId)),
-  ])].sort();
+  const referencedUserIds = [...new Set(explicitGroups.flatMap((group) => group.members.map((member) => member.userId)))].sort();
   if (!referencedUserIds.length) return;
   const identities = await prisma.user.findMany({
     where: { id: { in: referencedUserIds } },
     select: { id: true, timezone: true },
   });
-  const groups = candidateGroups(identities, friendships, explicitGroups);
+  // Squads only (#320): propose to whole squads (3–6 active members). Friend pairs, cliques and
+  // one-drop subsets are skipped; friendships only feed staleness. Manual hangouts never come through here.
+  const squadKeys = new Set(explicitGroups.map((group) =>
+    groupKey(group.members.filter((member) => member.status === "active").map((member) => member.userId))));
+  const groups = candidateGroups(identities, [], explicitGroups).filter((group) => squadKeys.has(group.groupKey));
   if (!groups.length) return;
 
   const candidateUserIds = [...new Set(groups.flatMap((group) => group.memberIds))].sort();

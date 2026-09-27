@@ -21,7 +21,6 @@ export interface GroupSlot {
   slot: ClassifiedSlot;
 }
 export interface RankedGroupSlot extends GroupSlot {
-  closeness: number;
   daysSinceLastHangout: number | null;
   staleness: number;
   soonness: number;
@@ -100,30 +99,24 @@ export function onCooldown(key: string, events: readonly MatchingEvent[], now: D
     now.getTime() < event.resolvedAt.getTime() + cooldownHours * HOUR);
 }
 
+/** Closeness is deferred (#320, plan §5): the score is staleness and soonness only. */
 export function rankCandidates(candidates: readonly GroupSlot[], friendships: readonly MatchingFriendship[], now: Date): RankedGroupSlot[] {
   const pairs = new Map(friendships.map(edge => [groupKey([edge.userLowId, edge.userHighId]), edge]));
   return candidates.map(candidate => {
-    let total = 0;
-    let count = 0;
     let lastHangout: number | null = null;
     const ids = candidate.group.memberIds;
     for (let i = 0; i < ids.length; i++) {
       for (let j = i + 1; j < ids.length; j++) {
         const pair = pairs.get(groupKey([ids[i]!, ids[j]!]));
-        // Explicit groups need not be cliques. Missing relationships contribute zero.
-        total += pair?.interactionScore ?? 0;
-        count++;
         if (pair?.lastHangoutAt) lastHangout = Math.max(lastHangout ?? -Infinity, pair.lastHangoutAt.getTime());
       }
     }
-    const closeness = (count ? total / count : 0) + (candidate.group.sourceGroupId !== null ? 0.05 : 0);
     // Most recent pair hangout is the conservative group recency estimate.
     const daysSinceLastHangout = lastHangout === null ? null : Math.max((now.getTime() - lastHangout) / (24 * HOUR), 0);
     const staleness = daysSinceLastHangout === null ? 1 : Math.min(daysSinceLastHangout, 14) / 14;
     const soonness = 1 - (candidate.slot.start.getTime() - now.getTime()) / (168 * HOUR);
-    const sizeFactor = ids.length === 2 ? 0.85 : 1;
-    const score = (0.4 * closeness + 0.35 * staleness + 0.25 * soonness) * sizeFactor;
-    return { ...candidate, closeness, daysSinceLastHangout, staleness, soonness, score };
+    const score = 0.6 * staleness + 0.4 * soonness;
+    return { ...candidate, daysSinceLastHangout, staleness, soonness, score };
   }).sort((a, b) => b.score - a.score || a.slot.start.getTime() - b.slot.start.getTime() || lexical(a.group.groupKey, b.group.groupKey));
 }
 
