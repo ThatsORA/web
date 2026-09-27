@@ -319,6 +319,9 @@ model EventOption {
   routeScore      Float   @map("route_score")
   factsLine       String  @map("facts_line")
   aiBlurb         String? @map("ai_blurb")
+  activity        String? // "Bouldering"; null = the event's vibe_tag (#321)
+  startsAt        DateTime? @map("starts_at") // the option's own time; null = the event's
+  endsAt          DateTime? @map("ends_at")
 
   event Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   votes Vote[]

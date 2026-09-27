@@ -259,6 +259,8 @@ event_options                      -- the 3 vote choices
   max_travel_min int, route_score real,
   facts_line text                  -- deterministic: "★4.6 · $$ · max 14 min travel"
   ai_blurb text null               -- Gemini; null if fallback
+  activity text null               -- "Bouldering" (≤ 40 chars); null = the event's vibe_tag (#321)
+  starts_at, ends_at null          -- the option's own time; null = the event's. The winner's becomes the event's
 
 votes                              -- never exposed per-user via API or socket
   event_id, user_id, option_id, cast_at   pk(event_id, user_id)
@@ -305,7 +307,7 @@ Every route except signup and login requires `Authorization: Bearer <JWT>`.
 | DELETE | /friends/close/:userId | Ojas | Clear my direction silently; 409 unless we're accepted friends |
 | PUT | /favorites | Andy | `{ categories: string[] }` |
 | GET | /events | Andy | My open and recent events, each card scoped to me (§9 "Who sees what") |
-| GET | /events/:id | Andy | `EventCardPayload`: options, facts, blurbs, progress, outcome, `viewer`. Scoped to the caller (§9 "Who sees what"). Never includes voter identities |
+| GET | /events/:id | Andy | `EventCardPayload`: options, facts, blurbs, progress, outcome, `viewer`. Each option may carry `activity`, `starts_at` and `ends_at` (optional; absent = the event's vibe and time, #321). Scoped to the caller (§9 "Who sees what"). Never includes voter identities |
 | POST | /events/:id/vote | Ojas | `{ option_id }`. Can be changed until voting closes |
 | POST | /events/:id/ghost-pass | Ojas | Quietly opt out |
 | POST | /events/:id/report-closed | Riley | `{ current_place_id }`. Returns 409 if someone already swapped |
@@ -681,6 +683,9 @@ own. The card shows the viewer's kind as `viewer.pass_kind`.
     `route_score`.
   - The venue fields are locked in, and voters' status becomes
     `confirmed`.
+  - If the winning option has its own `starts_at`/`ends_at` (#321), the
+    event's `starts_at`/`ends_at` become them. Options without a time
+    leave the event's time unchanged.
   - `backup_venues` = the losing options (most votes first, then by
     route_score), followed by the unused top-5 venues.
 - **At least 2 people remain but fewer than 2 votes:** the event becomes
@@ -703,6 +708,9 @@ own. The card shows the viewer's kind as `viewer.pass_kind`.
   and `venue_status` is set back to `open` for the new venue. Then the
   server emits `event:venue_changed`.
 - **No backups left:** the event becomes `chatted`.
+- **The time stays:** a swap never changes the event's resolved
+  `starts_at`/`ends_at`, even when the backup option had its own time
+  (#321).
 - **No new external API calls.** Travel times for the backup are already
   stored in its snapshot.
 - **Honest limit:** the app can't verify real-world status. The human tap
