@@ -14,7 +14,7 @@ export function toggleInvitee(selected: string[], id: string): string[] {
   return selected.length >= MAX_INVITEES ? selected : [...selected, id];
 }
 
-export type SquadMemberLike = { id: string; status: string };
+export type SquadMemberLike = { id: string; status?: string };
 export type SquadLike = { id: string; name: string; members: SquadMemberLike[] };
 
 export interface DeduplicatedInviteesResult {
@@ -42,7 +42,8 @@ export function getDeduplicatedInvitees(
   for (const squad of squads) {
     if (selectedSquadSet.has(squad.id)) {
       for (const member of squad.members) {
-        if (member.status === "active" && member.id !== creatorId) {
+        const isActive = !member.status || member.status === "active";
+        if (isActive && member.id !== creatorId) {
           squadMemberIdSet.add(member.id);
         }
       }
@@ -86,11 +87,12 @@ export function weekRange(week: Week, now: Date): { earliest: string; latest: st
 export const otherWeek = (week: Week | null): Week => (week === "next" ? "this" : "next");
 
 export function buildCreateEventRequest(
-  input: { inviteeIds: string[]; vibe: VibeTag | null; week: Week | null },
+  input: { inviteeIds: string[]; squadIds?: string[]; vibe: VibeTag | null; week: Week | null },
   now: Date,
 ): CreateEventRequest {
   return CreateEventRequest.parse({
     invitee_ids: input.inviteeIds,
+    ...(input.squadIds && input.squadIds.length > 0 ? { squad_ids: input.squadIds } : {}),
     ...(input.vibe ? { vibe_tag: input.vibe } : {}),
     ...(input.week ? weekRange(input.week, now) : {}),
   });
