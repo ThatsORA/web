@@ -6,9 +6,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../lib/api", () => ({
   api: mocks.api,
+  ApiError: class ApiError extends Error {},
 }));
 
-import { getEventMessages, sendChatMessage } from "./chatApi";
+import { getEventMessages, runSuggestion, sendChatMessage } from "./chatApi";
 
 const eventId = "3c48fb35-1518-481d-ab60-cfd2dcc28ac2";
 
@@ -64,6 +65,34 @@ describe("chatApi", () => {
 
     it("throws on empty body", async () => {
       await expect(sendChatMessage(eventId, "")).rejects.toThrow();
+      expect(mocks.api).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("runSuggestion (#325)", () => {
+    it("passes through the existing pass endpoint", async () => {
+      mocks.api.mockResolvedValueOnce(undefined);
+      expect(await runSuggestion(eventId, "pass")).toBeUndefined();
+      expect(mocks.api).toHaveBeenCalledWith(`/events/${eventId}/ghost-pass`, expect.anything(), { method: "POST" });
+    });
+
+    it("changes spot from the card's current venue", async () => {
+      mocks.api.mockResolvedValueOnce({ id: eventId, outcome: { venue: { place_id: "place-1" } } });
+      mocks.api.mockResolvedValueOnce({ ok: true });
+      expect(await runSuggestion(eventId, "change_spot")).toBeUndefined();
+      expect(mocks.api).toHaveBeenLastCalledWith(`/events/${eventId}/change-spot`, expect.anything(), {
+        method: "POST",
+        body: { current_place_id: "place-1" },
+      });
+    });
+
+    it("returns a notice instead of throwing", async () => {
+      mocks.api.mockRejectedValueOnce(new Error("409"));
+      expect(await runSuggestion(eventId, "pass")).toMatch(/couldn't pass/i);
+    });
+
+    it("does nothing for the running-late hint", async () => {
+      expect(await runSuggestion(eventId, "running_late_hint")).toBeUndefined();
       expect(mocks.api).not.toHaveBeenCalled();
     });
   });

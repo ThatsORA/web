@@ -16,6 +16,7 @@ import { prisma } from "../../lib/prisma";
 import { emitToUsers } from "../../realtime";
 import { publicUserSelect, toPublicUser } from "../auth/helpers";
 import { chatAccess, chatAudience, eventParticipants } from "../events/invitations";
+import { suggestToSender } from "./suggestion";
 
 export const chatRouter = Router();
 chatRouter.use(requireAuth);
@@ -118,4 +119,7 @@ chatRouter.post(routes.eventMessages(":id"), async (req, res) => {
       created_at: created.createdAt.toISOString(),
     })
   );
+
+  // After the response, so sending never waits on the model (#325).
+  void suggestToSender(event, participants, me, created);
 });
