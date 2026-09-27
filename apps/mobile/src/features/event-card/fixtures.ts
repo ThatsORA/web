@@ -38,6 +38,13 @@ const OPTIONS = [
   option(3, "Pollo Tropical", "★4.2 · $ · max 9 min travel", null, [5, 9, 8]),
 ];
 
+// #321: options are activity + place + their own time; the winner's time becomes the event's.
+const TIMED_OPTIONS: EventOption[] = [
+  { ...option(4, "Movement", "★4.8 · $$ · max 12 min travel", "Bouldering walls for every level.", [8, 12, 10]), activity: "Bouldering", starts_at: "2026-10-01T18:30:00-04:00", ends_at: "2026-10-01T20:30:00-04:00" },
+  { ...option(5, "Sing Sing", "★4.4 · $$ · max 15 min travel", null, [11, 15, 9]), activity: "Karaoke", starts_at: "2026-10-02T20:00:00-04:00", ends_at: "2026-10-02T22:00:00-04:00" },
+  { ...option(6, "Latin House Grill", "★4.6 · $$ · max 14 min travel", null, [9, 14, 12]), activity: "Dinner", starts_at: "2026-10-03T19:00:00-04:00", ends_at: "2026-10-03T21:00:00-04:00" },
+];
+
 const MATCH_REASON = "You three haven't hung out in 10 days. Thursday works for everyone.";
 
 const voting: EventCardPayload = {
@@ -69,6 +76,21 @@ const confirmed: EventCardPayload = {
     venue_status: "open",
     attendees: [ME, RILEY], // ojas passed
     tallies: { [OPTIONS[0]!.id!]: 2, [OPTIONS[1]!.id!]: 0, [OPTIONS[2]!.id!]: 0 },
+  },
+};
+
+const votingTimed: EventCardPayload = { ...voting, options: TIMED_OPTIONS };
+const confirmedTimed: EventCardPayload = {
+  ...confirmed,
+  // Resolution moved the event to Karaoke's own time.
+  starts_at: TIMED_OPTIONS[1]!.starts_at!,
+  ends_at: TIMED_OPTIONS[1]!.ends_at!,
+  options: TIMED_OPTIONS,
+  my_option_id: TIMED_OPTIONS[1]!.id!,
+  outcome: {
+    ...confirmed.outcome!,
+    venue: TIMED_OPTIONS[1]!,
+    tallies: { [TIMED_OPTIONS[0]!.id!]: 1, [TIMED_OPTIONS[1]!.id!]: 2, [TIMED_OPTIONS[2]!.id!]: 0 },
   },
 };
 
@@ -114,4 +136,6 @@ export const FIXTURES: { label: string; card: EventCardPayload; swapped?: boolea
       viewer: { ...confirmed.viewer, chat: "read_only" },
     },
   },
+  { label: "Voting (activities, own times)", card: votingTimed },
+  { label: "Confirmed (activity winner)", card: confirmedTimed },
 ];

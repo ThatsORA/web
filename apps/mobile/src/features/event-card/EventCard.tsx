@@ -8,13 +8,13 @@ import { ActionSheetIOS, ActivityIndicator, Linking, Platform, View } from "reac
 import { getToken } from "../../lib/api";
 import { CHAT_PATHNAME } from "../../lib/routes";
 import { userIdFromToken } from "../../lib/session";
-import { Badge, Button, Callout, Card, Chip, Txt, useTheme } from "../../ui";
+import { Badge, Button, Callout, Card, Chip, Modal, Txt, useTheme } from "../../ui";
 import { ExpenseForm, ExpenseLedger } from "../expenses";
 import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calendarSync";
-import { canChangeSpot, canOpenChat, cardKind, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows, votingTimeRemaining } from "./cardState";
+import { canChangeSpot, canOpenChat, cardKind, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows } from "./cardState";
 import { changeSpotPrompt } from "./changeSpot";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
-import { progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
+import { optionLabel, placeTitle, progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
 import { VotingCountdown } from "./VotingCountdown";
 
 
@@ -80,7 +80,7 @@ function Header({ card, eyebrow, badge, onBrand }: { card: EventCardPayload; eye
           {eyebrow}
         </Txt>
         <View style={{ flexDirection: "row", alignItems: "center", gap: t.spacing.xs, flexShrink: 0 }}>
-          {isSquad ? <Badge tone="info" label="Squad Hangout" /> : null}
+          {card.is_mixer ? <Badge tone="info" label="Mixer" /> : isSquad ? <Badge tone="info" label="Squad Hangout" /> : null}
           {badge}
         </View>
       </View>
@@ -89,7 +89,8 @@ function Header({ card, eyebrow, badge, onBrand }: { card: EventCardPayload; eye
           <Txt variant="headline" accessibilityRole="header">
             {timeLabel(card)}
           </Txt>
-          <Txt variant="small">{card.participants.map((p) => p.display_name ?? p.username).join(" · ")}</Txt>
+          {card.is_mixer ? <Txt variant="small">An anonymous invitation</Txt> :
+            <Txt variant="small">{card.participants.map((p) => p.display_name ?? p.username).join(" · ")}</Txt>}
           {card.match_reason ? <Txt variant="small">{card.match_reason}</Txt> : null}
         </>
       )}
@@ -119,20 +120,23 @@ function OpenCard({ card, actions, busy, notice }: Props) {
       {kind === "voting" || kind === "waiting" ? (
         <>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Badge label={progressLabel(card.progress)} />
+            {card.progress ? <Badge label={progressLabel(card.progress)} /> : <Txt variant="small">Responses are private</Txt>}
             <VotingCountdown voteClosesAt={card.vote_closes_at} />
           </View>
 
           {card.my_status === "ghost_passed" ? (
             <Txt variant="small">{passedNotice(card.viewer)}</Txt>
           ) : null}
+          {card.is_mixer ? <Txt variant="small">Choosing a spot commits you to attend if the Mixer is confirmed. You can change your choice or Ghost Pass until voting closes.</Txt> : null}
           {card.options.map((o) => (
             <OptionRow
               key={o.id ?? o.place_id}
               option={o}
+              timeZone={card.timezone}
               mine={!!o.id && o.id === card.my_option_id}
               disabled={busy}
               onVote={() => o.id && actions.vote(o.id)}
+              voteLabel={card.is_mixer ? "Commit and vote" : "Vote"}
             />
           ))}
           {kind === "voting" ? (
@@ -145,9 +149,9 @@ function OpenCard({ card, actions, busy, notice }: Props) {
         <>
           <Badge tone="warning" label="Not enough votes" />
           <Txt variant="small">
-            {card.progress.responded === 1
+            {card.progress?.responded === 1
               ? "1 person voted before time ran out. Discuss options or nominate a spot in chat."
-              : `${card.progress.responded} of ${card.progress.total} people responded before voting closed.`}
+              : `${card.progress?.responded ?? 0} of ${card.progress?.total ?? 0} people responded before voting closed.`}
           </Txt>
 
           <View style={{ gap: t.spacing.xs, marginVertical: t.spacing.xs }}>
@@ -177,6 +181,7 @@ function OpenCard({ card, actions, busy, notice }: Props) {
             <OptionRow
               key={o.id ?? o.place_id}
               option={o}
+              timeZone={card.timezone}
               mine={!!o.id && o.id === card.my_option_id}
               tally={o.id && card.outcome?.tallies ? card.outcome.tallies[o.id] : undefined}
             />
@@ -206,16 +211,20 @@ function OpenCard({ card, actions, busy, notice }: Props) {
 
 function OptionRow({
   option,
+  timeZone,
   mine,
   tally,
   disabled,
   onVote,
+  voteLabel = "Vote",
 }: {
   option: EventOption;
+  timeZone: string;
   mine: boolean;
   tally?: number;
   disabled?: boolean;
   onVote?: () => void;
+  voteLabel?: string;
 }) {
   const t = useTheme();
   return (
@@ -229,8 +238,8 @@ function OptionRow({
       }}
     >
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Txt variant="label" color="heading">
-          {option.name}
+        <Txt variant="label" color="heading" style={{ flexShrink: 1 }}>
+          {optionLabel(option, timeZone)}
         </Txt>
         {tally !== undefined ? (
           <Badge tone={tally > 0 ? "info" : undefined} label={`${tally} ${tally === 1 ? "vote" : "votes"}`} />
@@ -241,9 +250,9 @@ function OptionRow({
       </Txt>
       {option.ai_blurb ? <Txt>{option.ai_blurb}</Txt> : null}
       {mine ? (
-        <Badge tone="info" label="Your vote" />
+        <Badge tone="info" label={voteLabel === "Commit and vote" ? "You're committed" : "Your vote"} />
       ) : onVote ? (
-        <Button label="Vote" onPress={onVote} disabled={disabled} />
+        <Button label={voteLabel} onPress={onVote} disabled={disabled} />
       ) : null}
     </View>
   );
@@ -337,7 +346,7 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
         />
 
         <Txt variant="headline" color="onPrimary" accessibilityRole="header">
-          {venue.name}
+          {placeTitle(venue)}
         </Txt>
         <Txt variant="small" color="onPrimary" numeric>
           {timeLabel(card)}
@@ -389,18 +398,17 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
         />
         {calendarNotice ? <Callout tone="warning">{calendarNotice}</Callout> : null}
         {canOpenChat(card) ? <Button label="Open chat" variant="outline" onPress={handleOpenChat} /> : null}
-        {attendees.length > 0 ? (
+        {!card.is_mixer && attendees.length > 0 ? (
           <ExpenseLedger
             eventId={card.id}
             attendees={attendees}
             currentUserId={currentUserId}
             refreshTrigger={expenseRefresh}
             onAddExpense={() => setShowExpense(true)}
-            hideAddButton={showExpense}
           />
         ) : null}
-        {attendees.length > 0 && showExpense ? (
-          <View style={{ gap: t.spacing.sm }}>
+        {!card.is_mixer && attendees.length > 0 && showExpense ? (
+          <Modal visible={showExpense} onClose={() => setShowExpense(false)} title="Add expense">
             <ExpenseForm
               eventId={card.id}
               attendees={attendees}
@@ -409,8 +417,7 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
                 setExpenseRefresh((c) => c + 1);
               }}
             />
-            <Button label="Cancel" variant="ghost" onPress={() => setShowExpense(false)} />
-          </View>
+          </Modal>
         ) : null}
         {notice ? <Callout tone="danger">{notice}</Callout> : null}
       </Card>

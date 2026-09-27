@@ -201,6 +201,7 @@ users
   created_at
   email_verified_at null     -- null = unverified; sign-up writes null, seed/legacy accounts are backfilled as verified
   display_name null (1–40), bio null (≤ 160), username_changed_at null   -- #96; username changes once per 30 days
+  pref_activities null (≤ 300), pref_personality null (≤ 300)   -- #310; private matching profile, owner + decision model only
 
 email_codes                -- one live code per (user, purpose); 6 digits, stored as HMAC-SHA256, never plain
   id, user_id fk, purpose ('verify'|'reset'|'change_email'), code_hash, new_email null,
@@ -262,6 +263,8 @@ event_options                      -- the 3 vote choices
   max_travel_min int, route_score real,
   facts_line text                  -- deterministic: "★4.6 · $$ · max 14 min travel"
   ai_blurb text null               -- Gemini; null if fallback
+  activity text null               -- "Bouldering" (≤ 40 chars); null = the event's vibe_tag (#321)
+  starts_at, ends_at null          -- the option's own time; null = the event's. The winner's becomes the event's
 
 votes                              -- never exposed per-user via API or socket
   event_id, user_id, option_id, cast_at   pk(event_id, user_id)
@@ -284,7 +287,7 @@ Every route except signup and login requires `Authorization: Bearer <JWT>`.
 | POST | /auth/login | Ojas | Return JWT |
 | POST | /auth/verify-email/send | Ojas | Email a new 6-digit code. 204, or 429 + `Retry-After` within 60 s, or 409 if already verified |
 | POST | /auth/verify-email | Ojas | `{ code }` → `Me`. `400 wrong_code` burns an attempt; `400 code_expired` means send a new one |
-| GET / PATCH | /me | Ojas | Profile: timezone, home_lat/lng, travel_mode, `display_name`, `bio`, `username` (once per 30 days; 409 `username_taken` / `username_cooldown`), `email_verified` (read-only) |
+| GET / PATCH | /me | Ojas | Profile: timezone, home_lat/lng, travel_mode, `display_name`, `bio`, `pref_activities` / `pref_personality` (private, ≤ 300, #310), `username` (once per 30 days; 409 `username_taken` / `username_cooldown`), `email_verified` (read-only) |
 | POST | /me/email | Ojas | `{ new_email, password }` → emails a code to the new address (409 if taken) |
 | POST | /me/email/confirm | Ojas | `{ code }` → switches the email, marks it verified, tells the old address → `Me` |
 | GET | /users/:id | Ojas | Public profile: `{ id, username, display_name, bio, friendship: none\|requested\|incoming\|friends, squads }` (shared active squads). Never email or close-friend status |
@@ -308,7 +311,7 @@ Every route except signup and login requires `Authorization: Bearer <JWT>`.
 | DELETE | /friends/close/:userId | Ojas | Clear my direction silently; 409 unless we're accepted friends |
 | PUT | /favorites | Andy | `{ categories: string[] }` |
 | GET | /events | Andy | My open and recent events, each card scoped to me (§9 "Who sees what") |
-| GET | /events/:id | Andy | `EventCardPayload`: options, facts, blurbs, progress, outcome, `viewer`. Scoped to the caller (§9 "Who sees what"). Never includes voter identities |
+| GET | /events/:id | Andy | `EventCardPayload`: options, facts, blurbs, progress, outcome, `viewer`. Each option may carry `activity`, `starts_at` and `ends_at` (optional; absent = the event's vibe and time, #321). Scoped to the caller (§9 "Who sees what"). Never includes voter identities |
 | POST | /events/:id/vote | Ojas | `{ option_id }`. Can be changed until voting closes |
 | POST | /events/:id/ghost-pass | Ojas | Quietly opt out |
 | POST | /events/:id/report-closed | Riley | `{ current_place_id }`. Returns 409 if someone already swapped |
@@ -649,11 +652,9 @@ own. The card shows the viewer's kind as `viewer.pass_kind`.
   `eventAudience()`. Voting, chat and realtime read invite source only
   through `eventParticipants()`, so moving where it's stored changes one
   place.
-- **Not yet covered:** the venue swap (§11, Riley's `venues/router.ts`)
-  still sends `event:venue_changed` and its push to every participant, and
-  its 409 returns a card without the access check. It needs
-  `eventAudience(…, false)` for recipients and `canSeeEvent()` for the
-  caller (follow-up for Riley).
+- The venue swap (§11, Riley's `venues/router.ts`) sends `event:venue_changed`
+  and its push to `eventAudience(…, false)`, and verifies `canSeeEvent()` /
+  `keepsAccess()` for the caller and its 409 card (#333).
 - Before close, progress, notifications and the card look the same for a
   Ghost Pass and a vote; others can't observe the ghost passer losing the
   event afterwards.
@@ -668,6 +669,9 @@ own. The card shows the viewer's kind as `viewer.pass_kind`.
     `route_score`.
   - The venue fields are locked in, and voters' status becomes
     `confirmed`.
+  - If the winning option has its own `starts_at`/`ends_at` (#321), the
+    event's `starts_at`/`ends_at` become them. Options without a time
+    leave the event's time unchanged.
   - `backup_venues` = the losing options (most votes first, then by
     route_score), followed by the unused top-5 venues.
 - **At least 2 people remain but fewer than 2 votes:** the event becomes
@@ -690,6 +694,9 @@ own. The card shows the viewer's kind as `viewer.pass_kind`.
   and `venue_status` is set back to `open` for the new venue. Then the
   server emits `event:venue_changed`.
 - **No backups left:** the event becomes `chatted`.
+- **The time stays:** a swap never changes the event's resolved
+  `starts_at`/`ends_at`, even when the backup option had its own time
+  (#321).
 - **No new external API calls.** Travel times for the backup are already
   stored in its snapshot.
 - **Honest limit:** the app can't verify real-world status. The human tap
@@ -857,6 +864,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-26 | **Event chat for squad hangouts (#212).** Squad hangouts (any squad invitee) get the existing chat (same messages, paging, `event:message` and `ChatScreen`) from creation: while voting, after confirmation, as `chatted`, and read-only after `ends_at`; `expired` closes it. Members are the creator and the squad, squad passers included. Direct invitees are never in a squad or mixed chat, as readers or posters: a poster's name reveals them to everyone in the room, and a direct invitee may only see themselves and the creator, so any room holding direct invitees next to squad members breaks §9. Direct-only events keep the `chatted` fallback exactly as before. One rule, `chatAudience()` on `eventAudience()`, feeds the routes, the socket recipients and the card's new `viewer.chat` (`open`/`read_only`/null), so the client never infers it (#217 shows "Open chat" from it). See §9 "Event chat". |
 | 2026-09-26 | **Decision models: Laya + Jev; Gemini writes text (#196, #227).** Decisions (propose gate, vibe, venue fit) go through `askDecision`: fine-tuned Laya (self-hosted) first, then Jev `jev-1.13.0`, then deterministic code. Gemini only writes blurbs and `match_reason`, and generates Laya's training scenarios; Jev labels them. `rankWithGemini` is removed (#231). Auto-proposals come back weekly (Mon 09:00 America/New_York) plus a "Find a hangout now" demo button (#232/#233), which replaces the close-friend star as the demo trigger. |
 | 2026-09-27 | **Laya deferred; scheduler ships on Jev (#196, #274).** We hit a GPU roadblock, so decisions run on Jev with the deterministic fallback. The training data (#235) and the format alignment (#256) stay. Fine-tuning, eval and hosting move to #274 (#236 and #237 closed). |
+| 2026-09-27 | **Venue swap privacy scoping (#333).** Venue swap routes (`POST /events/:id/report-closed` and `change-spot`) scope socket `event:venue_changed` and Expo push notifications to `eventAudience(…, false)` so that ghost-passers (direct invitees who passed) do not receive swap alerts. Callers must satisfy `canSeeEvent()` / `keepsAccess()`, and the 409 stale-venue response checks `canSeeEvent()` to prevent card leakage. |
 | 2026-09-27 | **Chat intent suggestions (#325).** After a chat message is saved, `askDecision` classifies it in the background (`chatIntentRequest`: the message text only, capped at 300 chars). At ≥ 0.75 on `cant_make_it` or `change_spot` the sender alone gets `chat:suggestion` (`{ event_id, message_id, kind }`) and a chip that runs the existing Pass or Change spot action; `running_late` gets a hint chip; `logistics` and `just_chatting` get nothing. Sender-only because a direct invitee's Pass is a Ghost Pass. Nothing is stored; a failed call does nothing. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)

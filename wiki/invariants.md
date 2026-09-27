@@ -30,6 +30,10 @@ touches before you write code.
 - Friend status (pending/accepted) is visible to both people. Close-friend
   status never is: no endpoint or socket payload reveals whether someone
   marked you close, and a declined friend request is never announced.
+- The matching profile (`pref_activities`, `pref_personality`, #310) is
+  private. Only its owner (via `Me`) and the server-side decision model
+  ever see it: never `PublicUser`, `PublicProfile`, event, chat or socket
+  payloads. Read other users only through `publicUserSelect`.
 - Other users only ever leave the server as `PublicUser` (id, username,
   display_name) or `PublicProfile`, which are zod-parsed so extra fields
   (email, close-friend flags) are stripped.

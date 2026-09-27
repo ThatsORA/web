@@ -35,6 +35,13 @@ describe("realtime/push", () => {
   });
 
   describe("message formatters (no vote leakage)", () => {
+    it("invites a Mixer without naming or counting invitees", () => {
+      expect(buildEventCreatedMessage("evt-123", { isMixer: true })).toEqual({
+        title: "Mixer invitation",
+        body: "Choose a spot and commit to attend. Responses stay private.",
+        data: { event_id: "evt-123" },
+      });
+    });
     it("formats event created body with time, vibe, and timezone", () => {
       // 2026-10-01 is Thursday. 22:30 UTC = 18:30 EDT (6:30pm)
       const date = new Date("2026-10-01T22:30:00Z");

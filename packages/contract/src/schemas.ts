@@ -23,6 +23,8 @@ export type VoteStatus = z.infer<typeof VoteStatus>;
 export const Username = z.string().min(3).max(24).regex(/^[a-z0-9_]+$/);
 export const DisplayName = z.string().trim().min(1).max(40);
 export const Bio = z.string().trim().max(160);
+/** Private matching profile (#310): only the owner (via Me) and the server-side decision model see it. */
+export const PrefText = z.string().trim().max(300);
 
 export const SignupRequest = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -58,6 +60,8 @@ export const Me = z.object({
   email_verified: z.boolean(),
   display_name: z.string().nullable(), // as set (null = not set); others see it via PublicUser
   bio: z.string().nullable(),
+  pref_activities: z.string().nullable(), // private: never in PublicUser/PublicProfile/event/chat/socket
+  pref_personality: z.string().nullable(),
 });
 export const VerifyEmailRequest = z.object({ code: z.string().regex(/^\d{6}$/) });
 export const PatchMeRequest = z
@@ -68,6 +72,8 @@ export const PatchMeRequest = z
     travel_mode: TravelMode,
     display_name: DisplayName.nullable(), // null clears it
     bio: Bio.nullable(),
+    pref_activities: PrefText.nullable(), // null or "" clears it
+    pref_personality: PrefText.nullable(),
     username: Username, // at most once per 30 days; 409 username_taken / username_cooldown
   })
   .partial();
@@ -215,6 +221,11 @@ export const EventOption = RankedVenue.extend({
   rank: z.number().int(),
   facts_line: z.string(), // deterministic: "★4.6 · $$ · max 14 min travel"
   ai_blurb: z.string().max(90).nullable(), // null = Gemini fallback
+  // #321: an option is activity + place + its own time. Absent on manual hangouts and old events,
+  // which fall back to the event's vibe_tag and starts_at/ends_at.
+  activity: z.string().trim().min(1).max(40).optional(), // "Bouldering"
+  starts_at: Instant.optional(),
+  ends_at: Instant.optional(),
 });
 export type EventOption = z.infer<typeof EventOption>;
 
@@ -234,6 +245,9 @@ export interface OptionRowLike {
   routeScore: number;
   factsLine: string;
   aiBlurb: string | null;
+  activity?: string | null;
+  startsAt?: Date | null;
+  endsAt?: Date | null;
 }
 
 export function optionFromRow(row: OptionRowLike): EventOption & { id: string } {
@@ -253,6 +267,9 @@ export function optionFromRow(row: OptionRowLike): EventOption & { id: string } 
     route_score: row.routeScore,
     facts_line: row.factsLine,
     ai_blurb: row.aiBlurb,
+    activity: row.activity ?? undefined,
+    starts_at: row.startsAt?.toISOString(),
+    ends_at: row.endsAt?.toISOString(),
   }) as EventOption & { id: string };
 }
 
@@ -320,6 +337,7 @@ export type EventViewer = z.infer<typeof EventViewer>;
  */
 export const EventCardPayload = z.object({
   created_by: PublicUser.nullable().optional(), // the human creator; null on automated events
+  is_mixer: z.boolean().optional(), // absent on older cards; Mixer invitations never disclose group size
   id: Id,
   status: EventStatus,
   starts_at: Instant,
@@ -330,7 +348,7 @@ export const EventCardPayload = z.object({
   viewer: EventViewer,
   participants: z.array(EventParticipantView), // only people the caller may see, the caller included
   options: z.array(EventOption), // the 3 choices while voting
-  progress: z.object({ responded: z.number().int(), total: z.number().int() }),
+  progress: z.object({ responded: z.number().int(), total: z.number().int() }).nullable(),
   my_status: VoteStatus,
   my_option_id: Id.nullable(), // only the caller's own vote, never anyone else's
   vote_closes_at: Instant,

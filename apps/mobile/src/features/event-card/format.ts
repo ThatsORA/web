@@ -40,8 +40,19 @@ export function timeLabel(card: Pick<EventCardPayload, "starts_at" | "ends_at" |
 export const slotLabel = (card: Pick<EventCardPayload, "starts_at" | "ends_at" | "timezone" | "vibe_tag">) =>
   `${timeLabel(card)} · ${vibeLabel(card.vibe_tag)}`;
 
+/** "Bouldering at Movement", or just the place when the option has no activity (#321). */
+export const placeTitle = (option: Pick<EventOption, "name" | "activity">) =>
+  option.activity ? `${option.activity} at ${option.name}` : option.name;
+
+/** A vote option: "Bouldering at Movement · Thu 6:30pm". Without its own time the headline's event time applies. */
+export function optionLabel(option: Pick<EventOption, "name" | "activity" | "starts_at">, timeZone: string): string {
+  if (!option.starts_at) return placeTitle(option);
+  const s = localParts(option.starts_at, timeZone);
+  return `${placeTitle(option)} · ${s.day} ${s.time}${s.period}`;
+}
+
 /** "2 of 3 responded". A ghost pass counts as responded (invariants: Privacy). */
-export const progressLabel = ({ responded, total }: EventCardPayload["progress"]) =>
+export const progressLabel = ({ responded, total }: NonNullable<EventCardPayload["progress"]>) =>
   `${responded} of ${total} responded`;
 
 /** "Swapped to Sergio's · max 11 min" */

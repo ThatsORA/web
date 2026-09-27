@@ -93,6 +93,9 @@ model User {
   emailVerifiedAt DateTime? @map("email_verified_at")
   displayName       String?   @map("display_name") // 1–40 chars; others see display_name ?? username
   bio               String? // ≤ 160 chars
+  // Private matching profile (#310), ≤ 300 chars each. Only the owner (Me) and the decision model see it.
+  prefActivities    String?   @map("pref_activities")
+  prefPersonality   String?   @map("pref_personality")
   usernameChangedAt DateTime? @map("username_changed_at") // once per 30 days
   passwordChangedAt DateTime? @map("password_changed_at")
 
@@ -247,6 +250,7 @@ model UserFavorite {
 
 model Event {
   id            String      @id @default(uuid()) @map("_id")
+  isMixer       Boolean?    @default(false) @map("is_mixer") // null on legacy MongoDB documents
   groupKey      String      @map("group_key") // sorted member ids joined
   sourceGroupId String?     @map("source_group_id")
   sourceGroupIds String[]    @default([]) @map("source_group_ids") // selected squads in a mixed hangout
@@ -315,6 +319,9 @@ model EventOption {
   routeScore      Float   @map("route_score")
   factsLine       String  @map("facts_line")
   aiBlurb         String? @map("ai_blurb")
+  activity        String? // "Bouldering"; null = the event's vibe_tag (#321)
+  startsAt        DateTime? @map("starts_at") // the option's own time; null = the event's
+  endsAt          DateTime? @map("ends_at")
 
   event Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   votes Vote[]

@@ -6,7 +6,7 @@ import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
 import { emitToUsers, pushEventCreated, pushEventResolved } from "../../realtime";
 import { eventAudience, eventParticipants } from "../events/invitations";
-import { progress, resolveEvent, voteClosesAt } from "./resolution";
+import { progress, resolveEvent, voteClosesAt, winnerTime } from "./resolution";
 
 export async function openVoting(eventId: string): Promise<void> {
   const event = await prisma.event.findUniqueOrThrow({
@@ -25,6 +25,7 @@ export async function openVoting(eventId: string): Promise<void> {
       startsAt: event.startsAt,
       vibeTag: event.vibeTag,
       timezone: event.timezone,
+      ...(event.isMixer ? { isMixer: true } : {}),
     },
   ).catch((e: unknown) => console.error("pushEventCreated error", e));
 }
@@ -34,9 +35,14 @@ export async function openVoting(eventId: string): Promise<void> {
  * a vote), and close early once everyone has responded, which makes every response final.
  */
 export async function afterResponse(eventId: string): Promise<void> {
-  const participants = await prisma.eventParticipant.findMany({ where: { eventId } });
+  const participants = await prisma.eventParticipant.findMany({
+    where: { eventId },
+    select: { userId: true, voteStatus: true, event: { select: { isMixer: true } } },
+  });
   const p = progress(participants.map((x) => x.voteStatus));
-  emitToUsers(participants.map((x) => x.userId), "event:progress", { event_id: eventId, ...p });
+  emitToUsers(participants.map((x) => x.userId), "event:progress", participants[0]?.event?.isMixer
+    ? { event_id: eventId }
+    : { event_id: eventId, ...p });
   if (p.responded === p.total) await closeVoting(eventId);
 }
 
@@ -50,6 +56,7 @@ export async function closeVoting(eventId: string): Promise<void> {
 
   const unused = EventOption.array().safeParse(event.backupVenues);
   const r = resolveEvent({
+    isMixer: event.isMixer === true,
     participants,
     votes: event.votes,
     options: event.options.map(optionFromRow),
@@ -66,6 +73,7 @@ export async function closeVoting(eventId: string): Promise<void> {
           ? {
               status: "confirmed",
               resolvedAt: now,
+              ...winnerTime(r.winner),
               venuePlaceId: r.winner.place_id,
               venueName: r.winner.name,
               venueLat: r.winner.lat,
@@ -86,7 +94,9 @@ export async function closeVoting(eventId: string): Promise<void> {
   });
   if (claimed) {
     // Voting is closed now: a Ghost Pass is final, so its passer stops getting this event (#210).
-    const audience = eventAudience(participants, false);
+    const audience = event.isMixer && r.status === "expired"
+      ? participants.map((participant) => participant.userId)
+      : eventAudience(participants, false);
     emitToUsers(audience, "event:resolved", { event_id: eventId, status: r.status });
     if (r.status === "confirmed") {
       void pushEventResolved(

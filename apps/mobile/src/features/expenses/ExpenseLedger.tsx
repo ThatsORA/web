@@ -92,7 +92,7 @@ export function ExpenseLedgerView({
           Expenses
         </Txt>
         {!hideAddButton && onAddExpense && expenses.length > 0 ? (
-          <Button label="Add expense" variant="outline" onPress={onAddExpense} />
+          <Button label="Add expense" variant="outline" size="sm" onPress={onAddExpense} />
         ) : null}
       </View>
 
@@ -102,7 +102,7 @@ export function ExpenseLedgerView({
             No expenses recorded yet.
           </Txt>
           {!hideAddButton && onAddExpense ? (
-            <Button label="Add expense" variant="outline" onPress={onAddExpense} />
+            <Button label="Add expense" variant="outline" size="sm" onPress={onAddExpense} />
           ) : null}
         </View>
       ) : (

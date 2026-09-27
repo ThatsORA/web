@@ -8,12 +8,16 @@ export const DEMO_USERS = [
     email: "riley@web.demo",
     homeLat: 25.781,
     homeLng: -80.36,
+    prefActivities: "trying new ramen spots, board games, live music",
+    prefPersonality: "night owl, loves a crowd, up for anything downtown",
   },
   {
     username: "ojas",
     email: "ojas@web.demo",
     homeLat: 25.7,
     homeLng: -80.37,
+    prefActivities: "bouldering, sunset walks, specialty coffee",
+    prefPersonality: "introvert, prefer small groups, early bird, outdoorsy",
   },
 ] as const;
 
