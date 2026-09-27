@@ -1,5 +1,5 @@
 // Owner: Andy — event list + EventCardPayload assembly.
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import express from "express";
 import { CreateEventRequest } from "@web/contract";
 import { withMatcherMutex, createUserHangout } from "../matching/matcher";
@@ -12,7 +12,7 @@ import { emitToUsers, pushEventCreated } from "../../realtime";
 import { votingOpen } from "../voting/resolution";
 import { assembleEventCard, canSeeEvent } from "./assembleEventCard";
 import { eventAudience, eventParticipants } from "./invitations";
-import { canDecline, inviteBlock, lateInvitees } from "./lateInvite";
+import { canAnswerInvite, inviteBlock, lateInvitees } from "./lateInvite";
 
 export const eventsRouter = Router();
 
@@ -138,27 +138,33 @@ eventsRouter.post(routes.eventInvite(":id"), requireAuth, express.json(), async 
 
   emitToUsers(added, "event:created", { event_id: event.id });
   void pushEventCreated(added, event.id, { startsAt: event.startsAt, vibeTag: event.vibeTag, timezone: event.timezone });
-  emitToUsers(eventAudience(participants, votingOpen(event, now)), "event:progress", { event_id: event.id });
+  emitToUsers(eventAudience(participants, votingOpen(event, now), event.status), "event:progress", { event_id: event.id });
   res.status(204).end();
 });
 
-/** A direct invitee bows out of a confirmed hangout before it starts (#345): a Ghost Pass, so they lose the card. */
-eventsRouter.post(routes.declineInvite(":id"), requireAuth, async (req, res) => {
-  const id = Id.safeParse(req.params.id);
-  if (!id.success) return res.status(404).json({ error: "not_found" });
-  const userId = (req as AuthedRequest).userId;
+/**
+ * A late invitee answers before the hangout starts (#345, #407). "I'm in" makes them an attendee (`confirmed`);
+ * "Can't make it" is a Ghost Pass, so they lose the card. Either way everyone who has the event refetches it.
+ */
+function answerInvite(voteStatus: "confirmed" | "ghost_passed") {
+  return async (req: Request, res: Response) => {
+    const id = Id.safeParse(req.params.id);
+    if (!id.success) return res.status(404).json({ error: "not_found" });
+    const userId = (req as AuthedRequest).userId;
 
-  const event = await findInviteEvent(id.data);
-  const participants = event ? await eventParticipants(event.id) : [];
-  const me = participants.find((p) => p.userId === userId);
-  if (!event || !me) return res.status(404).json({ error: "not_found" });
-  if (!canDecline(event, me, new Date())) return res.status(409).json({ error: "cannot_decline" });
+    const event = await findInviteEvent(id.data);
+    const participants = event ? await eventParticipants(event.id) : [];
+    const me = participants.find((p) => p.userId === userId);
+    if (!event || !me) return res.status(404).json({ error: "not_found" });
+    if (!canAnswerInvite(event, me, new Date())) return res.status(409).json({ error: "cannot_answer" });
 
-  await prisma.eventParticipant.update({
-    where: { eventId_userId: { eventId: event.id, userId } },
-    data: { voteStatus: "ghost_passed" },
-  });
-  // Only the creator can see a direct invitee, so this just refreshes their attendee list; the payload is thin.
-  emitToUsers(eventAudience(participants, false).filter((other) => other !== userId), "event:progress", { event_id: event.id });
-  res.status(204).end();
-});
+    await prisma.eventParticipant.update({
+      where: { eventId_userId: { eventId: event.id, userId } },
+      data: { voteStatus },
+    });
+    emitToUsers(eventAudience(participants, false, event.status).filter((other) => other !== userId), "event:progress", { event_id: event.id });
+    res.status(204).end();
+  };
+}
+eventsRouter.post(routes.joinInvite(":id"), requireAuth, answerInvite("confirmed"));
+eventsRouter.post(routes.declineInvite(":id"), requireAuth, answerInvite("ghost_passed"));

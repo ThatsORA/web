@@ -4,7 +4,7 @@ import { Fragment } from "react";
 import { EmptyFeedCard, EventCard, FIXTURES, FindingCard, type CardActions } from "../../features/event-card";
 import { Screen, Txt } from "../../ui";
 
-const noop: CardActions = { vote: () => {}, ghostPass: () => {}, changeSpot: () => {}, declineInvite: () => {} };
+const noop: CardActions = { vote: () => {}, ghostPass: () => {}, changeSpot: () => {}, joinInvite: () => {}, declineInvite: () => {} };
 
 export default function CardStates() {
   if (!__DEV__) {

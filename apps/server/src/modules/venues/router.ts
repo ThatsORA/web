@@ -56,7 +56,7 @@ async function handleVenueSwap(req: Request, res: Response, intent: "report_clos
     if (!caller) return { kind: "forbidden" as const };
 
     const callerInvited = invitedParticipant(event, caller);
-    if (!keepsAccess(callerInvited, votingOpen(event, now))) {
+    if (!keepsAccess(callerInvited, votingOpen(event, now), event.status)) {
       return { kind: "forbidden" as const };
     }
     if ((intent === "change_spot" || event.isMixer) && caller.voteStatus !== "confirmed") {
@@ -82,7 +82,7 @@ async function handleVenueSwap(req: Request, res: Response, intent: "report_clos
     return {
       kind: "updated" as const,
       transition: decision.kind,
-      participantIds: eventAudience(participants, false),
+      participantIds: eventAudience(participants, false, event.status),
     };
   });
 

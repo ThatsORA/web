@@ -503,22 +503,36 @@ describe("inviting into an existing hangout (#345)", () => {
     expect((await post(`/events/${eventId}/invite`, alice, { invitee_ids: [carol] })).status).toBe(409);
   });
 
-  it("lets a direct invitee bow out of a confirmed hangout, and nobody else", async () => {
+  it("lets a late invitee answer I'm in or Can't make it on a confirmed hangout, and nobody else (#407)", async () => {
     const confirmed = inviteEvent({ status: "confirmed", voteClosesAt: new Date(Date.now() - 60_000) });
+    // bob was invited late by alice (the inviter marker); he's still at "invited".
+    const lateRows = () => rows().map((row) => (row.userId === bob ? { ...row, sourceGroupIds: [`invited_by:${alice}`] } : row));
     mocks.findUnique.mockResolvedValueOnce(confirmed);
-    participantMocks.findMany.mockResolvedValueOnce(rows());
-    expect((await post(`/events/${eventId}/decline`, bob)).status).toBe(204);
-    expect(participantMocks.update).toHaveBeenCalledWith({
-      where: { eventId_userId: { eventId, userId: bob } }, data: { voteStatus: "ghost_passed" },
+    participantMocks.findMany.mockResolvedValueOnce(lateRows());
+    expect((await post(`/events/${eventId}/join`, bob)).status).toBe(204);
+    expect(participantMocks.update).toHaveBeenLastCalledWith({
+      where: { eventId_userId: { eventId, userId: bob } }, data: { voteStatus: "confirmed" },
     });
 
     mocks.findUnique.mockResolvedValueOnce(confirmed);
-    participantMocks.findMany.mockResolvedValueOnce(rows());
-    expect((await post(`/events/${eventId}/decline`, alice)).status).toBe(409); // the creator isn't a direct invitee
+    participantMocks.findMany.mockResolvedValueOnce(lateRows());
+    expect((await post(`/events/${eventId}/decline`, bob)).status).toBe(204);
+    expect(participantMocks.update).toHaveBeenLastCalledWith({
+      where: { eventId_userId: { eventId, userId: bob } }, data: { voteStatus: "ghost_passed" },
+    });
 
-    mocks.findUnique.mockResolvedValueOnce(inviteEvent({ status: "voting", voteClosesAt: new Date(Date.now() + 3600_000) })); // still voting: use Ghost Pass instead
+    // An original invitee who didn't vote has lost the hangout and can't use this to get back in.
+    mocks.findUnique.mockResolvedValueOnce(confirmed);
     participantMocks.findMany.mockResolvedValueOnce(rows());
-    expect((await post(`/events/${eventId}/decline`, bob)).status).toBe(409);
-    expect(participantMocks.update).toHaveBeenCalledTimes(1);
+    expect((await post(`/events/${eventId}/join`, bob)).status).toBe(409);
+
+    mocks.findUnique.mockResolvedValueOnce(confirmed);
+    participantMocks.findMany.mockResolvedValueOnce(lateRows());
+    expect((await post(`/events/${eventId}/join`, alice)).status).toBe(409); // the creator isn't a late invitee
+
+    mocks.findUnique.mockResolvedValueOnce(inviteEvent({ status: "voting", voteClosesAt: new Date(Date.now() + 3600_000) }));
+    participantMocks.findMany.mockResolvedValueOnce(lateRows());
+    expect((await post(`/events/${eventId}/decline`, bob)).status).toBe(409); // still voting: vote or Ghost Pass instead
+    expect(participantMocks.update).toHaveBeenCalledTimes(2);
   });
 });

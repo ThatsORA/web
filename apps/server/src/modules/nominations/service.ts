@@ -30,7 +30,7 @@ export function getEligibleSquadVoters(
   event: { createdById: string | null; sourceGroupId: string | null; sourceGroupIds?: readonly string[]; status: any; endsAt: Date },
   participants: readonly InvitedParticipant[]
 ): string[] {
-  const eligible = participants.filter((p) => isSquadSourced(p, event) && keepsAccess(p, false));
+  const eligible = participants.filter((p) => isSquadSourced(p, event) && keepsAccess(p, false, event.status));
   return eligible.map((p) => p.userId);
 }
 

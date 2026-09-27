@@ -3,7 +3,7 @@
 // creator, their pass is a Ghost Pass, and they never join a squad chat. Same path for squad and friend hangouts.
 import type { EventStatus } from "@web/contract";
 import { votingOpen } from "../voting/resolution";
-import type { InvitedParticipant } from "./invitations";
+import { lateInvitePending, type InvitedParticipant } from "./invitations";
 
 export interface LateInviteEvent {
   status: EventStatus;
@@ -53,11 +53,11 @@ export function lateInvitees(
 }
 
 /**
- * Whether `me` can still say "Can't make it" after voting closed: a direct invitee who never responded, on a
- * confirmed hangout that hasn't started. This is how a late invite to a confirmed hangout gets declined; it also
- * covers an original direct invitee who never voted, who would otherwise count as attending.
+ * Whether `me` can still answer a late invite (#345, #407): "I'm in" or "Can't make it". Only someone invited
+ * after voting closed who hasn't answered, on a confirmed hangout that hasn't started. Original invitees who
+ * didn't vote have already lost the hangout (#407), so they can't use this to get back in.
  */
-export function canDecline(event: LateInviteEvent, me: InvitedParticipant | undefined, now: Date): boolean {
+export function canAnswerInvite(event: LateInviteEvent, me: InvitedParticipant | undefined, now: Date): boolean {
   return !!me && !event.isMixer && event.status === "confirmed" && now < event.startsAt &&
-    !votingOpen(event, now) && me.inviteSource === "direct" && me.voteStatus === "invited";
+    !votingOpen(event, now) && me.inviteSource === "direct" && lateInvitePending(me);
 }

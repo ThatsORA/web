@@ -99,6 +99,7 @@ export function useEvents() {
         ),
       ghostPass: () => run(card.id, () => api(routes.ghostPass(card.id), Ignored, { method: "POST" })),
       changeSpot: () => run(card.id, () => requestChangeSpot(card), changeSpotNotice),
+      joinInvite: () => run(card.id, () => api(routes.joinInvite(card.id), Ignored, { method: "POST" })),
       declineInvite: () => run(card.id, () => api(routes.declineInvite(card.id), Ignored, { method: "POST" })),
     }),
     [run],

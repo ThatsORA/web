@@ -39,7 +39,8 @@ export const routes = {
   reportClosed: (id: string) => `/events/${id}/report-closed`,
   changeSpot: (id: string) => `/events/${id}/change-spot`,
   eventInvite: (id: string) => `/events/${id}/invite`, // POST InviteToEventRequest → 204 (#345)
-  declineInvite: (id: string) => `/events/${id}/decline`, // POST → 204: a direct invitee's "Can't make it" after close (#345)
+  joinInvite: (id: string) => `/events/${id}/join`, // POST → 204: a late invitee's "I'm in" (#407)
+  declineInvite: (id: string) => `/events/${id}/decline`, // POST → 204: a late invitee's "Can't make it" (#345, #407)
   runMatcher: "/internal/run-matcher", // header X-Internal-Secret
   runScheduler: "/scheduler/run", // POST → 202, runs the scheduler with force; the card arrives over the socket
   expenses: (id: string) => `/events/${id}/expenses`,

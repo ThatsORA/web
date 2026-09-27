@@ -35,9 +35,19 @@ describe("feedTabs", () => {
     const confirmed = filterHangoutsByTab(cards, "confirmed");
     expect(confirmed.map((c) => c.id)).toEqual(["c3", "c4"]);
 
+    // A late invite you haven't answered lives in Pending only, never both tabs (#407).
     const lateInvite = mockCard("c7", "confirmed", "invited") as EventCardPayload;
     const withLate = filterHangoutsByTab([...cards, lateInvite], "confirmed");
-    expect(withLate.map((c) => c.id)).toEqual(["c3", "c4", "c7"]);
+    expect(withLate.map((c) => c.id)).toEqual(["c3", "c4"]);
+    expect(filterHangoutsByTab([lateInvite], "pending").map((c) => c.id)).toEqual(["c7"]);
+  });
+
+  it("puts every card in exactly one tab (#407)", () => {
+    const all = [...cards, mockCard("c7", "confirmed", "invited") as EventCardPayload, mockCard("c8", "chatted", "invited") as EventCardPayload];
+    for (const card of all) {
+      const tabs = (["pending", "confirmed", "past"] as const).filter((tab) => filterHangoutsByTab([card], tab).length);
+      expect(tabs, card.id).toHaveLength(1);
+    }
   });
 
   it("filters cards into Past tab (completed or expired status)", () => {
