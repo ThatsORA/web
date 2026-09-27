@@ -110,16 +110,16 @@ squadsRouter.post(routes.squadRespond(":id"), requireAuth, async (req, res) => {
   if (!body.success) return res.status(400).json({ error: "invalid_body", message: body.error.message });
   const groupId = String(req.params.id);
   const mine = await membership(groupId, meOf(req));
-  if (mine?.status !== "invited" || mine.acceptedAt) return res.status(404).json({ error: "not_found" });
+  if (!mine) return res.status(404).json({ error: "not_found" });
   if (!body.data.accept) {
     await prisma.groupMember.delete({ where: { id: mine.id } });
     return res.status(204).end();
   }
-  const now = new Date();
-  await prisma.groupMember.update({ where: { id: mine.id }, data: { status: "active", acceptedAt: now } });
+  if (mine.status !== "active") {
+    const now = new Date();
+    await prisma.groupMember.update({ where: { id: mine.id }, data: { status: "active", acceptedAt: now } });
+  }
   res.status(204).end();
-
-
 });
 
 squadsRouter.post(routes.squadLeave(":id"), requireAuth, async (req, res) => {
