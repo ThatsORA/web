@@ -14,7 +14,7 @@ export function toggleInvitee(selected: string[], id: string): string[] {
   return selected.length >= MAX_INVITEES ? selected : [...selected, id];
 }
 
-export type SquadMemberLike = { id: string; status?: string };
+export type SquadMemberLike = { id: string; username?: string; display_name?: string | null; status?: string };
 export type SquadLike = { id: string; name: string; members: SquadMemberLike[] };
 
 export interface DeduplicatedInviteesResult {
@@ -68,6 +68,21 @@ export function getDeduplicatedInvitees(
     totalCount,
     isValidCount,
   };
+}
+
+/** Returns details for selected squads and their active members (excluding creator). */
+export function getSelectedSquadMembers<T extends SquadMemberLike, S extends { id: string; name: string; members: T[] }>(
+  selectedSquadIds: string[],
+  squads: S[],
+  creatorId?: string | null,
+): { squad: S; activeMembers: T[] }[] {
+  const selectedSquadSet = new Set(selectedSquadIds);
+  return squads
+    .filter((squad) => selectedSquadSet.has(squad.id))
+    .map((squad) => ({
+      squad,
+      activeMembers: squad.members.filter((m) => (!m.status || m.status === "active") && m.id !== creatorId),
+    }));
 }
 
 /**

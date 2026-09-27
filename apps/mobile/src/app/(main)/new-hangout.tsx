@@ -14,6 +14,7 @@ import {
   MAX_INVITEES,
   buildCreateEventRequest,
   getDeduplicatedInvitees,
+  getSelectedSquadMembers,
   noMatchReason,
   otherWeek,
   type Week,
@@ -78,6 +79,7 @@ export default function NewHangout() {
     activeSquads,
     currentUserId,
   );
+  const selectedSquadDetails = getSelectedSquadMembers(selectedSquadIds, activeSquads, currentUserId);
 
   async function submit(forWeek: Week | null) {
     if (!isValidCount) return;
@@ -158,16 +160,37 @@ export default function NewHangout() {
       {submitError ? <Callout tone="danger">{submitError}</Callout> : null}
 
       <Card>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Txt variant="section">Who’s coming</Txt>
-          <Txt variant="small" numeric>
-            {totalCount} of 6 people total ({inviteeIds.length} of {MAX_INVITEES} picked)
-          </Txt>
-        </View>
+        {selectedSquadIds.length === 1 && selectedSquadDetails.length === 1 ? (
+          <View style={{ gap: t.spacing.xs }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Txt variant="section">Squad Hangout: {selectedSquadDetails[0].squad.name}</Txt>
+              <Txt variant="small" numeric>
+                {totalCount} of 6 people
+              </Txt>
+            </View>
+            <Txt variant="small">
+              Inviting all active members of {selectedSquadDetails[0].squad.name}:
+            </Txt>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm, marginTop: t.spacing.xs }}>
+              {selectedSquadDetails[0].activeMembers.map((m) => (
+                <Chip key={m.id} label={displayName({ username: m.username ?? "member", display_name: m.display_name })} selected />
+              ))}
+            </View>
+          </View>
+        ) : (
+          <>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Txt variant="section">Who’s coming</Txt>
+              <Txt variant="small" numeric>
+                {totalCount} of 6 people total ({inviteeIds.length} of {MAX_INVITEES} picked)
+              </Txt>
+            </View>
 
-        <Txt variant="small">
-          Squad invitees use visible Pass and directly invited people use Ghost Pass; overlap uses squad rules.
-        </Txt>
+            <Txt variant="small">
+              Squad invitees use visible Pass and directly invited people use Ghost Pass; overlap uses squad rules.
+            </Txt>
+          </>
+        )}
 
         {loadError ? (
           <>
@@ -231,7 +254,7 @@ export default function NewHangout() {
             onPress={() => setPeopleOpen((o) => !o)}
             style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: t.spacing.xs }}
           >
-            <Txt variant="title">People ({eligibleFriends.length})</Txt>
+            <Txt variant="title">Extra People ({eligibleFriends.length})</Txt>
             <Txt variant="small">{peopleOpen ? "Collapse" : "Expand"}</Txt>
           </Pressable>
 

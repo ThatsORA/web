@@ -1,7 +1,7 @@
 import { CreateEventRequest } from "@web/contract";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { MAX_INVITEES, buildCreateEventRequest, getDeduplicatedInvitees, noMatchReason, otherWeek, toggleInvitee, weekRange } from "./newHangout";
+import { MAX_INVITEES, buildCreateEventRequest, getDeduplicatedInvitees, getSelectedSquadMembers, noMatchReason, otherWeek, toggleInvitee, weekRange } from "./newHangout";
 
 const ids = Array.from({ length: 6 }, (_, i) => `00000000-0000-4000-8000-00000000000${i}`);
 
@@ -159,5 +159,26 @@ describe("getDeduplicatedInvitees", () => {
     expect(res.inviteeIds).toEqual([ids[1], ids[2]]);
     expect(res.totalCount).toBe(3);
     expect(res.isValidCount).toBe(true);
+  });
+});
+
+describe("getSelectedSquadMembers", () => {
+  const creator = ids[0];
+  const squad1 = {
+    id: "sq-1",
+    name: "Roommates",
+    members: [
+      { id: creator, status: "active" },
+      { id: ids[1], status: "active" },
+      { id: ids[2], status: "active" },
+      { id: ids[3], status: "invited" },
+    ],
+  };
+
+  it("returns active members excluding creator for selected squads", () => {
+    const res = getSelectedSquadMembers(["sq-1"], [squad1], creator);
+    expect(res).toHaveLength(1);
+    expect(res[0].squad.name).toBe("Roommates");
+    expect(res[0].activeMembers.map((m) => m.id)).toEqual([ids[1], ids[2]]);
   });
 });
