@@ -1,5 +1,6 @@
 // Socket.io events. Payloads are deliberately thin: on any event the client
-// refetches GET /events/:id. Never put vote identities in a payload.
+// refetches GET /events/:id, which is scoped to that viewer (#206). Never put
+// a person, a vote or a pass in a payload.
 import { z } from "zod";
 import { EventStatus, Id } from "./schemas";
 

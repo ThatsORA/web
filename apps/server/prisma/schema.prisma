@@ -38,6 +38,14 @@ enum VoteStatus {
   confirmed
 }
 
+// #206: how a person is in an event. A person picked both directly and via a selected squad is
+// stored once as squad. Automated events have no creator row.
+enum InviteSource {
+  creator
+  direct
+  squad
+}
+
 enum VenueStatus {
   open
   reported_closed
@@ -276,6 +284,10 @@ model EventParticipant {
   eventId    String     @map("event_id")
   userId     String     @map("user_id")
   voteStatus VoteStatus @default(invited) @map("vote_status")
+  // #206: provenance decides pass kind and who can see this person (plan §9 "Who sees what").
+  // Documents from before it are filled by scripts/backfill.ts.
+  inviteSource InviteSource @default(direct) @map("invite_source")
+  squadIds     String[]     @default([]) @map("squad_ids") // selected squads that brought them in; [] unless squad
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -237,8 +237,44 @@ export const CreateEventRequest = z.object({
 });
 export type CreateEventRequest = z.infer<typeof CreateEventRequest>;
 
+// ---------- invitations + per-viewer privacy (#206, plan §9 "Who sees what") ----------
+/**
+ * How a person is in an event. "creator": the human who made it, not via a selected squad.
+ * "direct": picked as a person. "squad": brought in by a selected squad; someone picked both
+ * ways is stored once, as "squad". Automated events have no "creator" row.
+ */
+export const InviteSource = z.enum(["creator", "direct", "squad"]);
+export type InviteSource = z.infer<typeof InviteSource>;
+/**
+ * "ghost" (direct invites): looks exactly like a vote and is never shown to anyone.
+ * "visible" (creator, squad): a "can't make it" that everyone who can see you can see.
+ */
+export const PassKind = z.enum(["ghost", "visible"]);
+export type PassKind = z.infer<typeof PassKind>;
+
+/** Someone on the card, as this viewer may see them. */
+export const EventParticipantView = PublicUser.extend({
+  invite_source: InviteSource,
+  /** Whether they passed, only where this viewer may see it (yourself, or a visible pass). null = not shown to you, never "didn't pass". */
+  passed: z.boolean().nullable(),
+});
+export type EventParticipantView = z.infer<typeof EventParticipantView>;
+
+/** What the caller is and may see on this card. Computed on the server; clients never infer it. */
+export const EventViewer = z.object({
+  invite_source: InviteSource,
+  pass_kind: PassKind,
+  /** The human creator only: every participant, and after close every attendee. Always false on automated events. */
+  full_roster: z.boolean(),
+});
+export type EventViewer = z.infer<typeof EventViewer>;
+
+/**
+ * One card, scoped to the caller: `participants`, `outcome.attendees` and every `travel_minutes`
+ * hold only people the caller may see, and `tallies` stays null unless the caller can see everyone.
+ */
 export const EventCardPayload = z.object({
-  created_by: PublicUser.nullable().optional(),
+  created_by: PublicUser.nullable().optional(), // the human creator; null on automated events
   id: Id,
   status: EventStatus,
   starts_at: Instant,
@@ -246,7 +282,8 @@ export const EventCardPayload = z.object({
   timezone: IanaTimezone,
   vibe_tag: VibeTag,
   match_reason: z.string().max(90).nullable().optional(),
-  participants: z.array(PublicUser),
+  viewer: EventViewer,
+  participants: z.array(EventParticipantView), // only people the caller may see, the caller included
   options: z.array(EventOption), // the 3 choices while voting
   progress: z.object({ responded: z.number().int(), total: z.number().int() }),
   my_status: VoteStatus,
@@ -257,8 +294,8 @@ export const EventCardPayload = z.object({
     .object({
       venue: EventOption.nullable(),
       venue_status: VenueStatus,
-      attendees: z.array(PublicUser),
-      tallies: z.record(Id, z.number().int()).nullable(),
+      attendees: z.array(PublicUser), // only people the caller may see
+      tallies: z.record(Id, z.number().int()).nullable(), // null while voting, or when the caller can't see everyone
     })
     .nullable(),
 });
