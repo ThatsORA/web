@@ -3,15 +3,16 @@ import { Pressable } from "react-native";
 import { Txt } from "./Txt";
 import { useTheme } from "./useTheme";
 
-type Props = { label: string; selected?: boolean; onPress?: () => void };
+type Props = { label: string; selected?: boolean; onPress?: () => void; disabled?: boolean };
 
-export function Chip({ label, selected = false, onPress }: Props) {
+export function Chip({ label, selected = false, onPress, disabled = false }: Props) {
   const t = useTheme();
   return (
     <Pressable
       accessibilityRole="checkbox"
       accessibilityLabel={label}
-      accessibilityState={{ checked: selected }}
+      accessibilityState={{ checked: selected, disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => ({
         minHeight: t.touch,
@@ -21,6 +22,7 @@ export function Chip({ label, selected = false, onPress }: Props) {
         borderColor: selected ? t.colors.primary : t.colors.borderStrong,
         backgroundColor: selected ? t.colors.primary : pressed ? t.colors.primarySofter : t.colors.surface,
         paddingHorizontal: t.spacing.md,
+        opacity: disabled ? 0.5 : 1,
       })}
     >
       <Txt variant="label" color={selected ? "onPrimary" : "heading"}>

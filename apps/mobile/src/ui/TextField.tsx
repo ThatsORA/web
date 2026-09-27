@@ -4,16 +4,19 @@ import { TextInput, View, type TextInputProps } from "react-native";
 import { Txt } from "./Txt";
 import { useTheme } from "./useTheme";
 
-type Props = Omit<TextInputProps, "style"> & { label: string; error?: string | null };
+/** `hideLabel` keeps the label for screen readers only (search bars). */
+type Props = Omit<TextInputProps, "style"> & { label: string; error?: string | null; hideLabel?: boolean };
 
-export function TextField({ label, error, onFocus, onBlur, ...input }: Props) {
+export function TextField({ label, error, hideLabel, onFocus, onBlur, ...input }: Props) {
   const t = useTheme();
   const [focused, setFocused] = useState(false);
   return (
     <View style={{ gap: t.spacing.xs }}>
-      <Txt variant="label" color="heading">
-        {label}
-      </Txt>
+      {hideLabel ? null : (
+        <Txt variant="label" color="heading">
+          {label}
+        </Txt>
+      )}
       <TextInput
         accessibilityLabel={label}
         placeholderTextColor={t.colors.textMuted}
