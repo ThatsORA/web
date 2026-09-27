@@ -66,3 +66,7 @@ export function resolveEvent({ isMixer, participants, votes, options, unusedVenu
 
   return { status: "confirmed", winner, backups: [...losers, ...unusedVenues], wasTiebreaker };
 }
+
+/** The winner's own time (#321) becomes the event's; options without one keep the event's time. */
+export const winnerTime = (winner: EventOption) =>
+  winner.starts_at && winner.ends_at ? { startsAt: new Date(winner.starts_at), endsAt: new Date(winner.ends_at) } : {};

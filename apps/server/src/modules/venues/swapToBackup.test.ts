@@ -48,6 +48,14 @@ describe("swapToBackup", () => {
     });
   });
 
+  it("keeps the event's resolved time when the backup has its own time (#321)", () => {
+    const timed = { ...backupA, activity: "Karaoke", starts_at: "2026-10-02T23:00:00Z", ends_at: "2026-10-03T01:00:00Z" };
+    const result = swapToBackup(event([timed]), "current", now, 24);
+    if (!result.ok || result.kind !== "swapped") throw new Error("expected a swap");
+    expect(result.data).not.toHaveProperty("startsAt");
+    expect(result.data).not.toHaveProperty("endsAt");
+  });
+
   it("uses the final backup and leaves a confirmed event with an empty list", () => {
     const result = swapToBackup(event([backupA]), "current", now, 24);
     expect(result).toMatchObject({ ok: true, kind: "swapped", data: { backupVenues: [] } });
