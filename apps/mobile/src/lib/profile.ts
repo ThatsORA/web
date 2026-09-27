@@ -42,6 +42,21 @@ export function buildProfilePatch(
   return { patch: empty || errors.displayName || errors.bio ? null : patch, errors };
 }
 
+export const PREF_MAX = 300; // PrefText in the contract; the fields cap input at this
+
+/** The PATCH /me body for the Preferences form (#310): only fields that changed, blank clears (null). Null when nothing changed. */
+export function buildPrefsPatch(
+  me: Pick<MeData, "pref_activities" | "pref_personality">,
+  draft: { activities: string; personality: string },
+): Patch | null {
+  const patch: Patch = {};
+  const activities = draft.activities.trim() || null;
+  const personality = draft.personality.trim() || null;
+  if (activities !== me.pref_activities) patch.pref_activities = activities;
+  if (personality !== me.pref_personality) patch.pref_personality = personality;
+  return Object.keys(patch).length ? patch : null;
+}
+
 /** Message for an invalid username draft, or null when it's valid. */
 export function usernameProblem(draft: string): string | null {
   return Username.safeParse(draft).success ? null : "Usernames are 3–24 lowercase letters, numbers or _.";

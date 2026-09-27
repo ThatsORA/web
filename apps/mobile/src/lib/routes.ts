@@ -9,6 +9,9 @@ export const SETTINGS_HREF = "/(main)/you";
 /** "Edit profile" on the You tab and Settings (#97). */
 export const PROFILE_HREF = "/(main)/profile";
 
+/** "Preferences" on the You tab: the private matching profile (#310). */
+export const PREFERENCES_HREF = "/(main)/preferences";
+
 /** The Hangouts feed's "+ New hangout" button. */
 export const NEW_HANGOUT_HREF = "/(main)/new-hangout";
 

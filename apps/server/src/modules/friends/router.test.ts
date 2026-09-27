@@ -33,8 +33,8 @@ const userMatches = (u: (typeof users)[number], w: UserWhere) =>
   (w.username === undefined || (typeof w.username === "string" ? u.username === w.username : u.username.startsWith(w.username.startsWith))) &&
   (w.id === undefined || (typeof w.id === "string" ? u.id === w.id : "not" in w.id ? u.id !== w.id.not : w.id.in.includes(u.id))) &&
   (w.emailVerifiedAt === undefined || u.emailVerifiedAt !== null);
-// Returns more than any route should expose (email) so tests prove responses strip it.
-const pick = (u: (typeof users)[number]) => ({ id: u.id, username: u.username, displayName: null, bio: null, email: `${u.username}@secret.test` });
+// Returns more than any route should expose (email, the private matching profile #310) so tests prove responses strip it.
+const pick = (u: (typeof users)[number]) => ({ id: u.id, username: u.username, displayName: null, bio: null, email: `${u.username}@secret.test`, prefActivities: "secret-activities", prefPersonality: "secret-personality" });
 vi.mock("../../lib/prisma", () => ({
   prisma: {
     user: {
@@ -237,7 +237,7 @@ describe("public profile", () => {
     await addClose(B, "andy");
     const body = await (await profile(A, B)).json();
     expect(body.friendship).toBe("friends");
-    expect(JSON.stringify(body)).not.toMatch(/secret|close|mutual|added/i);
+    expect(JSON.stringify(body)).not.toMatch(/secret|close|mutual|added|pref_/i);
   });
 
   it("404s unverified accounts (except to themselves)", async () => {

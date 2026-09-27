@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PatchMeRequest } from "@web/contract";
 import { classifySlot, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot } from "../src/modules/matching/timeMath";
 import { buildDemoSeedSchedule, DEMO_TIMEZONE, DEMO_USERS } from "./demoSeed";
 
@@ -9,10 +10,17 @@ function formatSlot(slot: ClassifiedSlot | null): string {
 
 describe("demo seed schedule", () => {
   it("uses the FIU demo identities and geography", () => {
-    expect(DEMO_USERS).toEqual([
+    expect(DEMO_USERS).toMatchObject([
       { username: "riley", email: "riley@web.demo", homeLat: 25.781, homeLng: -80.36 },
       { username: "ojas", email: "ojas@web.demo", homeLat: 25.7, homeLng: -80.37 },
     ]);
+  });
+
+  it("gives each demo user a distinct matching profile that fits PATCH /me (#310)", () => {
+    const [riley, ojas] = DEMO_USERS;
+    expect(riley.prefActivities).not.toBe(ojas.prefActivities);
+    expect(riley.prefPersonality).not.toBe(ojas.prefPersonality);
+    for (const u of DEMO_USERS) expect(PatchMeRequest.safeParse({ pref_activities: u.prefActivities, pref_personality: u.prefPersonality }).success).toBe(true);
   });
 
   it("chooses the first Thursday at least 24 hours away", () => {

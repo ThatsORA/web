@@ -38,7 +38,7 @@ import { hashPassword, verifyPassword } from "./passwordHash";
 import { passwordReasons } from "@web/contract";
 let base: string;
 let close: () => void;
-const user: User = { id: "6f48fb35-1518-481d-ab60-cfd2dcc28acf", username: "ojas", email: "ojas@example.com", passwordHash: bcrypt.hashSync("correct-horse", 4), timezone: "America/New_York", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: new Date(), displayName: null, bio: null, usernameChangedAt: null, passwordChangedAt: null };
+const user: User = { id: "6f48fb35-1518-481d-ab60-cfd2dcc28acf", username: "ojas", email: "ojas@example.com", passwordHash: bcrypt.hashSync("correct-horse", 4), timezone: "America/New_York", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: new Date(), displayName: null, bio: null, prefActivities: null, prefPersonality: null, usernameChangedAt: null, passwordChangedAt: null };
 beforeAll(async () => {
   const app = express();
   app.use(express.json(), authRouter);
@@ -160,7 +160,7 @@ describe("auth router", () => {
     expect((await call("GET", "/me")).status).toBe(401);
     mocks.findUnique.mockResolvedValueOnce(user);
     const body = await (await call("GET", "/me", undefined, true)).json();
-    expect(body).toEqual({ id: user.id, username: "ojas", email: user.email, timezone: user.timezone, home_lat: null, home_lng: null, travel_mode: "DRIVE", email_verified: true, display_name: null, bio: null });
+    expect(body).toEqual({ id: user.id, username: "ojas", email: user.email, timezone: user.timezone, home_lat: null, home_lng: null, travel_mode: "DRIVE", email_verified: true, display_name: null, bio: null, pref_activities: null, pref_personality: null });
   });
   it("PATCH /me rounds home coordinates to 3 decimals", async () => {
     mocks.update.mockImplementation(async ({ data }) => ({ ...user, homeLat: data.homeLat, homeLng: data.homeLng }));
@@ -245,6 +245,14 @@ describe("profile", () => {
     expect(mocks.update.mock.calls[1]![0].data).toMatchObject({ displayName: null, bio: null });
     expect((await patch({ display_name: "x".repeat(41) })).status).toBe(400);
     expect((await patch({ bio: "x".repeat(161) })).status).toBe(400);
+  });
+
+  it("sets and clears the private matching profile", async () => {
+    expect(await (await patch({ pref_activities: " bouldering, ramen ", pref_personality: "early bird" })).json()).toMatchObject({ pref_activities: "bouldering, ramen", pref_personality: "early bird" });
+    await patch({ pref_activities: null, pref_personality: "" });
+    expect(mocks.update.mock.calls[1]![0].data).toMatchObject({ prefActivities: null, prefPersonality: null });
+    expect((await patch({ pref_activities: "x".repeat(301) })).status).toBe(400);
+    expect((await patch({ pref_personality: "x".repeat(300) })).status).toBe(200);
   });
 
   it("changes the username at most once per 30 days", async () => {
