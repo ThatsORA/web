@@ -48,7 +48,7 @@ touches before you write code.
   Laya (self-hosted) first, then Jev `jev-1.13.0`, then the caller's
   deterministic fallback (#196, #228).
 - Gemini only writes text: the vote blurbs and `match_reason`, from
-  `curateVenues`. `rankWithGemini` is being removed (#231).
+  `curateVenues`. `rankWithGemini` was removed (#231).
 - Free windows, groups, which vibes are feasible for a slot, shortlist
   scoring, venue filtering, route scoring and backups stay deterministic
   TypeScript. The model only chooses among options code already computed
