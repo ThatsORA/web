@@ -84,22 +84,24 @@ export function transformScheduleItems(
     });
   });
 
-  // Convert hangouts
-  events.forEach((evt) => {
-    const venueName = evt.outcome?.venue?.name || (evt.options && evt.options[0]?.name) || "Venue TBD";
-    items.push({
-      id: `event-${evt.id}`,
-      type: "hangout",
-      startsAt: evt.starts_at,
-      endsAt: evt.ends_at,
-      title: `${formatVibeName(evt.vibe_tag)} Hangout`,
-      subtitle: `${formatTimeRange(evt.starts_at, evt.ends_at)} · ${venueName}`,
-      status: evt.status,
-      vibeTag: evt.vibe_tag,
-      eventId: evt.id,
-      venueName,
+  // Convert hangouts (only confirmed hangouts)
+  events
+    .filter((evt) => evt.status === "confirmed")
+    .forEach((evt) => {
+      const venueName = evt.outcome?.venue?.name || (evt.options && evt.options[0]?.name) || "Venue TBD";
+      items.push({
+        id: `event-${evt.id}`,
+        type: "hangout",
+        startsAt: evt.starts_at,
+        endsAt: evt.ends_at,
+        title: `${formatVibeName(evt.vibe_tag)} Hangout`,
+        subtitle: `${formatTimeRange(evt.starts_at, evt.ends_at)} · ${venueName}`,
+        status: evt.status,
+        vibeTag: evt.vibe_tag,
+        eventId: evt.id,
+        venueName,
+      });
     });
-  });
 
   // Sort items by startsAt ASC
   items.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());

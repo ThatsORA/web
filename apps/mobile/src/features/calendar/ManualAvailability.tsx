@@ -127,6 +127,7 @@ export function ManualAvailabilityView({
         <Button
           label={isAdding ? "Cancel" : "+ Add busy time"}
           variant={isAdding ? "ghost" : "outline"}
+          size="sm"
           onPress={() => onToggleAdding?.()}
         />
       </View>
@@ -210,6 +211,7 @@ export function ManualAvailabilityView({
             <Button
               label="Delete"
               variant="ghost"
+              size="sm"
               onPress={() => onDeleteBlock?.(block.id)}
               loading={deletingId === block.id}
             />

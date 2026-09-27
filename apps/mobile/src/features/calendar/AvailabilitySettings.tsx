@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, ActivityIndicator, Alert } from "react-native";
 import * as Location from "expo-location";
-import { Txt, Button, useTheme } from "../../ui";
+import { Txt, Button, Card, useTheme } from "../../ui";
 import { Me, routes } from "@web/contract";
 import type { z } from "zod";
 import { api } from "../../lib/api";
@@ -18,6 +18,7 @@ export function AvailabilitySettings() {
   const [loadingMe, setLoadingMe] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [updatingLocation, setUpdatingLocation] = useState(false);
+  const [scheduleKey, setScheduleKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +64,7 @@ export function AvailabilitySettings() {
     try {
       await createDeviceCalendarSync().sync(true);
       Alert.alert("Success", "Device calendar synced successfully.");
+      setScheduleKey((k) => k + 1);
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to sync device calendar.");
     } finally {
@@ -75,9 +77,9 @@ export function AvailabilitySettings() {
   }
 
   return (
-    <View style={{ gap: theme.spacing.xl, paddingVertical: theme.spacing.sm }}>
-      <View style={{ gap: theme.spacing.md }}>
-        <Txt variant="title">Home Location</Txt>
+    <View style={{ gap: theme.spacing.xl }}>
+      <Card>
+        <Txt variant="section">Home Location</Txt>
         <Txt variant="body" color="textMuted">
           {me?.home_lat !== null && me?.home_lng !== null
             ? `Lat: ${me?.home_lat}, Lng: ${me?.home_lng}`
@@ -85,24 +87,69 @@ export function AvailabilitySettings() {
         </Txt>
         <Button
           label="Update to current location"
+          variant="outline"
           onPress={handleUpdateLocation}
           disabled={updatingLocation}
         />
-      </View>
+      </Card>
 
-      <View style={{ gap: theme.spacing.md }}>
-        <Txt variant="title">Calendar Sources</Txt>
-        <Button
-          label="Sync Device Calendar Now"
-          onPress={handleSyncDeviceCalendar}
-          disabled={syncing}
-        />
-        <GoogleCalendarConnect />
-      </View>
+      {/* Consolidate Calendar & Availability Section */}
+      <Card>
+        <Txt variant="section">Calendar & Availability</Txt>
+        <Txt variant="small" color="textMuted">
+          Sync external calendars or enter manual busy times to highlight when you are free.
+        </Txt>
 
-      <ManualAvailability />
+        {/* Subtle Sync Controls Status Bar */}
+        <View
+          style={{
+            backgroundColor: theme.colors.surfaceMuted,
+            borderRadius: theme.radius.md,
+            padding: theme.spacing.sm,
+            gap: theme.spacing.sm,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+          }}
+        >
+          {/* Device Calendar Row */}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: theme.spacing.xs,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.xs }}>
+              <Txt variant="small" color="textMuted">
+                Device Calendar:
+              </Txt>
+              <Txt variant="small" color="heading">
+                Local Sync
+              </Txt>
+            </View>
+            <Button
+              label={syncing ? "Syncing..." : "Sync Device"}
+              variant="outline"
+              size="sm"
+              onPress={handleSyncDeviceCalendar}
+              disabled={syncing}
+            />
+          </View>
 
-      <UnifiedCalendarView />
+          <View style={{ height: 1, backgroundColor: theme.colors.border, opacity: 0.5 }} />
+
+          {/* Google Calendar Row */}
+          <GoogleCalendarConnect />
+        </View>
+
+        {/* Manual Availability */}
+        <ManualAvailability onBlocksChanged={() => setScheduleKey((k) => k + 1)} />
+
+        {/* Unified Schedule View */}
+        <UnifiedCalendarView key={scheduleKey} />
+      </Card>
     </View>
   );
 }
