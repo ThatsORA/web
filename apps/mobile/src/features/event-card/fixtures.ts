@@ -47,7 +47,7 @@ const voting: EventCardPayload = {
   ends_at: "2026-10-01T20:30:00-04:00",
   timezone: "America/New_York",
   vibe_tag: "dinner",
-  viewer: { invite_source: "squad", pass_kind: "visible", full_roster: false },
+  viewer: { invite_source: "squad", pass_kind: "visible", full_roster: false, chat: "open" },
   participants: inSquad([]),
   options: OPTIONS,
   progress: { responded: 1, total: 3 },

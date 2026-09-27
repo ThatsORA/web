@@ -1,12 +1,12 @@
 // Owner: Andy (#206, #210) — invitation provenance, the one per-viewer privacy rule (plan §9 "Who sees what")
 // and who keeps an event after a pass. Pure (no DB, no clock) except eventParticipants(), the one read of
 // participants for voting, chat and realtime. Every event payload goes through viewerScope() and every
-// post-close audience through keepsAccess(); #212 (chat membership) extends them rather than adding a second rule.
+// post-close audience through keepsAccess(); chat membership (#212, chatAudience()) is built on eventAudience().
 //
 // Invite source is derived from fields the event already has, not stored per participant: the schema is
 // the steward's (Ojas), and every event that exists today has one squad at most. Mixed events with several
 // squads (#207) need stored provenance; see the `schema` issue that follows #206.
-import type { EventViewer, InviteSource, PassKind, VoteStatus } from "@web/contract";
+import type { EventChatAccess, EventStatus, EventViewer, InviteSource, PassKind, VoteStatus } from "@web/contract";
 import { prisma } from "../../lib/prisma";
 
 export interface EventInvites {
@@ -54,6 +54,37 @@ export function keepsAccess(row: InvitedParticipant, votingOpen: boolean): boole
 export const eventAudience = (rows: readonly InvitedParticipant[], votingOpen: boolean): string[] =>
   rows.filter((row) => keepsAccess(row, votingOpen)).map((row) => row.userId);
 
+/** A squad hangout's chat opens at creation and stays readable once the event is over; an expired one has none. */
+const SQUAD_CHAT_STATUSES: readonly EventStatus[] = ["voting", "confirmed", "chatted", "completed"];
+
+/**
+ * Who is in the event's chat (#212): everyone here may read it, post until `ends_at`, and gets `event:message`.
+ * A chat shows every poster to every member, so its members must all be allowed to see each other (viewerScope()):
+ * - a squad hangout (it has a squad invitee) has chat from creation for the creator and the squad, passes
+ *   included (theirs are visible Passes, so keepsAccess() keeps them). Direct invitees are never in it: they may
+ *   see only themselves and the creator, and squad members may not see them;
+ * - every other event has chat only as the `chatted` fallback, for everyone who keeps access after close.
+ * Chat always uses the after-close rule, so a Ghost Pass never enters it, even while voting is open.
+ */
+export function chatAudience(status: EventStatus, rows: readonly InvitedParticipant[]): string[] {
+  if (rows.some((row) => row.inviteSource === "squad")) {
+    if (!SQUAD_CHAT_STATUSES.includes(status)) return [];
+    return eventAudience(rows.filter((row) => row.inviteSource !== "direct"), false);
+  }
+  return status === "chatted" ? eventAudience(rows, false) : [];
+}
+
+/** The viewer's chat: open until the event ends, then read-only; null if they aren't in chatAudience(). */
+export function chatAccess(
+  event: { status: EventStatus; endsAt: Date },
+  rows: readonly InvitedParticipant[],
+  userId: string,
+  now: Date,
+): EventChatAccess | null {
+  if (!chatAudience(event.status, rows).includes(userId)) return null;
+  return now < event.endsAt ? "open" : "read_only";
+}
+
 /**
  * Every participant of an event with their invite source and vote status. Voting, chat and realtime read
  * participants only through here, so storing provenance later (the #207 schema issue) changes one place.
@@ -67,7 +98,8 @@ export async function eventParticipants(eventId: string): Promise<InvitedPartici
 }
 
 export interface ViewerScope {
-  viewer: EventViewer;
+  /** Everything but `chat`, which the card adds from chatAccess(). */
+  viewer: Omit<EventViewer, "chat">;
   /** People the viewer may see, in event order, the viewer included. `passed` is null where the viewer may not see it. */
   people: { userId: string; inviteSource: InviteSource; passed: boolean | null }[];
   /** After close: the visible people who didn't pass. Only the creator sees everyone, so only they can infer a Ghost Pass. */

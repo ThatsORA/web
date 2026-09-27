@@ -78,7 +78,7 @@ eventsRouter.get(routes.events, requireAuth, async (req, res) => {
   });
   const now = new Date();
   res.json(EventsListResponse.parse({
-    events: events.filter((event) => canSeeEvent(event, userId, now)).map((event) => assembleEventCard(event, userId)),
+    events: events.filter((event) => canSeeEvent(event, userId, now)).map((event) => assembleEventCard(event, userId, now)),
   }));
 });
 

@@ -1,7 +1,9 @@
-// Owner: Ojas — fallback group chat for chatted events.
-// Only participants may read or post. A Ghost Pass (direct invite) is excluded; a visible Pass (creator,
-// squad) keeps chat (#210, keepsAccess in events/invitations.ts).
-// Posting only works while Event.status === "chatted" and before endsAt.
+// Owner: Ojas (handed to Andy for #212) — event group chat.
+// Squad hangouts get chat from creation (voting, confirmed, chatted); every other event only as the `chatted`
+// fallback. Who is in it comes from chatAudience() in events/invitations.ts, the same rule as the card's
+// `viewer.chat`: a Ghost Pass never enters, a visible Pass (creator, squad) keeps it, and direct invitees stay
+// out of squad chats. Anyone outside it gets the same 403, whether or not the event has a chat. Members can
+// read until the messages are cleaned up; posting stops at endsAt (read-only).
 import { Router } from "express";
 import {
   ChatMessage,
@@ -12,10 +14,7 @@ import {
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { emitToUsers } from "../../realtime";
-import { eventAudience, eventParticipants } from "../events/invitations";
-
-/** Who may read and post. Chat uses the after-close rule even while voting is open, so a Ghost Pass never enters it (#210, #212). */
-const chatMembers = async (eventId: string) => eventAudience(await eventParticipants(eventId), false);
+import { chatAccess, chatAudience, eventParticipants } from "../events/invitations";
 
 export const chatRouter = Router();
 chatRouter.use(requireAuth);
@@ -27,12 +26,8 @@ chatRouter.get(routes.eventMessages(":id"), async (req, res) => {
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) return res.status(404).json({ error: "not_found" });
 
-  if (!(await chatMembers(eventId)).includes(me)) {
-    return res.status(403).json({ error: "forbidden", message: "Only active participants may read chat" });
-  }
-
-  if (event.status !== "chatted") {
-    return res.status(400).json({ error: "chat_closed", message: "Chat is only available for chatted events" });
+  if (!chatAccess(event, await eventParticipants(eventId), me, new Date())) {
+    return res.status(403).json({ error: "forbidden", message: "Chat isn't available to you for this event" });
   }
 
   const beforeQuery = req.query.before ? new Date(String(req.query.before)) : undefined;
@@ -77,16 +72,12 @@ chatRouter.post(routes.eventMessages(":id"), async (req, res) => {
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) return res.status(404).json({ error: "not_found" });
 
-  const members = await chatMembers(eventId);
-  if (!members.includes(me)) {
-    return res.status(403).json({ error: "forbidden", message: "Only active participants may post in chat" });
+  const participants = await eventParticipants(eventId);
+  const access = chatAccess(event, participants, me, new Date());
+  if (!access) {
+    return res.status(403).json({ error: "forbidden", message: "Chat isn't available to you for this event" });
   }
-
-  const now = new Date();
-  if (event.status !== "chatted") {
-    return res.status(400).json({ error: "chat_closed", message: "Posting is only allowed when event is chatted" });
-  }
-  if (now >= event.endsAt) {
+  if (access === "read_only") {
     return res.status(400).json({ error: "chat_closed", message: "Chat is read-only after event ends" });
   }
 
@@ -104,10 +95,10 @@ chatRouter.post(routes.eventMessages(":id"), async (req, res) => {
     },
   });
 
-  const otherActiveUserIds = members.filter((id) => id !== me);
-
-  if (otherActiveUserIds.length > 0) {
-    emitToUsers(otherActiveUserIds, "event:message", { event_id: eventId });
+  // Exactly the chat audience, minus the sender.
+  const otherMembers = chatAudience(event.status, participants).filter((id) => id !== me);
+  if (otherMembers.length > 0) {
+    emitToUsers(otherMembers, "event:message", { event_id: eventId });
   }
 
   res.status(201).json(

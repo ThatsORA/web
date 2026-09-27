@@ -21,7 +21,8 @@ touches before you write code.
   Only a hangout's human creator sees its whole roster; nobody else ever
   receives a direct invitee they can't see, a Ghost Pass marker, or an
   attendee list, travel time or tally that reveals one. Build every event
-  payload (card, list, chat membership, presence) on `viewerScope()`.
+  payload (card, list, chat membership, presence) on `viewerScope()`;
+  chat members come only from `chatAudience()` (#212).
 - Once voting closes, a direct invitee's Ghost Pass is final and they lose
   the event: card, list, chat, socket events and pushes (#210, plan §9
   "Pass lifecycle"). Pick every post-close recipient with `keepsAccess()` /

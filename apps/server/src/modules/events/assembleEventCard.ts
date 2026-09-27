@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { EventCardPayload, EventOption, optionFromRow, type VoteStatus } from "@web/contract";
 import { publicUserSelect, toPublicUser } from "../auth/helpers";
 import { votingOpen } from "../voting/resolution";
-import { inviteSource, keepsAccess, viewerScope } from "./invitations";
+import { chatAccess, inviteSource, keepsAccess, viewerScope } from "./invitations";
 
 export type EventWithCardData = Prisma.EventGetPayload<{
   include: {
@@ -25,9 +25,10 @@ function scopedTravel(option: EventOption, visible: ReadonlySet<string>): EventO
 
 /**
  * The card as `userId` may see it (#206): people, attendees and travel times go through viewerScope(),
- * and only the caller's option is exposed while voting. Every field is allowlisted by the contract.
+ * and only the caller's option is exposed while voting. `viewer.chat` comes from chatAccess() (#212), the
+ * same rule the chat routes use. Every field is allowlisted by the contract.
  */
-export function assembleEventCard(event: EventWithCardData, userId: string): EventCardPayload {
+export function assembleEventCard(event: EventWithCardData, userId: string, now = new Date()): EventCardPayload {
   const scope = viewerScope(event, userId);
   const visible = new Set(scope.people.map((person) => person.userId));
   const users = new Map(event.participants.map((participant) => [participant.userId, participant.user]));
@@ -48,6 +49,7 @@ export function assembleEventCard(event: EventWithCardData, userId: string): Eve
     ? Object.fromEntries(options.map((option) => [option.id!, event.votes.filter((vote) => vote.optionId === option.id).length]))
     : null;
   const creator = event.createdById ? users.get(event.createdById) : undefined;
+  const invited = event.participants.map((participant) => ({ ...participant, inviteSource: inviteSource(event, participant.userId) }));
 
   return EventCardPayload.parse({
     id: event.id,
@@ -56,7 +58,7 @@ export function assembleEventCard(event: EventWithCardData, userId: string): Eve
     ends_at: event.endsAt.toISOString(),
     timezone: event.timezone,
     vibe_tag: event.vibeTag,
-    viewer: scope.viewer,
+    viewer: { ...scope.viewer, chat: chatAccess(event, invited, userId, now) },
     participants: scope.people.map((person) => ({
       ...toPublicUser(users.get(person.userId)!),
       invite_source: person.inviteSource,
