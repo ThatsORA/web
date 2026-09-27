@@ -285,6 +285,15 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
   const attendees = card.outcome?.attendees ?? [];
   const currentUserId = userIdFromToken(getToken());
 
+  const inviter = (() => {
+    if (card.viewer.invite_source !== "direct") return null;
+    const others = card.participants.filter((p) => p.id !== currentUserId);
+    const nonCreator = others.find((p) => !card.created_by || p.id !== card.created_by.id);
+    if (nonCreator) return nonCreator;
+    if (card.created_by) return card.created_by;
+    return others[0] ?? null;
+  })();
+
   useEffect(() => {
     if (swapped) {
       void syncSwappedEventToCalendar(card).then((res) => {
@@ -379,7 +388,7 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
       <Card>
         {canDeclineInvite(card) ? (
           <Callout tone="info" title="You’re invited">
-            {card.created_by ? `${card.created_by.display_name ?? card.created_by.username} added you to this hangout.` : "You were added to this hangout."}
+            {inviter ? `${inviter.display_name ?? inviter.username} added you to this hangout.` : "You were added to this hangout."}
             {" "}You’re in unless you say otherwise.
           </Callout>
         ) : null}
