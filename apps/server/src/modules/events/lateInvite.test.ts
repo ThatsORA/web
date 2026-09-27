@@ -10,8 +10,8 @@ const me = (over: Partial<InvitedParticipant> = {}): InvitedParticipant =>
   ({ userId: "me", voteStatus: "voted", inviteSource: "squad", sourceGroupIds: ["s"], ...over });
 
 describe("inviteBlock", () => {
-  it("lets any participant invite while voting or once confirmed, before the start", () => {
-    expect(inviteBlock(voting, me(), now)).toBeNull();
+  it("lets any participant invite once confirmed before the start, but closes invites during voting", () => {
+    expect(inviteBlock(voting, me(), now)).toBe("closed");
     expect(inviteBlock(confirmed, me({ inviteSource: "direct", voteStatus: "invited" }), now)).toBeNull();
   });
 
@@ -20,7 +20,8 @@ describe("inviteBlock", () => {
     expect(inviteBlock(confirmed, me({ inviteSource: "direct", voteStatus: "ghost_passed" }), now)).toBe("not_found");
   });
 
-  it("closes invites after a pass, on Mixers, once started, and on chatted/expired/completed events", () => {
+  it("closes invites during voting, after a pass, on Mixers, once started, and on chatted/expired/completed events", () => {
+    expect(inviteBlock(voting, me(), now)).toBe("closed");
     expect(inviteBlock(voting, me({ voteStatus: "ghost_passed" }), now)).toBe("closed");
     expect(inviteBlock({ ...voting, isMixer: true }, me(), now)).toBe("closed");
     expect(inviteBlock({ ...confirmed, startsAt: now }, me(), now)).toBe("closed");

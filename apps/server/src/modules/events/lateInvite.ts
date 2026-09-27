@@ -16,7 +16,7 @@ export type InviteBlock = "not_found" | "closed";
 
 /**
  * Whether `me` may invite people now: a participant who still has the event and hasn't passed, on a
- * non-Mixer that is voting or confirmed and hasn't started. `not_found` hides events the caller can't see.
+ * non-Mixer that is confirmed and hasn't started. `not_found` hides events the caller can't see.
  */
 export function inviteBlock(event: LateInviteEvent, me: InvitedParticipant | undefined, now: Date): InviteBlock | null {
   if (!me) return "not_found";
@@ -25,7 +25,7 @@ export function inviteBlock(event: LateInviteEvent, me: InvitedParticipant | und
   if (me.voteStatus === "ghost_passed") return !open && me.inviteSource === "direct" ? "not_found" : "closed";
   if (event.isMixer) return "closed";
   if (now >= event.startsAt) return "closed";
-  return open || event.status === "confirmed" ? null : "closed";
+  return event.status === "confirmed" ? null : "closed";
 }
 
 interface FriendRow {

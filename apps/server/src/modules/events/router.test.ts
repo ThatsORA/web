@@ -430,7 +430,7 @@ describe("inviting into an existing hangout (#345)", () => {
   const dave = "4c1d3f0e-8a2b-4c6d-9e1f-2a3b4c5d6e7f";
   const future = new Date(Date.now() + 24 * 3600_000);
   const inviteEvent = (over: Record<string, unknown> = {}) => ({
-    id: eventId, status: "voting", isMixer: false, startsAt: future, voteClosesAt: new Date(Date.now() + 3600_000),
+    id: eventId, status: "confirmed", isMixer: false, startsAt: future, voteClosesAt: new Date(Date.now() - 3600_000),
     vibeTag: "dinner", timezone: "America/New_York", ...over,
   });
   // alice created it, bob came in directly, ghost passed.
@@ -447,6 +447,14 @@ describe("inviting into an existing hangout (#345)", () => {
     method: "POST",
     headers: { authorization: `Bearer ${signToken(userId)}`, "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  it("rejects invites while voting is still open", async () => {
+    mocks.findUnique.mockResolvedValueOnce(inviteEvent({ status: "voting" }));
+    participantMocks.findMany.mockResolvedValueOnce(rows());
+    const response = await post(`/events/${eventId}/invite`, alice, { invitee_ids: [carol] });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "invites_closed" });
   });
 
   it("adds accepted friends as direct invitees and sends them the card", async () => {
@@ -508,7 +516,7 @@ describe("inviting into an existing hangout (#345)", () => {
     participantMocks.findMany.mockResolvedValueOnce(rows());
     expect((await post(`/events/${eventId}/decline`, alice)).status).toBe(409); // the creator isn't a direct invitee
 
-    mocks.findUnique.mockResolvedValueOnce(inviteEvent()); // still voting: use Ghost Pass instead
+    mocks.findUnique.mockResolvedValueOnce(inviteEvent({ status: "voting", voteClosesAt: new Date(Date.now() + 3600_000) })); // still voting: use Ghost Pass instead
     participantMocks.findMany.mockResolvedValueOnce(rows());
     expect((await post(`/events/${eventId}/decline`, bob)).status).toBe(409);
     expect(participantMocks.update).toHaveBeenCalledTimes(1);
