@@ -22,6 +22,48 @@ export interface ScheduleDayGroup {
   items: ScheduleItem[];
 }
 
+export interface Interval {
+  start: number;
+  end: number;
+}
+
+/** Subtracts a blocker interval from a source interval, returning 0, 1, or 2 remaining intervals. */
+export function subtractInterval(source: Interval, blocker: Interval): Interval[] {
+  if (blocker.end <= source.start || blocker.start >= source.end) {
+    return [source];
+  }
+  if (blocker.start <= source.start && blocker.end >= source.end) {
+    return [];
+  }
+  if (blocker.start > source.start && blocker.end < source.end) {
+    return [
+      { start: source.start, end: blocker.start },
+      { start: blocker.end, end: source.end },
+    ];
+  }
+  if (blocker.start <= source.start && blocker.end < source.end) {
+    return [{ start: blocker.end, end: source.end }];
+  }
+  if (blocker.start > source.start && blocker.end >= source.end) {
+    return [{ start: source.start, end: blocker.start }];
+  }
+  return [source];
+}
+
+/** Subtracts multiple blocker intervals from a list of source intervals. */
+export function subtractIntervals(sources: Interval[], blockers: Interval[]): Interval[] {
+  let result = sources;
+  for (const blocker of blockers) {
+    const next: Interval[] = [];
+    for (const src of result) {
+      next.push(...subtractInterval(src, blocker));
+    }
+    result = next;
+  }
+  // Filter out any negligible intervals (< 5 minutes)
+  return result.filter((i) => i.end - i.start >= 5 * 60 * 1000);
+}
+
 export function getDateKey(date: Date, timeZone: string): string {
   try {
     return new Intl.DateTimeFormat("en-CA", {
@@ -97,20 +139,52 @@ export function transformScheduleItems(
   const tz = timeZone || "UTC";
   const items: ScheduleItem[] = [];
 
-  // Convert free windows
-  freeWindows.forEach((f, idx) => {
+  // Filter confirmed hangouts
+  const confirmedEvents = events.filter((evt) => evt.status === "confirmed");
+
+  // Hangout intervals take highest priority
+  const hangoutIntervals: Interval[] = confirmedEvents.map((evt) => ({
+    start: new Date(evt.starts_at).getTime(),
+    end: new Date(evt.ends_at).getTime(),
+  }));
+
+  // Filter out busy blocks completely covered by confirmed hangouts (e.g. from calendar sync)
+  const activeBusy = busyBlocks.filter((b) => {
+    const bStart = new Date(b.starts_at).getTime();
+    const bEnd = new Date(b.ends_at).getTime();
+    return !hangoutIntervals.some((h) => h.start <= bStart && h.end >= bEnd);
+  });
+
+  const busyIntervals: Interval[] = activeBusy.map((b) => ({
+    start: new Date(b.starts_at).getTime(),
+    end: new Date(b.ends_at).getTime(),
+  }));
+
+  // Reconcile free windows by subtracting both confirmed hangouts and active busy blocks
+  const blockers = [...hangoutIntervals, ...busyIntervals];
+  const rawFreeIntervals: Interval[] = freeWindows.map((f) => ({
+    start: new Date(f.starts_at).getTime(),
+    end: new Date(f.ends_at).getTime(),
+  }));
+
+  const reconciledFree = subtractIntervals(rawFreeIntervals, blockers);
+
+  // Add reconciled free windows
+  reconciledFree.forEach((f, idx) => {
+    const startsAt = new Date(f.start).toISOString();
+    const endsAt = new Date(f.end).toISOString();
     items.push({
-      id: `free-${idx}-${f.starts_at}`,
+      id: `free-${idx}-${startsAt}`,
       type: "free",
-      startsAt: f.starts_at,
-      endsAt: f.ends_at,
+      startsAt,
+      endsAt,
       title: "Free",
-      subtitle: formatTimeRange(f.starts_at, f.ends_at, tz),
+      subtitle: formatTimeRange(startsAt, endsAt, tz),
     });
   });
 
-  // Convert busy blocks
-  busyBlocks.forEach((b, idx) => {
+  // Add active busy blocks
+  activeBusy.forEach((b, idx) => {
     items.push({
       id: b.id ? `busy-${b.id}` : `busy-${idx}-${b.starts_at}`,
       type: "busy",
@@ -123,24 +197,22 @@ export function transformScheduleItems(
     });
   });
 
-  // Convert hangouts (only confirmed hangouts)
-  events
-    .filter((evt) => evt.status === "confirmed")
-    .forEach((evt) => {
-      const venueName = evt.outcome?.venue?.name || (evt.options && evt.options[0]?.name) || "Venue TBD";
-      items.push({
-        id: `event-${evt.id}`,
-        type: "hangout",
-        startsAt: evt.starts_at,
-        endsAt: evt.ends_at,
-        title: `${formatVibeName(evt.vibe_tag)} Hangout`,
-        subtitle: `${formatTimeRange(evt.starts_at, evt.ends_at, tz)} · ${venueName}`,
-        status: evt.status,
-        vibeTag: evt.vibe_tag,
-        eventId: evt.id,
-        venueName,
-      });
+  // Add confirmed hangouts
+  confirmedEvents.forEach((evt) => {
+    const venueName = evt.outcome?.venue?.name || (evt.options && evt.options[0]?.name) || "Venue TBD";
+    items.push({
+      id: `event-${evt.id}`,
+      type: "hangout",
+      startsAt: evt.starts_at,
+      endsAt: evt.ends_at,
+      title: `${formatVibeName(evt.vibe_tag)} Hangout`,
+      subtitle: `${formatTimeRange(evt.starts_at, evt.ends_at, tz)} · ${venueName}`,
+      status: evt.status,
+      vibeTag: evt.vibe_tag,
+      eventId: evt.id,
+      venueName,
     });
+  });
 
   // Sort items by startsAt ASC
   items.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());

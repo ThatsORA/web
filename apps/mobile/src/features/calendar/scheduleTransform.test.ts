@@ -121,4 +121,100 @@ describe("scheduleTransform", () => {
     expect(result[0].items[0].eventId).toBe("evt-confirmed");
     expect(result[0].items[0].status).toBe("confirmed");
   });
+
+  describe("interval reconciliation and overlap removal", () => {
+    it("completely removes free window when fully consumed by confirmed hangout", () => {
+      const freeWindows = [
+        { starts_at: "2026-10-01T18:00:00.000Z", ends_at: "2026-10-01T20:00:00.000Z" },
+      ];
+      const events: Partial<EventCardPayload>[] = [
+        {
+          id: "evt-dinner",
+          status: "confirmed",
+          starts_at: "2026-10-01T18:00:00.000Z",
+          ends_at: "2026-10-01T20:00:00.000Z",
+          vibe_tag: "dinner",
+        },
+      ];
+
+      const result = transformScheduleItems(freeWindows, events as EventCardPayload[], [], "UTC");
+      expect(result.length).toBe(1);
+      // No duplicate "Free" window at the same time as confirmed hangout
+      expect(result[0].items.length).toBe(1);
+      expect(result[0].items[0].type).toBe("hangout");
+      expect(result[0].items[0].eventId).toBe("evt-dinner");
+    });
+
+    it("splits free window into before and after when confirmed hangout is in the middle", () => {
+      const freeWindows = [
+        { starts_at: "2026-10-01T16:00:00.000Z", ends_at: "2026-10-01T22:00:00.000Z" },
+      ];
+      const events: Partial<EventCardPayload>[] = [
+        {
+          id: "evt-dinner",
+          status: "confirmed",
+          starts_at: "2026-10-01T18:00:00.000Z",
+          ends_at: "2026-10-01T20:00:00.000Z",
+          vibe_tag: "dinner",
+        },
+      ];
+
+      const result = transformScheduleItems(freeWindows, events as EventCardPayload[], [], "UTC");
+      expect(result.length).toBe(1);
+      expect(result[0].items.length).toBe(3);
+
+      expect(result[0].items[0].type).toBe("free");
+      expect(result[0].items[0].startsAt).toBe("2026-10-01T16:00:00.000Z");
+      expect(result[0].items[0].endsAt).toBe("2026-10-01T18:00:00.000Z");
+
+      expect(result[0].items[1].type).toBe("hangout");
+      expect(result[0].items[1].eventId).toBe("evt-dinner");
+
+      expect(result[0].items[2].type).toBe("free");
+      expect(result[0].items[2].startsAt).toBe("2026-10-01T20:00:00.000Z");
+      expect(result[0].items[2].endsAt).toBe("2026-10-01T22:00:00.000Z");
+    });
+
+    it("trims free window overlapping with busy block", () => {
+      const freeWindows = [
+        { starts_at: "2026-10-01T09:00:00.000Z", ends_at: "2026-10-01T13:00:00.000Z" },
+      ];
+      const busyBlocks = [
+        { id: "b1", starts_at: "2026-10-01T11:00:00.000Z", ends_at: "2026-10-01T13:00:00.000Z" },
+      ];
+
+      const result = transformScheduleItems(freeWindows, [], busyBlocks, "UTC");
+      expect(result.length).toBe(1);
+      expect(result[0].items.length).toBe(2);
+
+      expect(result[0].items[0].type).toBe("free");
+      expect(result[0].items[0].startsAt).toBe("2026-10-01T09:00:00.000Z");
+      expect(result[0].items[0].endsAt).toBe("2026-10-01T11:00:00.000Z");
+
+      expect(result[0].items[1].type).toBe("busy");
+      expect(result[0].items[1].startsAt).toBe("2026-10-01T11:00:00.000Z");
+      expect(result[0].items[1].endsAt).toBe("2026-10-01T13:00:00.000Z");
+    });
+
+    it("suppresses redundant busy blocks that coincide with confirmed hangouts", () => {
+      const busyBlocks = [
+        { id: "b-sync", starts_at: "2026-10-01T18:00:00.000Z", ends_at: "2026-10-01T20:00:00.000Z" },
+      ];
+      const events: Partial<EventCardPayload>[] = [
+        {
+          id: "evt-confirmed",
+          status: "confirmed",
+          starts_at: "2026-10-01T18:00:00.000Z",
+          ends_at: "2026-10-01T20:00:00.000Z",
+          vibe_tag: "dinner",
+        },
+      ];
+
+      const result = transformScheduleItems([], events as EventCardPayload[], busyBlocks, "UTC");
+      expect(result.length).toBe(1);
+      // Only the confirmed hangout is displayed, avoiding duplicate "Busy" block
+      expect(result[0].items.length).toBe(1);
+      expect(result[0].items[0].type).toBe("hangout");
+    });
+  });
 });
