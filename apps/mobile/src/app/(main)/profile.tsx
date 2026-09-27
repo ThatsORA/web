@@ -2,6 +2,7 @@
 // Opened from the You tab and Settings, never a bottom tab. Avatar is initials only:
 // the backend has no avatar upload yet.
 import { ConfirmEmailChangeRequest, Me, PatchMeRequest, routes } from "@web/contract";
+import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 import { z } from "zod";
@@ -38,7 +39,10 @@ export default function Profile() {
   }, [load]);
 
   return (
-    <Screen title="My profile">
+    <Screen
+      title="My profile"
+      headerRight={<Button label="← Back" variant="ghost" onPress={() => router.back()} />}
+    >
       {loadError ? (
         <>
           <Callout tone="danger" title="Couldn't load your profile">
