@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
-import { EventsListResponse, MyAvailabilityResponse, routes, EventCardPayload } from "@web/contract";
+import { EventsListResponse, MyAvailabilityResponse, routes } from "@web/contract";
 import { Badge, Card, Txt, useTheme } from "../../ui";
 import { api } from "../../lib/api";
 import { ScheduleDayGroup, transformScheduleItems } from "./scheduleTransform";
@@ -72,11 +72,11 @@ export function UnifiedCalendarView() {
         <Txt variant="title">Upcoming Schedule</Txt>
         <View style={{ flexDirection: "row", gap: theme.spacing.xs, alignItems: "center" }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.textMuted }} />
+            <View style={{ width: 8, height: 8, borderRadius: theme.radius.pill, backgroundColor: theme.colors.textMuted }} />
             <Txt variant="small" color="textMuted">Busy</Txt>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 8 }}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.link }} />
+            <View style={{ width: 8, height: 8, borderRadius: theme.radius.pill, backgroundColor: theme.colors.primary }} />
             <Txt variant="small" color="link">Hangout</Txt>
           </View>
         </View>
@@ -97,11 +97,11 @@ export function UnifiedCalendarView() {
                     key={item.id}
                     style={{
                       padding: theme.spacing.sm,
-                      borderRadius: theme.radii.sm,
-                      backgroundColor: theme.colors.cardBackground,
+                      borderRadius: theme.radius.sm,
+                      backgroundColor: theme.colors.surfaceMuted,
                       borderWidth: 1,
                       borderColor: theme.colors.border,
-                      opacity: 0.75,
+                      opacity: 0.8,
                     }}
                   >
                     <Txt variant="body" color="textMuted">
@@ -116,6 +116,7 @@ export function UnifiedCalendarView() {
 
               // Prominently highlighted Web Hangout Block
               const isConfirmed = item.status === "confirmed";
+              const badgeTone = isConfirmed ? "success" : item.status === "voting" ? "info" : "neutral";
               return (
                 <Pressable
                   key={item.id}
@@ -128,31 +129,20 @@ export function UnifiedCalendarView() {
                     opacity: pressed ? 0.9 : 1.0,
                   })}
                 >
-                  <Card
-                    style={{
-                      borderColor: theme.colors.link,
-                      borderWidth: 1.5,
-                      backgroundColor: isConfirmed ? theme.colors.violetSoft || "#2D1F47" : theme.colors.cardBackground,
-                      padding: theme.spacing.md,
-                      gap: theme.spacing.xs,
-                      shadowColor: theme.colors.link,
-                      shadowOpacity: 0.2,
-                      shadowRadius: 6,
-                    }}
-                  >
+                  <Card tint={!isConfirmed} brand={isConfirmed}>
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                      <Txt variant="title" color="text">
+                      <Txt variant="label" style={{ color: isConfirmed ? theme.colors.onPrimary : theme.colors.heading }}>
                         ✨ {item.title}
                       </Txt>
                       {item.status ? (
-                        <Badge label={item.status.toUpperCase()} variant={isConfirmed ? "success" : "primary"} />
+                        <Badge label={item.status.toUpperCase()} tone={isConfirmed ? "new" : badgeTone} />
                       ) : null}
                     </View>
-                    <Txt variant="body" numeric color="link">
+                    <Txt variant="body" numeric style={{ color: isConfirmed ? theme.colors.onPrimary : theme.colors.primary }}>
                       {item.subtitle}
                     </Txt>
                     <View style={{ marginTop: theme.spacing.xs, flexDirection: "row", justifyContent: "flex-end" }}>
-                      <Txt variant="small" color="link">
+                      <Txt variant="small" style={{ color: isConfirmed ? theme.colors.onPrimary : theme.colors.link }}>
                         View Event Card →
                       </Txt>
                     </View>
