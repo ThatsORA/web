@@ -96,6 +96,7 @@ model User {
   // Private matching profile (#310), ≤ 300 chars each. Only the owner (Me) and the decision model see it.
   prefActivities    String?   @map("pref_activities")
   prefPersonality   String?   @map("pref_personality")
+  budget            Json? // private budget (#324), a contract `Budget`; same privacy as pref*
   usernameChangedAt DateTime? @map("username_changed_at") // once per 30 days
   passwordChangedAt DateTime? @map("password_changed_at")
 

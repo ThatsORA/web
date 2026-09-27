@@ -1,9 +1,9 @@
 // Owner: Ojas — activity labels for discovered places (#322). Gemini only writes text: ONE call per
-// squad labels each place as an activity with a typical length. Code validates every entry and falls
-// back per place (primary type, 90 min); a failed call falls back for all. Picking the 3 is code:
+// squad labels each place as an activity with a typical length and a spend category (#324). Code validates
+// every entry and falls back per place (primary type, 90 min); a failed call falls back for all. Picking the 3 is code:
 // preference fit (#311) sums each member's decision-model probabilities over the candidates.
 import { z } from "zod";
-import type { RankedVenue } from "@web/contract";
+import { SpendCategory, type Budget, type RankedVenue } from "@web/contract";
 import { env } from "../../env";
 import type { ActivityCandidate } from "../venues/discover";
 import { callGemini } from "./curateVenues";
@@ -12,6 +12,7 @@ import { askDecision, memberFitRequest, type MemberProfile } from "./decision";
 export interface ActivityInfo {
   activity: string; // "Bouldering"
   typical_minutes: number;
+  spend_category: SpendCategory;
 }
 
 const Reply = z.object({ activities: z.array(z.unknown()) });
@@ -19,6 +20,7 @@ const Entry = z.object({
   place_id: z.string(),
   activity: z.string().trim().min(1).max(40),
   typical_minutes: z.number().int().min(30).max(240),
+  spend_category: SpendCategory.optional().catch(undefined), // missing or invalid → from the primary type
 });
 
 const RESPONSE_SCHEMA = {
@@ -32,18 +34,28 @@ const RESPONSE_SCHEMA = {
           place_id: { type: "STRING" },
           activity: { type: "STRING", maxLength: 40 },
           typical_minutes: { type: "INTEGER", minimum: 30, maximum: 240 },
+          spend_category: { type: "STRING", enum: SpendCategory.options },
         },
-        required: ["place_id", "activity", "typical_minutes"],
+        required: ["place_id", "activity", "typical_minutes", "spend_category"],
       },
     },
   },
   required: ["activities"],
 };
 
-/** "bowling_alley" → "Bowling alley", 90 min. */
+const SPEND_BY_TYPE: Record<string, SpendCategory> = {
+  restaurant: "casual_meal",
+  bar: "drinks_night_out", pub: "drinks_night_out", wine_bar: "drinks_night_out", brewery: "drinks_night_out", night_club: "drinks_night_out",
+  cafe: "coffee_snacks", coffee_shop: "coffee_snacks", tea_house: "coffee_snacks", bakery: "coffee_snacks",
+  dessert_shop: "coffee_snacks", ice_cream_shop: "coffee_snacks",
+};
+/** The spend category a place's primary type implies; anything else is tickets & activities. */
+export const spendCategoryFor = (primaryType: string | null): SpendCategory => SPEND_BY_TYPE[primaryType ?? ""] ?? "tickets_activities";
+
+/** "bowling_alley" → "Bowling alley", 90 min, tickets & activities. */
 export function fallbackActivity(primaryType: string | null): ActivityInfo {
   const label = primaryType?.replaceAll("_", " ") || "hangout";
-  return { activity: (label[0]!.toUpperCase() + label.slice(1)).slice(0, 40), typical_minutes: 90 };
+  return { activity: (label[0]!.toUpperCase() + label.slice(1)).slice(0, 40), typical_minutes: 90, spend_category: spendCategoryFor(primaryType) };
 }
 
 type Place = Pick<RankedVenue, "place_id" | "name" | "primary_type">;
@@ -52,7 +64,8 @@ function buildPrompt(places: readonly Place[]): string {
   return [
     "A friend group is choosing what to do together. For each place below, write:",
     '- activity: what the group would do there, at most 40 characters (e.g. "Bouldering", "Board games", "Sunset walk", "Tacos");',
-    "- typical_minutes: how long a group usually spends doing it, 30 to 240.",
+    "- typical_minutes: how long a group usually spends doing it, 30 to 240;",
+    `- spend_category: what kind of spending it is, one of ${SpendCategory.options.join(", ")}.`,
     "One entry per place, using its exact place_id. Use ONLY the input.",
     JSON.stringify(places.map(({ place_id, name, primary_type }) => ({ place_id, name, primary_type }))),
   ].join("\n");
@@ -67,12 +80,31 @@ export async function describeActivities(places: readonly Place[]): Promise<Map<
     for (const entry of reply.activities) {
       const parsed = Entry.safeParse(entry);
       if (!parsed.success || !out.has(parsed.data.place_id)) continue; // invalid → fallback; unknown id → dropped
-      out.set(parsed.data.place_id, { activity: parsed.data.activity, typical_minutes: parsed.data.typical_minutes });
+      const { place_id, activity, typical_minutes, spend_category } = parsed.data;
+      out.set(place_id, { activity, typical_minutes, spend_category: spend_category ?? out.get(place_id)!.spend_category });
     }
   } catch {
     // fallback for all
   }
   return out;
+}
+
+// ponytail: a fixed guess from Places' $–$$$$; real prices would need another data source.
+const PRICE_USD = [0, 15, 30, 60, 100]; // index = price_level 1–4
+
+/**
+ * Code price cap (#324): drops a candidate whose estimated $/person (from `price_level`) is above
+ * 1.25 × the LOWEST spend any member set for its spend category. No price level, or nobody set that
+ * category → kept. Frequency is only a model input, never a rule here.
+ */
+export function withinBudget<T extends Pick<ActivityCandidate, "price_level" | "spend_category">>(
+  candidates: readonly T[],
+  budgets: readonly (Budget | null)[],
+): T[] {
+  return candidates.filter((c) => {
+    const spends = budgets.flatMap((b) => b?.[c.spend_category]?.spend ?? []);
+    return c.price_level == null || !spends.length || PRICE_USD[c.price_level]! <= Math.min(...spends) * 1.25;
+  });
 }
 
 const byCommute = (a: ActivityCandidate, b: ActivityCandidate) => a.route_score - b.route_score || a.place_id.localeCompare(b.place_id);

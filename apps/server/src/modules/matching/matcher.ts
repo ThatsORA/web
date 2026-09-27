@@ -1,10 +1,10 @@
 // Owner: Riley — the matcher pipeline (plan §2–§7), behind ONE in-process mutex.
 // Every trigger (cron, handshake, busy-block PUT, /internal/run-matcher)
 // calls triggerMatcher(); never call the pipeline around it.
-import type { CurateContext, EventOption, RankedVenue } from "@web/contract";
+import type { Budget, CurateContext, EventOption, RankedVenue } from "@web/contract";
 import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
-import { chooseActivities, describeActivities } from "../intelligence/activities";
+import { chooseActivities, describeActivities, withinBudget } from "../intelligence/activities";
 import { curateActivities, curateVenues, factsLine, type Curation } from "../intelligence/curateVenues";
 import { scheduleDecisions } from "../intelligence/scheduleDecisions";
 import { discoverPlaces, timeCandidates, type ActivityCandidate } from "../venues/discover";
@@ -253,13 +253,16 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
       travelMode: user.travelMode,
     }));
     const context = curateContext(candidate, favoritesByUser);
-    // #322: activities discovered near the squad, each at its own time. #311: each member's private
-    // profile scores them (server-only; Gemini never sees it). Fewer than 3 → the fixed-vibe venues.
-    const activities = await activityCandidates(candidate.slot, candidate.window, venueMembers, now);
-    const picks = await chooseActivities(activities, members.map((user) => ({
+    // #322: activities discovered near the squad, each at its own time. #324: code drops the ones over the
+    // squad's budget cap first. #311: each member's private profile and budget score the rest (server-only;
+    // Gemini never sees them). Fewer than 3 → the fixed-vibe venues.
+    const budgets = members.map((user) => user.budget as Budget | null); // validated by PatchMeRequest on write
+    const activities = withinBudget(await activityCandidates(candidate.slot, candidate.window, venueMembers, now), budgets);
+    const picks = await chooseActivities(activities, members.map((user, i) => ({
       activities: user.prefActivities,
       personality: user.prefPersonality,
       favorites: [...new Set(user.favorites.map((favorite) => favorite.category))],
+      budget: budgets[i]!,
     })), force);
     if (!picks) continue; // the squad's appeal is under the gate
     let rankedVenues: RankedVenue[] = activities;

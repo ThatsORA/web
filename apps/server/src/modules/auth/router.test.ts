@@ -38,7 +38,7 @@ import { hashPassword, verifyPassword } from "./passwordHash";
 import { passwordReasons } from "@web/contract";
 let base: string;
 let close: () => void;
-const user: User = { id: "6f48fb35-1518-481d-ab60-cfd2dcc28acf", username: "ojas", email: "ojas@example.com", passwordHash: bcrypt.hashSync("correct-horse", 4), timezone: "America/New_York", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: new Date(), displayName: null, bio: null, prefActivities: null, prefPersonality: null, usernameChangedAt: null, passwordChangedAt: null };
+const user: User = { id: "6f48fb35-1518-481d-ab60-cfd2dcc28acf", username: "ojas", email: "ojas@example.com", passwordHash: bcrypt.hashSync("correct-horse", 4), timezone: "America/New_York", homeLat: null, homeLng: null, travelMode: "DRIVE", createdAt: new Date(), emailVerifiedAt: new Date(), displayName: null, bio: null, prefActivities: null, prefPersonality: null, budget: null, usernameChangedAt: null, passwordChangedAt: null };
 beforeAll(async () => {
   const app = express();
   app.use(express.json(), authRouter);
@@ -160,7 +160,7 @@ describe("auth router", () => {
     expect((await call("GET", "/me")).status).toBe(401);
     mocks.findUnique.mockResolvedValueOnce(user);
     const body = await (await call("GET", "/me", undefined, true)).json();
-    expect(body).toEqual({ id: user.id, username: "ojas", email: user.email, timezone: user.timezone, home_lat: null, home_lng: null, travel_mode: "DRIVE", email_verified: true, display_name: null, bio: null, pref_activities: null, pref_personality: null });
+    expect(body).toEqual({ id: user.id, username: "ojas", email: user.email, timezone: user.timezone, home_lat: null, home_lng: null, travel_mode: "DRIVE", email_verified: true, display_name: null, bio: null, pref_activities: null, pref_personality: null, budget: null });
   });
   it("PATCH /me rounds home coordinates to 3 decimals", async () => {
     mocks.update.mockImplementation(async ({ data }) => ({ ...user, homeLat: data.homeLat, homeLng: data.homeLng }));
@@ -253,6 +253,18 @@ describe("profile", () => {
     expect(mocks.update.mock.calls[1]![0].data).toMatchObject({ prefActivities: null, prefPersonality: null });
     expect((await patch({ pref_activities: "x".repeat(301) })).status).toBe(400);
     expect((await patch({ pref_personality: "x".repeat(300) })).status).toBe(200);
+  });
+
+  it("sets and clears the private budget (#324), rejecting bad entries", async () => {
+    const budget = { nice_dinner: { spend: 60, often: "monthly" } };
+    expect(await (await patch({ budget })).json()).toMatchObject({ budget });
+    expect(mocks.update.mock.calls[0]![0].data).toMatchObject({ budget });
+    await patch({ budget: null });
+    expect(mocks.update.mock.calls[1]![0].data).toMatchObject({ budget: null });
+    expect((await patch({ budget: { nice_dinner: { spend: 501, often: "monthly" } } })).status).toBe(400);
+    expect((await patch({ budget: { nice_dinner: { spend: 12.5, often: "monthly" } } })).status).toBe(400);
+    expect((await patch({ budget: { nice_dinner: { spend: 60, often: "daily" } } })).status).toBe(400);
+    expect((await patch({ budget: { yacht: { spend: 60, often: "monthly" } } })).status).toBe(400);
   });
 
   it("changes the username at most once per 30 days", async () => {

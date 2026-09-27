@@ -198,6 +198,9 @@ users
   email_verified_at null     -- null = unverified; sign-up writes null, seed/legacy accounts are backfilled as verified
   display_name null (1–40), bio null (≤ 160), username_changed_at null   -- #96; username changes once per 30 days
   pref_activities null (≤ 300), pref_personality null (≤ 300)   -- #310; private matching profile, owner + decision model only
+  budget json null           -- #324; private, same rule. contract `Budget`: { <category>?: { spend: int 0–500 USD/person, often } }
+                             --   categories coffee_snacks | casual_meal | nice_dinner | drinks_night_out | tickets_activities
+                             --   often weekly | few_times_a_month | monthly | rarely
 
 email_codes                -- one live code per (user, purpose); 6 digits, stored as HMAC-SHA256, never plain
   id, user_id fk, purpose ('verify'|'reset'|'change_email'), code_hash, new_email null,
@@ -283,7 +286,7 @@ Every route except signup and login requires `Authorization: Bearer <JWT>`.
 | POST | /auth/login | Ojas | Return JWT |
 | POST | /auth/verify-email/send | Ojas | Email a new 6-digit code. 204, or 429 + `Retry-After` within 60 s, or 409 if already verified |
 | POST | /auth/verify-email | Ojas | `{ code }` → `Me`. `400 wrong_code` burns an attempt; `400 code_expired` means send a new one |
-| GET / PATCH | /me | Ojas | Profile: timezone, home_lat/lng, travel_mode, `display_name`, `bio`, `pref_activities` / `pref_personality` (private, ≤ 300, #310), `username` (once per 30 days; 409 `username_taken` / `username_cooldown`), `email_verified` (read-only) |
+| GET / PATCH | /me | Ojas | Profile: timezone, home_lat/lng, travel_mode, `display_name`, `bio`, `pref_activities` / `pref_personality` (private, ≤ 300, #310), `budget` (private, #324; `null` clears it), `username` (once per 30 days; 409 `username_taken` / `username_cooldown`), `email_verified` (read-only) |
 | POST | /me/email | Ojas | `{ new_email, password }` → emails a code to the new address (409 if taken) |
 | POST | /me/email/confirm | Ojas | `{ code }` → switches the email, marks it verified, tells the old address → `Me` |
 | GET | /users/:id | Ojas | Public profile: `{ id, username, display_name, bio, friendship: none\|requested\|incoming\|friends, squads }` (shared active squads). Never email or close-friend status |
@@ -501,21 +504,33 @@ near the squad instead of drawn from the vibe's place types
    `route_score`.
 4. **Describe (Gemini, text only).** One call per squad returns, for
    each place ID, an `activity` label (40 characters or fewer, like
-   "Bouldering") and `typical_minutes` (30–240). Zod validates each
-   entry: unknown IDs are dropped, and an invalid entry falls back to a
-   label from `primary_type` and 90 minutes. A failed call falls back
-   for every place.
+   "Bouldering"), `typical_minutes` (30–240) and a `spend_category`
+   (one of the 5 budget categories, #324). Zod validates each entry:
+   unknown IDs are dropped, and an invalid entry falls back to a label
+   from `primary_type` and 90 minutes. A missing or invalid
+   `spend_category` alone falls back to `spendCategoryFor(primary_type)`
+   (restaurant → casual meal, bar/pub/night club → drinks, cafe/bakery →
+   coffee & snacks, anything else → tickets & activities). A failed call
+   falls back for every place.
 5. **Time (code).** Each option starts at the first 15-minute mark when
    the place is open, never before the event's slot start (the voting
    deadline is derived from it) and at least `MIN_LEAD_HOURS` out. It
    lasts `typical_minutes` and ends inside both the free window and the
    opening hours. Places where it doesn't fit are dropped.
+   Then the **price cap (code, #324)**: `withinBudget` estimates $ per person
+   from `price_level` ($ 15, $$ 30, $$$ 60, $$$$ 100; none = no cap)
+   and drops a candidate above 1.25 × the **lowest** `spend` any squad
+   member set for its `spend_category`. Members who didn't set that
+   category don't count; nobody set it → no cap. Dropped places aren't
+   backups either. How often is a model input only.
 6. **Preference fit (decision model per member, #311).** One
    `askDecision(memberFitRequest(profile, candidates))` per squad member,
    in parallel. `state` is that member's private `pref_activities` and
    `pref_personality` (each capped at 300 characters, framed as data,
    never instructions) plus their favorite categories, with no name,
-   username or id; an empty profile sends "No profile yet". The one
+   username or id; an empty profile sends "No profile yet". Their
+   `budget` goes in as plain-word lines ("Nice dinner: about $60, about
+   once a month"), or "No budget set" (#324). The one
    question, `fit`, is a Choice over the ≤ 15 candidates keyed `c0…cN`,
    each in plain words ("Bouldering at Movement: climbing gym, $$, ★4.7,
    ~2h"): no place IDs, raw times or commutes.
@@ -953,6 +968,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-27 | **Squads only; closeness deferred (#320).** The scheduler (weekly cron, demo button, `/internal/run-matcher`) proposes only to whole squads with 3–6 active members and to Riley's Mixers (#215); friend pairs, cliques and one-drop subsets are skipped. Manual hangouts are unchanged. Ranking is `0.6 · staleness + 0.4 · soonness`; closeness is documented as deferred in §5. The demo trio forms a squad instead of starring each other. |
 | 2026-09-27 | **No fixed activity list in the automated flow (#322).** One broad Places Nearby Search finds leisure places near the squad; code keeps the ones open in the free window, ranks them by worst commute, and times each option at or after the slot start. Gemini only labels each place as an activity with a typical length. Until preference fit (#311), code picks the 3 best by commute with distinct labels (`pickActivities`). Fewer than 3 → the fixed-vibe venues. Manual New hangout keeps the fixed vibes. |
 | 2026-09-27 | **Chat intent suggestions (#325).** After a chat message is saved, `askDecision` classifies it in the background (`chatIntentRequest`: the message text only, capped at 300 chars). At ≥ 0.75 on `cant_make_it` or `change_spot` the sender alone gets `chat:suggestion` (`{ event_id, message_id, kind }`) and a chip that runs the existing Pass or Change spot action; `running_late` gets a hint chip; `logistics` and `just_chatting` get nothing. Sender-only because a direct invitee's Pass is a Ghost Pass. Nothing is stored; a failed call does nothing. |
+| 2026-09-27 | **Private budget + price cap (#324).** `User.budget` (one JSON field, contract `Budget`): per outing type, typical spend per person (whole USD 0–500) and how often. Private like the matching profile: only `Me` and the decision model, never Gemini. Gemini's describe step also labels each place's spend category; code drops candidates above 1.25 × the lowest member's spend for that category (Places `price_level` → $15/30/60/100), then preference fit sees each member's budget as plain-word lines. |
 | 2026-09-27 | **Preference fit picks the options (#311).** Each squad member's private profile (#310) goes to the decision model as one `fit` Choice over the discovered candidates (no names or ids, profile text as data). Code sums the members' probabilities and takes the top 3 distinct activities; the squad is proposed only when `propose` P(A) ≥ 0.6 and `squadAppeal` (the #1 pick's mean probability) ≥ 0.2, and `force` skips both. Any member call fails → the 3 best by commute. The automated flow drops the group `vibe` question and venue fit; Gemini never sees the profiles. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)

@@ -1,7 +1,7 @@
 import { PatchMeRequest } from "@web/contract";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { buildChangeEmailRequest, buildPrefsPatch, buildProfilePatch, profileErrorMessage, usernameProblem } from "./profile";
+import { budgetDraft, buildBudget, buildChangeEmailRequest, buildPrefsPatch, buildProfilePatch, profileErrorMessage, usernameProblem } from "./profile";
 
 describe("buildProfilePatch", () => {
   const me = { display_name: "Andy", bio: "Coffee first." };
@@ -89,12 +89,53 @@ describe("profileErrorMessage", () => {
 });
 
 describe("buildPrefsPatch", () => {
-  const me = { pref_activities: "bouldering", pref_personality: null };
+  const me = { pref_activities: "bouldering", pref_personality: null, budget: null };
 
   it("sends only changed, trimmed fields and clears blanks", () => {
-    expect(buildPrefsPatch(me, { activities: " bouldering ", personality: "" })).toBeNull();
-    const patch = buildPrefsPatch(me, { activities: "  ", personality: " early bird " });
+    expect(buildPrefsPatch(me, { activities: " bouldering ", personality: "", budget: null })).toBeNull();
+    const patch = buildPrefsPatch(me, { activities: "  ", personality: " early bird ", budget: null });
     expect(patch).toEqual({ pref_activities: null, pref_personality: "early bird" });
     expect(PatchMeRequest.parse(patch)).toEqual(patch);
+  });
+
+  it("sends the budget only when it changed, and null to clear it (#324)", () => {
+    const budget = { nice_dinner: { spend: 60, often: "monthly" as const } };
+    const draft = { activities: "bouldering", personality: "" };
+    expect(buildPrefsPatch(me, { ...draft, budget })).toEqual({ budget });
+    expect(buildPrefsPatch({ ...me, budget }, { ...draft, budget: { nice_dinner: { spend: 60, often: "monthly" } } })).toBeNull();
+    expect(buildPrefsPatch({ ...me, budget }, { ...draft, budget: { nice_dinner: { spend: 60, often: "rarely" } } }))
+      .toEqual({ budget: { nice_dinner: { spend: 60, often: "rarely" } } });
+    expect(buildPrefsPatch({ ...me, budget }, { ...draft, budget: null })).toEqual({ budget: null });
+  });
+});
+
+describe("buildBudget (#324)", () => {
+  it("round-trips a saved budget through the form; untouched rows stay unset", () => {
+    const budget = { nice_dinner: { spend: 60, often: "monthly" as const }, coffee_snacks: { spend: 0, often: "weekly" as const } };
+    const draft = budgetDraft(budget);
+    expect(draft.casual_meal).toEqual({ spend: "", often: null });
+    expect(buildBudget(draft)).toEqual({ budget, errors: {} });
+    expect(PatchMeRequest.parse({ budget })).toEqual({ budget });
+  });
+
+  it("is null when every row is empty", () => {
+    expect(buildBudget(budgetDraft(null))).toEqual({ budget: null, errors: {} });
+  });
+
+  it("needs whole dollars 0–500 and a frequency on any row that's started", () => {
+    const draft = budgetDraft(null);
+    draft.nice_dinner = { spend: " 60 ", often: null };
+    draft.casual_meal = { spend: "12.50", often: "weekly" };
+    draft.drinks_night_out = { spend: "501", often: "monthly" };
+    draft.tickets_activities = { spend: "", often: "rarely" };
+    draft.coffee_snacks = { spend: "8", often: "few_times_a_month" };
+    const { budget, errors } = buildBudget(draft);
+    expect(budget).toEqual({ coffee_snacks: { spend: 8, often: "few_times_a_month" } });
+    expect(errors).toEqual({
+      nice_dinner: "Pick how often.",
+      casual_meal: "Enter whole dollars, 0 to 500.",
+      drinks_night_out: "Enter whole dollars, 0 to 500.",
+      tickets_activities: "Enter whole dollars, 0 to 500.",
+    });
   });
 });

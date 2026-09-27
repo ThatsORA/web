@@ -1,11 +1,22 @@
 // Owner: Andy (built for Ojas's #310) — private matching profile: what you enjoy and what kind of person you are.
 // Opened from the You tab, never a bottom tab. Only the owner and the decision model ever see these fields.
-import { Me, PatchMeRequest, routes } from "@web/contract";
+// The Budget section (#324) is private too: typical spend per person and how often, per kind of outing.
+import { Me, PatchMeRequest, SpendCategory, SpendOften, routes } from "@web/contract";
 import { useCallback, useEffect, useState } from "react";
+import { View } from "react-native";
 import type { z } from "zod";
 import { api } from "../../lib/api";
-import { PREF_MAX, buildPrefsPatch, profileErrorMessage } from "../../lib/profile";
-import { Button, Callout, Card, Screen, TextField, Txt } from "../../ui";
+import {
+  OFTEN_LABELS,
+  PREF_MAX,
+  SPEND_LABELS,
+  budgetDraft,
+  buildBudget,
+  buildPrefsPatch,
+  profileErrorMessage,
+  type BudgetDraft,
+} from "../../lib/profile";
+import { Button, Callout, Card, Chip, Screen, TextField, Txt, useTheme } from "../../ui";
 
 type MeData = z.infer<typeof Me>;
 
@@ -44,10 +55,18 @@ export default function Preferences() {
 function PrefsForm({ me, onSaved }: { me: MeData; onSaved: (me: MeData) => void }) {
   const [activities, setActivities] = useState(me.pref_activities ?? "");
   const [personality, setPersonality] = useState(me.pref_personality ?? "");
+  const [draft, setDraft] = useState(() => budgetDraft(me.budget));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const patch = buildPrefsPatch(me, { activities, personality });
+  const { budget, errors: budgetErrors } = buildBudget(draft);
+  const patch = Object.keys(budgetErrors).length ? null : buildPrefsPatch(me, { activities, personality, budget });
+  const t = useTheme();
+
+  function setRow(category: SpendCategory, row: Partial<BudgetDraft[SpendCategory]>) {
+    setDraft((d) => ({ ...d, [category]: { ...d[category], ...row } }));
+    setSaved(false);
+  }
 
   async function save() {
     if (!patch) return;
@@ -96,6 +115,31 @@ function PrefsForm({ me, onSaved }: { me: MeData; onSaved: (me: MeData) => void 
       <Txt variant="small" numeric>
         {personality.trim().length} / {PREF_MAX}
       </Txt>
+      <Txt variant="section">Budget</Txt>
+      <Txt variant="small">What you usually spend per person, and how often. All optional.</Txt>
+      {SpendCategory.options.map((category) => (
+        <View key={category} style={{ gap: t.spacing.sm }}>
+          <TextField
+            label={`${SPEND_LABELS[category]} ($ per person)`}
+            value={draft[category].spend}
+            onChangeText={(spend) => setRow(category, { spend })}
+            placeholder="e.g. 25"
+            keyboardType="number-pad"
+            maxLength={3}
+            error={budgetErrors[category]}
+          />
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm }}>
+            {SpendOften.options.map((often) => (
+              <Chip
+                key={often}
+                label={OFTEN_LABELS[often]}
+                selected={draft[category].often === often}
+                onPress={() => setRow(category, { often: draft[category].often === often ? null : often })}
+              />
+            ))}
+          </View>
+        </View>
+      ))}
       {error ? (
         <Callout tone="danger" title="Couldn't save">
           {error}

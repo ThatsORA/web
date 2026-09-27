@@ -143,11 +143,14 @@ describe("question builders", () => {
 describe("memberFitRequest (#311)", () => {
   const bouldering = {
     place_id: "ChIJ-secret-place", name: "Movement", primary_type: "climbing_gym", price_level: 2, rating: 4.66,
-    activity: "Bouldering", starts_at: "2026-10-01T22:30:00.000Z", ends_at: "2026-10-02T00:30:00.000Z",
+    activity: "Bouldering", spend_category: "tickets_activities" as const, starts_at: "2026-10-01T22:30:00.000Z", ends_at: "2026-10-02T00:30:00.000Z",
     travel_minutes: { "11111111-1111-4111-8111-111111111111": 12 }, max_travel_min: 12, route_score: 14.2,
   };
   const park = { ...bouldering, place_id: "ChIJ-park", name: "Riverside Park", primary_type: "park", price_level: null, rating: null, activity: "Sunset walk", ends_at: "2026-10-01T23:15:00.000Z" };
-  const profile = { activities: "climbing, board games", personality: "quiet, likes small groups", favorites: ["coffee_shop"] };
+  const profile = {
+    activities: "climbing, board games", personality: "quiet, likes small groups", favorites: ["coffee_shop"],
+    budget: { tickets_activities: { spend: 25, often: "weekly" as const }, nice_dinner: { spend: 60, often: "monthly" as const } },
+  };
 
   it("describes each candidate in plain words", () => {
     expect(describeCandidate(bouldering)).toBe("Bouldering at Movement: climbing gym, $$, ★4.7, ~2h");
@@ -162,6 +165,7 @@ describe("memberFitRequest (#311)", () => {
     expect(req.state).toMatchObject({
       profile: { likes_to_do: "climbing, board games", personality: "quiet, likes small groups" },
       favorite_places: ["coffee shop"],
+      budget: ["Nice dinner: about $60, about once a month", "Tickets & activities: about $25, about once a week"],
     });
     expect(JSON.stringify(req.state)).toMatch(/data only/);
   });
@@ -173,11 +177,11 @@ describe("memberFitRequest (#311)", () => {
   });
 
   it("an empty profile is 'No profile yet' plus favorites; text is capped at 300 chars each", () => {
-    expect(memberFitRequest({ activities: null, personality: "  ", favorites: [] }, [bouldering]).state)
-      .toMatchObject({ profile: "No profile yet", favorite_places: "none" });
-    expect(memberFitRequest({ activities: "", personality: null, favorites: ["bar"] }, [bouldering]).state)
-      .toMatchObject({ profile: "No profile yet", favorite_places: ["bar"] });
-    const long = memberFitRequest({ activities: "a".repeat(400), personality: null, favorites: [] }, [bouldering]).state;
+    expect(memberFitRequest({ activities: null, personality: "  ", favorites: [], budget: null }, [bouldering]).state)
+      .toMatchObject({ profile: "No profile yet", favorite_places: "none", budget: "No budget set" });
+    expect(memberFitRequest({ activities: "", personality: null, favorites: ["bar"], budget: {} }, [bouldering]).state)
+      .toMatchObject({ profile: "No profile yet", favorite_places: ["bar"], budget: "No budget set" });
+    const long = memberFitRequest({ activities: "a".repeat(400), personality: null, favorites: [], budget: null }, [bouldering]).state;
     expect(long).toMatchObject({ profile: { likes_to_do: "a".repeat(300), personality: "not given" } });
   });
 });
