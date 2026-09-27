@@ -26,7 +26,8 @@ async function toSquad(groupId: string, me: string) {
       .map((m) => ({
         ...toPublicUser(m.user),
         status: m.status,
-        joins_at: visibleJoinsAt(m)?.toISOString() ?? null,
+        joins_at: null,
+
       })),
   });
 }
