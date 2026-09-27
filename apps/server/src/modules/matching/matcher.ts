@@ -5,16 +5,17 @@ import type { CurateContext, EventOption, RankedVenue } from "@web/contract";
 import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
 import { curateVenues, factsLine } from "../intelligence/curateVenues";
+import { scheduleDecisions } from "../intelligence/scheduleDecisions";
 import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
 import { openVoting } from "../voting/lifecycle";
 import { candidateGroups, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
-import { rankWithGemini } from "./rankWithGemini";
-import { classifySlot, earliestTimezone, formatTimeHHMM, freeWindows, getLocalParts } from "./timeMath";
+import { classifySlot, earliestTimezone, feasibleSlots, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot } from "./timeMath";
 
 export { freeWindows, classifySlot } from "./timeMath";
 
 let running: Promise<void> | null = null;
 let rerunRequested = false;
+let forceNext = false;
 
 let mutexQueue: Promise<any> = Promise.resolve();
 export function withMatcherMutex<T>(task: () => Promise<T>): Promise<T> {
@@ -109,7 +110,7 @@ function optionData(option: EventOption) {
   };
 }
 
-export async function runPipeline(now = new Date()): Promise<void> {
+export async function runPipeline(now = new Date(), { force = false }: { force?: boolean } = {}): Promise<void> {
   const [friendships, explicitGroups] = await Promise.all([
     prisma.friendship.findMany(),
     prisma.explicitGroup.findMany({ include: { members: true } }),
@@ -160,6 +161,7 @@ export async function runPipeline(now = new Date()): Promise<void> {
   const favoritesByUser = new Map(users.map((user) => [user.id, user.favorites]));
   const eventsByParticipant = openEventsByParticipant(openEvents);
   const groupSlots: GroupSlot[] = [];
+  const feasibleBySlot = new Map<ClassifiedSlot, ClassifiedSlot[]>();
 
   for (const group of groups) {
     const members = group.memberIds.map((id) => usersById.get(id)).filter((user) => user !== undefined);
@@ -177,13 +179,25 @@ export async function runPipeline(now = new Date()): Promise<void> {
       horizonDays: env.MATCH_HORIZON_DAYS,
     })) {
       const slot = classifySlot(window, Object.values(group.memberTimezones));
-      if (slot) groupSlots.push({ group, slot });
+      if (!slot) continue;
+      groupSlots.push({ group, slot });
+      feasibleBySlot.set(slot, feasibleSlots(window, Object.values(group.memberTimezones)));
     }
   }
 
-  const deterministicRanking = rankCandidates(groupSlots, friendships, now);
-  const reranked = await rankWithGemini(deterministicRanking, favoritesByUser);
-  const selected = selectRankedCandidates(reranked, [...openEvents, ...cooldownEvents], now, env.COOLDOWN_HOURS);
+  const shortlist = selectRankedCandidates(
+    rankCandidates(groupSlots, friendships, now),
+    [...openEvents, ...cooldownEvents],
+    now,
+    env.COOLDOWN_HOURS,
+  );
+  // ponytail: the vibe is chosen after selection, so a longer vibe slot could overlap another
+  // candidate from the same run; re-check the overlap if it ever matters.
+  const selected = await scheduleDecisions(
+    shortlist.map((candidate) => ({ ...candidate, feasible: feasibleBySlot.get(candidate.slot)! })),
+    favoritesByUser,
+    force,
+  );
   for (const candidate of selected) {
     const venueMembers = candidate.group.memberIds
       .map((id) => usersById.get(id))
@@ -221,7 +235,7 @@ export async function runPipeline(now = new Date()): Promise<void> {
           endsAt: candidate.slot.end,
           vibeTag: candidate.slot.vibe_tag,
           timezone: eventTimezone,
-          matchReason: matchReason ?? candidate.matchReason,
+          matchReason,
           backupVenues: unusedVenueSnapshots(rankedVenues, options),
           voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
           participants: {
@@ -236,7 +250,9 @@ export async function runPipeline(now = new Date()): Promise<void> {
   }
 }
 
-export function triggerMatcher(): Promise<void> {
+/** `force` skips the propose gate (the model still picks the vibe); a coalesced forced call forces the rerun. */
+export function triggerMatcher({ force = false }: { force?: boolean } = {}): Promise<void> {
+  forceNext ||= force;
   if (running) {
     rerunRequested = true;
     return running;
@@ -245,10 +261,13 @@ export function triggerMatcher(): Promise<void> {
     try {
       do {
         rerunRequested = false;
-        await runPipeline();
+        const forced = forceNext;
+        forceNext = false;
+        await runPipeline(new Date(), { force: forced });
       } while (rerunRequested);
     } finally {
       running = null;
+      forceNext = false;
     }
   })();
   return running;
