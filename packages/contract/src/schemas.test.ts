@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EventCardPayload, EventViewer, ExpoPushToken, LoginRequest, SignupRequest, optionFromRow, type OptionRowLike } from "./schemas";
+import { CreateEventRequest, EventCardPayload, EventViewer, ExpoPushToken, LoginRequest, SignupRequest, optionFromRow, type OptionRowLike } from "./schemas";
 import { EventCreatedPayload, EventMessagePayload, EventProgressPayload, EventResolvedPayload, EventVenueChangedPayload } from "./socket";
 
 describe("EventCardPayload match reason", () => {
@@ -23,6 +23,24 @@ describe("EventViewer chat (#212)", () => {
     expect(EventViewer.safeParse(viewer).success).toBe(false);
     expect(EventViewer.safeParse({ ...viewer, chat: "member" }).success).toBe(false);
     expect(EventViewer.safeParse({ ...viewer, chat: ["someone"] }).success).toBe(false);
+  });
+});
+
+describe("CreateEventRequest", () => {
+  const person = "11111111-1111-4111-8111-111111111111";
+  const squad = "22222222-2222-4222-8222-222222222222";
+
+  it("accepts a squad, a direct person, or both while preserving old person-only requests", () => {
+    expect(CreateEventRequest.parse({ squad_ids: [squad] })).toMatchObject({ invitee_ids: [], squad_ids: [squad] });
+    expect(CreateEventRequest.parse({ invitee_ids: [person] })).toEqual({ invitee_ids: [person] });
+    expect(CreateEventRequest.parse({ invitee_ids: [person], squad_ids: [squad] })).toMatchObject({
+      invitee_ids: [person], squad_ids: [squad],
+    });
+  });
+
+  it("rejects an empty selection and malformed IDs", () => {
+    expect(CreateEventRequest.safeParse({}).success).toBe(false);
+    expect(CreateEventRequest.safeParse({ squad_ids: ["bad"] }).success).toBe(false);
   });
 });
 

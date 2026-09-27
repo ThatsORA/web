@@ -3,8 +3,8 @@ import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventCardPayload, EventsListResponse } from "@web/contract";
 
-const mocks = vi.hoisted(() => ({ findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() }));
-vi.mock("../../lib/prisma", () => ({ prisma: { event: mocks, friendship: mocks, user: { findUnique: async () => ({ passwordChangedAt: null }) } } }));
+const mocks = vi.hoisted(() => ({ findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), groupFindMany: vi.fn() }));
+vi.mock("../../lib/prisma", () => ({ prisma: { event: mocks, friendship: mocks, explicitGroup: { findMany: mocks.groupFindMany }, user: { findUnique: async () => ({ passwordChangedAt: null }) } } }));
 
 const matcherMocks = vi.hoisted(() => ({
   withMatcherMutex: vi.fn(async (cb) => cb()),
@@ -44,7 +44,8 @@ const option = (id: string, rank: number) => ({
     });
     
     expect(response.status).toBe(201);
-    expect(matcherMocks.createUserHangout).toHaveBeenCalledWith(alice, [bob], undefined, undefined, undefined);
+    expect(matcherMocks.createUserHangout).toHaveBeenCalledWith(alice, [bob], undefined, undefined, undefined,
+      expect.objectContaining({ memberIds: [alice, bob].sort(), squadIds: [] }));
     expect(mocks.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: eventId },
       include: expect.not.objectContaining({ creator: expect.anything() }),
@@ -61,6 +62,41 @@ const option = (id: string, rank: number) => ({
     });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "invalid_invitees" });
+  });
+
+  it("expands a selected squad and sends its provenance to the matcher", async () => {
+    mocks.groupFindMany.mockResolvedValueOnce([{ id: bob, members: [
+      { userId: alice, status: "active" }, { userId: bob, status: "active" },
+      { userId: ghost, status: "invited" },
+    ] }]);
+    matcherMocks.createUserHangout.mockResolvedValueOnce({ eventId });
+    mocks.findUnique.mockResolvedValueOnce(event());
+    const response = await fetch(`${base}/events`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${signToken(alice)}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ squad_ids: [bob] }),
+    });
+    expect(response.status).toBe(201);
+    expect(matcherMocks.createUserHangout).toHaveBeenCalledWith(alice, [], undefined, undefined, undefined, {
+      squadIds: [bob], memberIds: [alice, bob].sort(), participants: [
+        { userId: alice, inviteSource: "creator", sourceGroupIds: [bob] },
+        { userId: bob, inviteSource: "squad", sourceGroupIds: [bob] },
+      ].sort((a, b) => a.userId.localeCompare(b.userId)),
+    });
+  });
+
+  it("rejects a squad when the caller is not an active member", async () => {
+    mocks.groupFindMany.mockResolvedValueOnce([{ id: bob, members: [
+      { userId: alice, status: "invited" }, { userId: bob, status: "active" },
+    ] }]);
+    const response = await fetch(`${base}/events`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${signToken(alice)}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ squad_ids: [bob] }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_squads" });
+    expect(matcherMocks.createUserHangout).not.toHaveBeenCalled();
   });
 
   it("POST /events rejects non-friends", async () => {
@@ -142,6 +178,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.findFirst.mockResolvedValue(event());
   mocks.findMany.mockResolvedValue([event()]);
+  mocks.groupFindMany.mockResolvedValue([]);
 });
 const get = (path: string, userId = alice) => fetch(`${base}${path}`, { headers: { authorization: `Bearer ${signToken(userId)}` } });
 

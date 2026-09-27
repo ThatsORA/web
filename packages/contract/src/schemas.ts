@@ -230,10 +230,13 @@ export const CurateContext = z.object({
 export type CurateContext = z.infer<typeof CurateContext>;
 
 export const CreateEventRequest = z.object({
-  invitee_ids: z.array(Id).min(1).max(5),
+  invitee_ids: z.array(Id).max(5).default([]),
+  squad_ids: z.array(Id).optional(),
   vibe_tag: VibeTag.optional(),
   earliest: Instant.optional(),
   latest: Instant.optional(),
+}).refine((request) => request.invitee_ids.length + (request.squad_ids?.length ?? 0) > 0, {
+  message: "Select a squad or person",
 });
 export type CreateEventRequest = z.infer<typeof CreateEventRequest>;
 
