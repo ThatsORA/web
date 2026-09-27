@@ -49,9 +49,10 @@ touches before you write code.
 
 **AI boundary**
 - Decisions (the propose gate, the vibe, venue fit) go through one client,
-  `askDecision` in `apps/server/src/modules/intelligence/`: fine-tuned
-  Laya (self-hosted) first, then Jev `jev-1.13.0`, then the caller's
-  deterministic fallback (#196, #228).
+  `askDecision` in `apps/server/src/modules/intelligence/`: Jev
+  `jev-1.13.0`, then the caller's deterministic fallback (#196, #228).
+  A fine-tuned, self-hosted Laya is deferred to #274; `askDecision`
+  already tries it first when `LAYA_URL` is set, and it's empty today.
 - Gemini only writes text: the vote blurbs and `match_reason`, from
   `curateVenues`. `rankWithGemini` was removed (#231).
 - Free windows, groups, which vibes are feasible for a slot, shortlist

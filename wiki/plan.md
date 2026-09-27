@@ -441,7 +441,7 @@ deterministic score builds a top-10 shortlist.
 The hard limits apply first: one open proposal per group, and the
 `COOLDOWN_HOURS` (48) cooldown.
 
-**Decision gate + vibe (#231).** One `askDecision` call (Laya, then Jev)
+**Decision gate + vibe (#231).** One `askDecision` call (Jev)
 per shortlisted candidate, in parallel, built by `groupRequest` in the same
 format as Laya's training data (#235). The questions carry plain-word facts
 (size, "Fri 7:00pm", "Last hangout: 3 weeks ago", shared favorites; no
@@ -721,22 +721,21 @@ backstop if they ever do.
 shortlist scoring, Places filtering, route-matrix scoring, and backup
 ordering. These form the complete fallback path.
 
-**Decision model (`askDecision`, #228):** fine-tuned Laya (self-hosted on
-a DigitalOcean GPU droplet, #237) first, then Jev `jev-1.13.0`, then the
-deterministic fallback. It makes three decisions: whether to propose to a
-group now, which feasible vibe to use (§5), and which venues fit the vibe
-(§8). Code computes every option it chooses from.
+**Decision model (`askDecision`, #228):** Jev `jev-1.13.0`, then the
+deterministic fallback. A fine-tuned, self-hosted Laya in front of Jev is
+deferred to #274 (set `LAYA_URL` to turn it on). It makes three
+decisions: whether to propose to a group now, which feasible vibe to use
+(§5), and which venues fit the vibe (§8). Code computes every option it chooses from.
 
 **Gemini, text only:** the vote blurbs and the card's `match_reason` (§8).
 It also writes the synthetic training scenarios (#235). It never makes a
 decision.
 
-**Pitch note: teacher and student.** Gemini generates scheduling
-scenarios, Jev labels them with calibrated probabilities (the teacher),
-and Laya is fine-tuned on those labels (the student) and serves the
-decisions at runtime, with Jev as its fallback. The eval table (accuracy
-and p50 latency on a held-out gold set, for the deterministic fallback,
-Laya base, Laya fine-tuned and Jev) comes from #236.
+**Pitch note: teacher and student (next step, #274).** Gemini generates
+scheduling scenarios and Jev labels them with calibrated probabilities (the
+teacher). That training set is built (#235), and the runtime requests match
+its format (#256). Fine-tuning Laya on it (the student) and serving Laya in
+front of Jev is deferred to #274, along with the eval table.
 
 **Future work (pitch only):** learned ranking once real hangout history
 exists, natural-language expense entry, and summaries of the fallback chat.
@@ -851,6 +850,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-26 | **Pass lifecycle (#210).** A squad Pass reuses `vote_status = ghost_passed` instead of a new status; the kind (Ghost vs visible) is derived from invite source with `passKind()`, so no schema change was needed. A vote can replace a pass until voting closes; after close both are final. A direct invitee's Ghost Pass then loses the event (card, list, chat, sockets, push); a visible Pass (creator or squad) keeps the card and chat and isn't an attendee. The pass endpoint keeps its `ghost-pass` path. See §9 "Pass lifecycle". |
 | 2026-09-26 | **Event chat for squad hangouts (#212).** Squad hangouts (any squad invitee) get the existing chat (same messages, paging, `event:message` and `ChatScreen`) from creation: while voting, after confirmation, as `chatted`, and read-only after `ends_at`; `expired` closes it. Members are the creator and the squad, squad passers included. Direct invitees are never in a squad or mixed chat, as readers or posters: a poster's name reveals them to everyone in the room, and a direct invitee may only see themselves and the creator, so any room holding direct invitees next to squad members breaks §9. Direct-only events keep the `chatted` fallback exactly as before. One rule, `chatAudience()` on `eventAudience()`, feeds the routes, the socket recipients and the card's new `viewer.chat` (`open`/`read_only`/null), so the client never infers it (#217 shows "Open chat" from it). See §9 "Event chat". |
 | 2026-09-26 | **Decision models: Laya + Jev; Gemini writes text (#196, #227).** Decisions (propose gate, vibe, venue fit) go through `askDecision`: fine-tuned Laya (self-hosted) first, then Jev `jev-1.13.0`, then deterministic code. Gemini only writes blurbs and `match_reason`, and generates Laya's training scenarios; Jev labels them. `rankWithGemini` is removed (#231). Auto-proposals come back weekly (Mon 09:00 America/New_York) plus a "Find a hangout now" demo button (#232/#233), which replaces the close-friend star as the demo trigger. |
+| 2026-09-27 | **Laya deferred; scheduler ships on Jev (#196, #274).** We hit a GPU roadblock, so decisions run on Jev with the deterministic fallback. The training data (#235) and the format alignment (#256) stay. Fine-tuning, eval and hosting move to #274 (#236 and #237 closed). |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)
 
