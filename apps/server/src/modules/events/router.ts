@@ -16,7 +16,9 @@ eventsRouter.post(routes.events, requireAuth, express.json(), async (req, res) =
   const parsed = CreateEventRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "bad_request" });
 
-  const { invitee_ids, vibe_tag, earliest, latest } = parsed.data;
+  const { invitee_ids, squad_ids, vibe_tag, earliest, latest } = parsed.data;
+  // #244 must land before mixed invitations can be stored without losing their privacy rules.
+  if (squad_ids?.length) return res.status(503).json({ error: "mixed_invites_unavailable" });
 
   if (invitee_ids.includes(userId)) {
     return res.status(400).json({ error: "invalid_invitees" });

@@ -63,6 +63,17 @@ const option = (id: string, rank: number) => ({
     expect(await response.json()).toEqual({ error: "invalid_invitees" });
   });
 
+  it("does not create a squad hangout before mixed invitation provenance can be stored", async () => {
+    const response = await fetch(`${base}/events`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${signToken(alice)}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ squad_ids: [bob] }),
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "mixed_invites_unavailable" });
+    expect(matcherMocks.createUserHangout).not.toHaveBeenCalled();
+  });
+
   it("POST /events rejects non-friends", async () => {
     mocks.findMany.mockResolvedValueOnce([{ userLowId: alice, userHighId: bob, lowAddedHigh: false, highAddedLow: true }]);
 
