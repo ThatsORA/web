@@ -71,7 +71,7 @@ describe("resolveEvent", () => {
     expect(r.backups.map((o) => o.name)).toEqual(["a", "b", "d"]);
   });
 
-  it("breaks a tie with the lower route_score", () => {
+  it("breaks a tie with the lower route_score and sets wasTiebreaker", () => {
     const r = resolveEvent({
       participants: people("voted", "voted"),
       votes: [{ userId: "u0", optionId: "a" }, { userId: "u1", optionId: "b" }],
@@ -79,6 +79,7 @@ describe("resolveEvent", () => {
     });
     if (r.status !== "confirmed") throw new Error(r.status);
     expect(r.winner.id).toBe("b");
+    expect(r.wasTiebreaker).toBe(true);
     expect(r.backups.map((o) => o.name)).toEqual(["a", "c"]);
   });
 });

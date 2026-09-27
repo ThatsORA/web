@@ -73,6 +73,9 @@ export async function closeVoting(eventId: string): Promise<void> {
               venueSnapshot: r.winner,
               venueStatus: "open",
               backupVenues: r.backups,
+              ...(r.wasTiebreaker
+                ? { matchReason: `${event.matchReason ? event.matchReason + " · " : ""}Tiebreaker: Chosen by travel score` }
+                : {}),
             }
           : { status: r.status, resolvedAt: now },
     });
