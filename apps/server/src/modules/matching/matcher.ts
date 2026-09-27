@@ -4,14 +4,16 @@
 import type { CurateContext, EventOption, RankedVenue } from "@web/contract";
 import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
-import { curateVenues, factsLine } from "../intelligence/curateVenues";
+import { describeActivities, pickActivities } from "../intelligence/activities";
+import { curateActivities, curateVenues, factsLine, type Curation } from "../intelligence/curateVenues";
 import { scheduleDecisions } from "../intelligence/scheduleDecisions";
+import { discoverPlaces, timeCandidates, type ActivityCandidate } from "../venues/discover";
 import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
 import { openVoting } from "../voting/lifecycle";
-import { candidateGroups, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
+import { candidateGroups, groupKey, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
 import type { ResolvedManualSelection } from "./manualSelection";
 import { mixerCandidates } from "./mixerCandidates";
-import { classifySlot, earliestTimezone, feasibleSlots, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot } from "./timeMath";
+import { classifySlot, earliestTimezone, feasibleSlots, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot, type TimeWindow } from "./timeMath";
 
 export { freeWindows, classifySlot } from "./timeMath";
 
@@ -93,7 +95,7 @@ export function timezoneClosestToVenueCentroid(
     .sort((a, b) => a.distance - b.distance || a.member.id.localeCompare(b.member.id))[0]?.member.timezone ?? null;
 }
 
-function optionData(option: EventOption) {
+export function optionData(option: EventOption) {
   return {
     rank: option.rank,
     placeId: option.place_id,
@@ -109,7 +111,31 @@ function optionData(option: EventOption) {
     routeScore: option.route_score,
     factsLine: option.facts_line,
     aiBlurb: option.ai_blurb,
+    activity: option.activity,
+    startsAt: option.starts_at ? new Date(option.starts_at) : undefined,
+    endsAt: option.ends_at ? new Date(option.ends_at) : undefined,
   };
+}
+
+/**
+ * Nearby places labelled as activities (#322), each timed inside the free window, at least
+ * MIN_LEAD_HOURS out and never before the slot start (the voting deadline derives from it).
+ * Any failure → none, so the caller falls back to the fixed-vibe venues.
+ */
+async function activityCandidates(
+  slot: ClassifiedSlot,
+  window: TimeWindow,
+  members: readonly VenueMember[],
+  now: Date,
+): Promise<ActivityCandidate[]> {
+  const from = new Date(Math.max(slot.start.getTime(), now.getTime() + env.MIN_LEAD_HOURS * 3_600_000));
+  try {
+    const places = await discoverPlaces(slot, from, window.end, members);
+    return timeCandidates(places, await describeActivities(places));
+  } catch (e) {
+    console.error("activity discovery", e);
+    return [];
+  }
 }
 
 export async function runPipeline(now = new Date(), { force = false }: { force?: boolean } = {}): Promise<void> {
@@ -118,7 +144,7 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
     prisma.explicitGroup.findMany({ include: { members: true } }),
   ]);
 
-  // ponytail: discovery reads lightweight identities for relationship endpoints, then loads
+  // ponytail: discovery reads lightweight identities for squad members and Mixer friends, then loads
   // busy blocks and favorites only for users who can form a candidate group.
   const referencedUserIds = [...new Set([
     ...friendships.flatMap((friendship) => [friendship.userLowId, friendship.userHighId]),
@@ -129,12 +155,16 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
     where: { id: { in: referencedUserIds } },
     select: { id: true, timezone: true },
   });
-  const ordinaryGroups = candidateGroups(identities, friendships, explicitGroups);
-  const possibleMixers = mixerCandidates(identities, friendships, [], now);
-  const groupsByKey = new Map(ordinaryGroups.map((group) => [group.groupKey, group]));
-  for (const { group } of possibleMixers) {
-    // A selected Squad keeps its provenance; otherwise a 4–6 person eligible group is a Mixer.
-    if (!groupsByKey.get(group.groupKey)?.sourceGroupId) groupsByKey.set(group.groupKey, group);
+  // Squads only (#320): propose to whole squads (3–6 active members). Friend pairs, cliques and
+  // one-drop subsets are skipped. Manual hangouts never come through here.
+  const squadKeys = new Set(explicitGroups.map((group) =>
+    groupKey(group.members.filter((member) => member.status === "active").map((member) => member.userId))));
+  const groupsByKey = new Map(candidateGroups(identities, [], explicitGroups)
+    .filter((group) => squadKeys.has(group.groupKey))
+    .map((group) => [group.groupKey, group]));
+  for (const { group } of mixerCandidates(identities, friendships, [], now)) {
+    // A selected Squad keeps its provenance; otherwise a 4–6 person eligible group is a Mixer (#215).
+    if (!groupsByKey.has(group.groupKey)) groupsByKey.set(group.groupKey, group);
   }
   const groups = [...groupsByKey.values()];
   if (!groups.length) return;
@@ -172,7 +202,7 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
   const favoritesByUser = new Map(users.map((user) => [user.id, user.favorites]));
   const eventsByParticipant = openEventsByParticipant(openEvents);
   const groupSlots: GroupSlot[] = [];
-  const feasibleBySlot = new Map<ClassifiedSlot, ClassifiedSlot[]>();
+  const windowBySlot = new Map<ClassifiedSlot, { window: TimeWindow; feasible: ClassifiedSlot[] }>();
 
   for (const group of groups) {
     if (group.isMixer && !eligibleMixerKeys.has(group.groupKey)) continue;
@@ -193,7 +223,7 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
       const slot = classifySlot(window, Object.values(group.memberTimezones));
       if (!slot) continue;
       groupSlots.push({ group, slot });
-      feasibleBySlot.set(slot, feasibleSlots(window, Object.values(group.memberTimezones)));
+      windowBySlot.set(slot, { window, feasible: feasibleSlots(window, Object.values(group.memberTimezones)) });
     }
   }
 
@@ -210,7 +240,7 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
   // ponytail: the vibe is chosen after selection, so a longer vibe slot could overlap another
   // candidate from the same run; re-check the overlap if it ever matters.
   const selected = await scheduleDecisions(
-    shortlist.map((candidate) => ({ ...candidate, feasible: feasibleBySlot.get(candidate.slot)! })),
+    shortlist.map((candidate) => ({ ...candidate, ...windowBySlot.get(candidate.slot)! })),
     favoritesByUser,
     force,
   );
@@ -226,12 +256,20 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
         favorites: user.favorites,
         travelMode: user.travelMode,
       }));
-    const rankedVenues = await fetchCandidates(candidate.slot, venueMembers);
-    if (rankedVenues.length < 3) continue;
-    const { options, matchReason } = await curateVenues(
-      rankedVenues,
-      curateContext(candidate, favoritesByUser),
-    );
+    const context = curateContext(candidate, favoritesByUser);
+    // #322: activities discovered near the squad, each at its own time. Fewer than 3 → the fixed-vibe venues.
+    const activities = await activityCandidates(candidate.slot, candidate.window, venueMembers, now);
+    const picks = pickActivities(activities);
+    let rankedVenues: RankedVenue[] = activities;
+    let curation: Curation;
+    if (picks.length === 3) {
+      curation = await curateActivities(picks, context);
+    } else {
+      rankedVenues = await fetchCandidates(candidate.slot, venueMembers);
+      if (rankedVenues.length < 3) continue;
+      curation = await curateVenues(rankedVenues, context);
+    }
+    const { options, matchReason } = curation;
     if (options.length !== 3) throw new Error(`Venue curation returned ${options.length} options; expected 3`);
     const eventTimezone = timezoneClosestToVenueCentroid(venueMembers, options) ??
       earliestTimezone(candidate.slot.start, Object.values(candidate.group.memberTimezones));

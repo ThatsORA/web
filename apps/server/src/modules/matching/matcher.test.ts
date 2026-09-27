@@ -10,7 +10,9 @@ const mocks = vi.hoisted(() => ({
   eventCreate: vi.fn(),
   transaction: vi.fn(),
   curateVenues: vi.fn(),
+  curateActivities: vi.fn(),
   fetchCandidates: vi.fn(),
+  discoverPlaces: vi.fn(),
   openVoting: vi.fn(),
   askDecision: vi.fn(),
 }));
@@ -27,12 +29,17 @@ vi.mock("../../lib/prisma", () => ({
 vi.mock("../intelligence/curateVenues", async (importOriginal) => ({
   ...await importOriginal<typeof import("../intelligence/curateVenues")>(),
   curateVenues: mocks.curateVenues,
+  curateActivities: mocks.curateActivities,
 }));
 vi.mock("../intelligence/decision", async (importOriginal) => ({
   ...await importOriginal<typeof import("../intelligence/decision")>(),
   askDecision: mocks.askDecision,
 }));
 vi.mock("../venues/liveVenues", () => ({ fetchCandidates: mocks.fetchCandidates }));
+vi.mock("../venues/discover", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../venues/discover")>(),
+  discoverPlaces: mocks.discoverPlaces,
+}));
 vi.mock("../voting/lifecycle", () => ({ openVoting: mocks.openVoting }));
 
 import { env } from "../../env";
@@ -40,6 +47,7 @@ import type { MatchingEvent } from "./candidates";
 import {
   createUserHangout,
   openEventsByParticipant,
+  optionData,
   runPipeline,
   timezoneClosestToVenueCentroid,
   triggerMatcher,
@@ -85,6 +93,12 @@ const friendships = IDS.flatMap((userLowId, index) =>
     lastHangoutAt: new Date(NOW.getTime() - 10 * 24 * 60 * 60 * 1_000),
   })),
 );
+const squad = {
+  id: "squad-1",
+  name: "Thursday crew",
+  createdBy: IDS[0]!,
+  members: IDS.map((userId) => ({ userId, status: "active" })),
+};
 const rankedVenues: RankedVenue[] = [
   { place_id: "place-campus-bistro", name: "Campus Bistro", lat: 25.756, lng: -80.376, primary_type: "restaurant", price_level: 2, rating: 4.5, user_rating_count: 180, travel_minutes: { [IDS[0]!]: 8, [IDS[1]!]: 11, [IDS[2]!]: 14 }, max_travel_min: 14, route_score: 17.3 },
   { place_id: "place-sweetwater-kitchen", name: "Sweetwater Kitchen", lat: 25.763, lng: -80.373, primary_type: "restaurant", price_level: 2, rating: 4.6, user_rating_count: 240, travel_minutes: { [IDS[0]!]: 10, [IDS[1]!]: 12, [IDS[2]!]: 15 }, max_travel_min: 15, route_score: 18.7 },
@@ -96,7 +110,7 @@ const rankedVenues: RankedVenue[] = [
 function resetData() {
   mocks.userFindMany.mockResolvedValue(users);
   mocks.friendshipFindMany.mockResolvedValue(friendships);
-  mocks.explicitGroupFindMany.mockResolvedValue([]);
+  mocks.explicitGroupFindMany.mockResolvedValue([squad]);
   mocks.eventFindMany.mockResolvedValue([]);
   mocks.eventFindFirst.mockResolvedValue(null);
   mocks.eventCreate.mockResolvedValue({ id: "event-1" });
@@ -113,6 +127,8 @@ function resetData() {
     })),
     matchReason: null,
   }));
+  mocks.curateActivities.mockImplementation(mocks.curateVenues.getMockImplementation()!);
+  mocks.discoverPlaces.mockResolvedValue([]);
   mocks.openVoting.mockResolvedValue(undefined);
   mocks.askDecision.mockRejectedValue(new Error("Decision: no provider configured"));
 }
@@ -155,6 +171,17 @@ describe("venue snapshots", () => {
       "★4.6 · $$ · max 15 min travel",
       "★4.4 · $$ · max 16 min travel",
     ]);
+  });
+});
+
+describe("optionData (#321)", () => {
+  const base = { ...rankedVenues[0]!, rank: 1, facts_line: "facts", ai_blurb: null };
+  it("stores an option's activity and its own time", () => {
+    expect(optionData({ ...base, activity: "Bouldering", starts_at: "2026-10-01T22:30:00Z", ends_at: "2026-10-02T00:30:00Z" }))
+      .toMatchObject({ activity: "Bouldering", startsAt: new Date("2026-10-01T22:30:00Z"), endsAt: new Date("2026-10-02T00:30:00Z") });
+  });
+  it("leaves them unset for options without them", () => {
+    expect(optionData(base)).toMatchObject({ activity: undefined, startsAt: undefined, endsAt: undefined });
   });
 });
 
@@ -235,12 +262,7 @@ describe("matcher pipeline", () => {
     });
     expect(mocks.eventFindMany).toHaveBeenNthCalledWith(2, {
       where: {
-        groupKey: { in: [
-          `${IDS[0]},${IDS[1]}`,
-          IDS.join(","),
-          `${IDS[0]},${IDS[2]}`,
-          `${IDS[1]},${IDS[2]}`,
-        ] },
+        groupKey: { in: [IDS.join(",")] },
         status: { in: ["expired", "chatted"] },
         resolvedAt: { gte: new Date(NOW.getTime() - env.COOLDOWN_HOURS * 60 * 60 * 1_000) },
       },
@@ -268,7 +290,7 @@ describe("matcher pipeline", () => {
     expect(create.select).toEqual({ id: true });
     expect(create.data).toMatchObject({
       groupKey: IDS.join(","),
-      sourceGroupId: null,
+      sourceGroupId: "squad-1",
       status: "voting",
       startsAt: new Date("2026-10-01T22:30:00Z"),
       endsAt: new Date("2026-10-02T00:30:00Z"),
@@ -298,6 +320,16 @@ describe("matcher pipeline", () => {
     expect(create.data.options.create).toHaveLength(3);
     expect(mocks.openVoting).toHaveBeenCalledWith("event-1");
     expect(mocks.eventCreate.mock.invocationCallOrder[0]).toBeLessThan(mocks.openVoting.mock.invocationCallOrder[0]!);
+  });
+
+  it("proposes to whole squads only: a close-friend clique or a squad with an invited member gets nothing", async () => {
+    mocks.explicitGroupFindMany.mockResolvedValue([]);
+    await runPipeline(NOW);
+    const invited = { ...squad, members: squad.members.map((m, i) => (i === 2 ? { ...m, status: "invited" } : m)) };
+    mocks.explicitGroupFindMany.mockResolvedValue([invited]);
+    await runPipeline(NOW);
+    expect(mocks.fetchCandidates).not.toHaveBeenCalled();
+    expect(mocks.eventCreate).not.toHaveBeenCalled();
   });
 
   it("stores the curated match reason on the event", async () => {
@@ -358,6 +390,67 @@ describe("matcher pipeline", () => {
     mocks.transaction.mockRejectedValue(Error("rollback"));
     await expect(runPipeline(NOW)).rejects.toThrow("rollback");
     expect(mocks.openVoting).not.toHaveBeenCalled();
+  });
+});
+
+describe("nearby activities (#322)", () => {
+  type Open = { start: Date; end: Date }[];
+  const place = (id: string, primary_type: string, route_score: number, open: Open) =>
+    ({ ...rankedVenues[0]!, place_id: id, name: id, primary_type, route_score, open });
+  const SLOT_START = new Date("2026-10-01T21:30:00Z"); // Thu 17:30 EDT, the dinner slot
+  const WINDOW_CLOSE = new Date("2026-10-02T00:45:00Z");
+  // Free from Thu 15:15 EDT, so the free window starts before the dinner slot.
+  const freeFromAfternoon = () => mocks.userFindMany.mockResolvedValue(users.map((user) => ({
+    ...user,
+    busyBlocks: user.busyBlocks.map((block) =>
+      block.id.endsWith("-before") ? { ...block, endsAt: new Date("2026-10-01T19:00:00Z") } : block),
+  })));
+
+  it("proposes 3 activities with distinct labels at their own times, never before the slot start", async () => {
+    freeFromAfternoon();
+    mocks.discoverPlaces.mockImplementation(async (_slot: unknown, from: Date, to: Date) => [
+      place("bowl", "bowling_alley", 10, [{ start: from, end: to }]),
+      place("bowl-2", "bowling_alley", 11, [{ start: from, end: to }]), // same label → a backup
+      place("park", "park", 12, [{ start: new Date("2026-10-01T23:00:00Z"), end: to }]),
+      place("museum", "museum", 13, [{ start: from, end: new Date("2026-10-01T22:00:00Z") }]), // 90 min doesn't fit
+      place("gallery", "art_gallery", 14, [{ start: from, end: to }]),
+    ]);
+
+    await runPipeline(NOW);
+
+    // The voting deadline derives from the event's slot start, so discovery starts there, not at the window start.
+    expect(mocks.discoverPlaces).toHaveBeenCalledWith(
+      expect.objectContaining({ vibe_tag: "dinner", start: SLOT_START }), SLOT_START, WINDOW_CLOSE, expect.any(Array),
+    );
+    expect(mocks.fetchCandidates).not.toHaveBeenCalled();
+    const { data } = mocks.eventCreate.mock.calls[0]![0];
+    expect(data.startsAt).toEqual(SLOT_START);
+    const options = data.options.create as { placeId: string; activity: string; startsAt: Date; endsAt: Date }[];
+    expect(options.map((o) => [o.placeId, o.activity, o.startsAt.toISOString(), o.endsAt.toISOString()])).toEqual([
+      ["bowl", "Bowling alley", "2026-10-01T21:30:00.000Z", "2026-10-01T23:00:00.000Z"],
+      ["park", "Park", "2026-10-01T23:00:00.000Z", "2026-10-02T00:30:00.000Z"],
+      ["gallery", "Art gallery", "2026-10-01T21:30:00.000Z", "2026-10-01T23:00:00.000Z"],
+    ]);
+    expect(options.every((o) => o.startsAt >= data.startsAt)).toBe(true);
+    expect(data.backupVenues).toEqual([expect.objectContaining({ place_id: "bowl-2", activity: "Bowling alley" })]);
+  });
+
+  it("falls back to the fixed-vibe venues when discovery finds fewer than 3 or fails", async () => {
+    mocks.discoverPlaces.mockImplementationOnce(async (_slot: unknown, from: Date, to: Date) => [
+      place("bowl", "bowling_alley", 10, [{ start: from, end: to }]),
+      place("park", "park", 12, [{ start: from, end: to }]),
+    ]);
+    await runPipeline(NOW);
+    expect(mocks.fetchCandidates).toHaveBeenCalledOnce();
+    expect(mocks.eventCreate.mock.calls[0]![0].data.options.create[0].activity).toBeUndefined();
+
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.discoverPlaces.mockRejectedValueOnce(new Error("Places down"));
+    await runPipeline(NOW);
+    expect(mocks.fetchCandidates).toHaveBeenCalledTimes(2);
+    expect(mocks.eventCreate).toHaveBeenCalledTimes(2);
+    expect(quiet).toHaveBeenCalledWith("activity discovery", expect.any(Error));
+    quiet.mockRestore();
   });
 });
 

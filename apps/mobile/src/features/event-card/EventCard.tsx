@@ -14,7 +14,7 @@ import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calen
 import { canChangeSpot, canOpenChat, cardKind, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows } from "./cardState";
 import { changeSpotPrompt } from "./changeSpot";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
-import { progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
+import { optionLabel, placeTitle, progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
 import { VotingCountdown } from "./VotingCountdown";
 
 
@@ -132,6 +132,7 @@ function OpenCard({ card, actions, busy, notice }: Props) {
             <OptionRow
               key={o.id ?? o.place_id}
               option={o}
+              timeZone={card.timezone}
               mine={!!o.id && o.id === card.my_option_id}
               disabled={busy}
               onVote={() => o.id && actions.vote(o.id)}
@@ -180,6 +181,7 @@ function OpenCard({ card, actions, busy, notice }: Props) {
             <OptionRow
               key={o.id ?? o.place_id}
               option={o}
+              timeZone={card.timezone}
               mine={!!o.id && o.id === card.my_option_id}
               tally={o.id && card.outcome?.tallies ? card.outcome.tallies[o.id] : undefined}
             />
@@ -209,6 +211,7 @@ function OpenCard({ card, actions, busy, notice }: Props) {
 
 function OptionRow({
   option,
+  timeZone,
   mine,
   tally,
   disabled,
@@ -216,6 +219,7 @@ function OptionRow({
   voteLabel = "Vote",
 }: {
   option: EventOption;
+  timeZone: string;
   mine: boolean;
   tally?: number;
   disabled?: boolean;
@@ -234,8 +238,8 @@ function OptionRow({
       }}
     >
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Txt variant="label" color="heading">
-          {option.name}
+        <Txt variant="label" color="heading" style={{ flexShrink: 1 }}>
+          {optionLabel(option, timeZone)}
         </Txt>
         {tally !== undefined ? (
           <Badge tone={tally > 0 ? "info" : undefined} label={`${tally} ${tally === 1 ? "vote" : "votes"}`} />
@@ -342,7 +346,7 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
         />
 
         <Txt variant="headline" color="onPrimary" accessibilityRole="header">
-          {venue.name}
+          {placeTitle(venue)}
         </Txt>
         <Txt variant="small" color="onPrimary" numeric>
           {timeLabel(card)}

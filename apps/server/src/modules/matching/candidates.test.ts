@@ -81,46 +81,33 @@ describe("candidate groups", () => {
   });
 });
 describe("ranking and cooldown", () => {
-  it("computes the numeric example: .4*.6 + .35*.5 + .25*.5 = .54", () => {
+  it("computes the numeric example: .6*.5 + .4*.5 = .5", () => {
     const pairs = [edge("a", "b", .3, at(-7 * 24)), edge("a", "c", .6, at(-10 * 24)), edge("b", "c", .9)];
     const ranked = rankCandidates([candidate(["a", "b", "c"], 84)], pairs, now)[0]!;
-    expect(ranked.closeness).toBeCloseTo(.6);
     expect(ranked.staleness).toBe(.5);
     expect(ranked.soonness).toBe(.5);
-    expect(ranked.score).toBeCloseTo(.54);
+    expect(ranked.score).toBeCloseTo(.5);
   });
-  it("uses staleness 1 for never/14+ days and includes missing pairs as zero", () => {
+  it("uses staleness 1 for never/14+ days", () => {
     const c = candidate(["a", "b", "c"]);
     expect(rankCandidates([c], [], now)[0]?.staleness).toBe(1);
-    const ranked = rankCandidates([c], [edge("a", "b", .6, at(-20 * 24))], now)[0]!;
-    expect(ranked.staleness).toBe(1);
-    expect(ranked.closeness).toBeCloseTo(.2);
+    expect(rankCandidates([c], [edge("a", "b", .6, at(-20 * 24))], now)[0]?.staleness).toBe(1);
+  });
+  it("ignores interaction scores and squad provenance (closeness is deferred)", () => {
+    const squad = candidate(["a", "b", "c"]);
+    squad.group.sourceGroupId = "squad1";
+    const close = rankCandidates([squad], clique(["a", "b", "c"]).map(e => ({ ...e, interactionScore: 1 })), now)[0]!;
+    const distant = rankCandidates([candidate(["a", "b", "c"])], clique(["a", "b", "c"]).map(e => ({ ...e, interactionScore: 0 })), now)[0]!;
+    expect(close.score).toBe(distant.score);
   });
   it("breaks score ties by earlier start, then lexical group key", () => {
+    // .6*.5 + .4*1 = .6*1 + .4*.25 = .7
     const a = candidate(["a", "b", "c"], 0);
-    const b = candidate(["d", "e", "f"], 168);
-    // .4*0 + .35 + .25 = .4*.625 + .35 + 0 = .6
-    const pairs = clique(b.group.memberIds).map(e => ({ ...e, interactionScore: .625 }));
-    expect(rankCandidates([b, a], pairs, now).map(c => c.group.groupKey)).toEqual(["a,b,c", "d,e,f"]);
+    const b = candidate(["d", "e", "f"], 126);
+    const ranked = rankCandidates([b, a], [edge("a", "b", .5, at(-7 * 24))], now);
+    expect(ranked[0]!.score).toBe(ranked[1]!.score);
+    expect(ranked.map(c => c.group.groupKey)).toEqual(["a,b,c", "d,e,f"]);
     expect(rankCandidates([candidate(["d", "e", "f"]), candidate(["a", "b", "c"])], [], now).map(c => c.group.groupKey)).toEqual(["a,b,c", "d,e,f"]);
-  });
-  it("ranks a pair below a 3-person group when their base scores are equal", () => {
-    const pair = candidate(["d", "e"]);
-    const group = candidate(["a", "b", "c"]);
-    const ranked = rankCandidates([pair, group], [...clique(group.group.memberIds), edge("d", "e")], now);
-    expect(ranked.map(c => c.group.groupKey)).toEqual(["a,b,c", "d,e"]);
-    expect(ranked[1]!.score).toBeCloseTo(ranked[0]!.score * 0.85);
-  });
-  it("adds +0.05 closeness bonus to squad-sourced groups to win ties against identical ad-hoc cliques", () => {
-    const squadGroup = candidate(["a", "b", "c"], 24);
-    squadGroup.group.sourceGroupId = "squad1";
-    const adhocGroup = candidate(["a", "b", "c"], 24);
-    const pairs = clique(["a", "b", "c"]);
-    
-    const rankedSquad = rankCandidates([squadGroup], pairs, now)[0]!;
-    const rankedAdhoc = rankCandidates([adhocGroup], pairs, now)[0]!;
-    expect(rankedSquad.closeness).toBeCloseTo(rankedAdhoc.closeness + 0.05);
-    expect(rankedSquad.score).toBeGreaterThan(rankedAdhoc.score);
   });
   it.each(["expired", "chatted"] as const)("uses %s resolution for cooldown with an exact boundary and demo disable", status => {
     const e = event(["a", "b", "c"], status);

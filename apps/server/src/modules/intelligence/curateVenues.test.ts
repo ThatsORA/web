@@ -4,7 +4,7 @@ import type { CurateContext, RankedVenue } from "@web/contract";
 import { env } from "../../env";
 vi.mock("node:fs", () => ({ existsSync: vi.fn(), readFileSync: vi.fn(), readdirSync: vi.fn() }));
 import { buildCase, type Scenario } from "../../../scripts/decision-data";
-import { curateVenues, factsLine, fallbackOptions, pickVenues } from "./curateVenues";
+import { curateActivities, curateVenues, factsLine, fallbackOptions, pickVenues } from "./curateVenues";
 
 const venue = (id: string, route_score: number, max: number): RankedVenue => ({
   place_id: id,
@@ -134,6 +134,20 @@ describe("curateVenues", () => {
     expect(out.options.map((o) => [o.place_id, o.ai_blurb, o.facts_line])).toEqual(
       ["g2", "g4", "g5"].map((id) => [id, null, "★4.6 · $$ · max " + Number(id[1]) * 5 + " min travel"]),
     );
+  });
+
+  it("curateActivities: no venue-fit decision; Gemini blurbs keep each option's activity and time (#322)", async () => {
+    geminiReply = blurbs(["a1", "a2", "a3"]);
+    const picks = [1, 2, 3].map((n) => ({
+      ...venue(`a${n}`, n * 10, n * 5), activity: `Activity ${n}`,
+      starts_at: "2026-10-01T22:30:00.000Z", ends_at: "2026-10-02T00:00:00.000Z",
+    }));
+    const out = await curateActivities(picks, ctx);
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes("systemone"))).toBe(false);
+    expect(out.options.map((o) => [o.place_id, o.rank, o.activity, o.starts_at, o.ai_blurb])).toEqual(
+      [1, 2, 3].map((n) => [`a${n}`, n, `Activity ${n}`, "2026-10-01T22:30:00.000Z", `Blurb a${n}`]),
+    );
+    expect(bodyOf("generativelanguage").contents[0].parts[0].text).toContain('"activity":"Activity 1"');
   });
 
   it("returns exactly 3 facts-only options when both models fail", async () => {

@@ -24,6 +24,8 @@ describe("cardKind", () => {
       ["Chatted", "chatted"],
       ["Expired", "expired"],
       ["Completed (ended event)", "completed"],
+      ["Voting (activities, own times)", "voting"],
+      ["Confirmed (activity winner)", "confirmed"],
     ]);
   });
 
@@ -71,7 +73,7 @@ describe("travelRows", () => {
 
 describe("helpers", () => {
   it("offers Change spot only on a confirmed event with a venue", () => {
-    expect(FIXTURES.filter((f) => canChangeSpot(f.card)).map((f) => f.label)).toEqual(["Confirmed", "Confirmed (with match reason)", "Swapped"]);
+    expect(FIXTURES.filter((f) => canChangeSpot(f.card)).map((f) => f.label)).toEqual(["Confirmed", "Confirmed (with match reason)", "Swapped", "Confirmed (activity winner)"]);
   });
 
   it("hides Change spot from people who didn't vote for the plan (the server would refuse them)", () => {
