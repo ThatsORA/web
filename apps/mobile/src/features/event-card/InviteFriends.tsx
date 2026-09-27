@@ -1,4 +1,4 @@
-// Owner: Andy (#345) — "Invite friends" on an existing hangout: pick accepted friends, send, done.
+// Owner: Andy (#345) — "Invite friends" on an existing hangout: search accepted friends, pick, send.
 // Invitees join as direct invites, so the inviter won't see them on the card unless they created the hangout (§9).
 import { FriendsResponse, InviteToEventRequest, routes, type EventCardPayload, type Friend } from "@web/contract";
 import { useEffect, useState } from "react";
@@ -6,8 +6,8 @@ import { View } from "react-native";
 import { z } from "zod";
 import { api, ApiError } from "../../lib/api";
 import { displayName } from "../../lib/displayName";
-import { Button, Callout, Chip, Modal, Txt, useTheme } from "../../ui";
-import { invitableFriends } from "./cardState";
+import { Button, Callout, Chip, Modal, TextField, Txt, useTheme } from "../../ui";
+import { inviteSearch } from "./cardState";
 
 const MAX_INVITES = 5;
 
@@ -16,6 +16,7 @@ const inviteError = (e: unknown) =>
   e instanceof ApiError && e.status === 400 ? "You can only invite people you’re friends with." :
   "Couldn’t send the invite. Try again.";
 
+/** Full-width "Invite friends" button, for the open (voting) card. */
 export function InviteFriendsButton({ card }: { card: EventCardPayload }) {
   const [open, setOpen] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
@@ -27,9 +28,10 @@ export function InviteFriendsButton({ card }: { card: EventCardPayload }) {
   );
 }
 
-function InviteFriendsModal({ card, onClose, onSent }: { card: EventCardPayload; onClose: () => void; onSent: (label: string) => void }) {
+export function InviteFriendsModal({ card, onClose, onSent }: { card: EventCardPayload; onClose: () => void; onSent: (label: string) => void }) {
   const t = useTheme();
   const [friends, setFriends] = useState<Friend[] | null>(null);
+  const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,11 +39,13 @@ function InviteFriendsModal({ card, onClose, onSent }: { card: EventCardPayload;
   useEffect(() => {
     let live = true;
     api(routes.friends, FriendsResponse)
-      .then((res) => live && setFriends(invitableFriends(res.friends, card)))
+      .then((res) => live && setFriends(res.friends))
       .catch(() => live && setError("Couldn’t load your friends."));
     return () => { live = false; };
-  }, [card]);
+  }, []);
 
+  const rows = friends ? inviteSearch(friends, card, query) : [];
+  const picked = (friends ?? []).filter((friend) => selected.includes(friend.id));
   const toggle = (id: string) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length < MAX_INVITES ? [...s, id] : s));
 
@@ -64,17 +68,26 @@ function InviteFriendsModal({ card, onClose, onSent }: { card: EventCardPayload;
   return (
     <Modal visible onClose={onClose} title="Invite friends">
       <View style={{ gap: t.spacing.sm }}>
-        <Txt variant="small">
-          {card.status === "voting"
-            ? "They’ll get this hangout and can vote on a spot or pass privately."
-            : "They’ll get this hangout and can tap “Can’t make it” if they’re out."}{" "}
-          Up to {MAX_INVITES} at a time.
-        </Txt>
-        {friends === null && !error ? <Txt variant="small">Loading friends…</Txt> : null}
-        {friends?.length === 0 ? <Txt variant="small">Everyone you’re friends with is already here.</Txt> : null}
+        <TextField
+          placeholder="Search friends"
+          value={query}
+          onChangeText={setQuery}
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+        {friends && query.trim() && rows.length === 0 ? <Txt variant="small">No friends match that search.</Txt> : null}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm }}>
-          {friends?.map((f) => (
-            <Chip key={f.id} label={displayName(f)} selected={selected.includes(f.id)} onPress={() => toggle(f.id)} />
+          {/* Picks stay visible after the search changes, so they can be removed. */}
+          {picked.map((friend) => (
+            <Chip key={friend.id} label={displayName(friend)} selected onPress={() => toggle(friend.id)} />
+          ))}
+          {rows.filter(({ friend }) => !selected.includes(friend.id)).map(({ friend, inGroup }) => (
+            <Chip
+              key={friend.id}
+              label={inGroup ? `${displayName(friend)} · Already in the group` : displayName(friend)}
+              disabled={inGroup}
+              onPress={() => toggle(friend.id)}
+            />
           ))}
         </View>
         {error ? <Callout tone="danger">{error}</Callout> : null}

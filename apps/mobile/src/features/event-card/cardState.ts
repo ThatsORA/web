@@ -111,6 +111,19 @@ export const canInvite = (card: EventCardPayload, now = Date.now()) =>
   (card.status === "voting" || card.status === "confirmed") && !card.is_mixer &&
   card.my_status !== "ghost_passed" && Date.parse(card.starts_at) > now;
 
-/** Friends the invite picker offers: everyone not already visible on the card. Hidden participants are skipped by the server. */
-export const invitableFriends = <F extends { id: string }>(friends: readonly F[], card: Pick<EventCardPayload, "participants">) =>
-  friends.filter((friend) => !card.participants.some((p) => p.id === friend.id));
+/**
+ * The invite picker's search results (#345): nothing until you type, then every friend whose name or username
+ * matches. Anyone already visible on the card comes back `inGroup` (shown faded, not selectable). Hidden
+ * participants look like anyone else; the server skips them silently.
+ */
+export function inviteSearch<F extends { id: string; username: string; display_name?: string | null }>(
+  friends: readonly F[],
+  card: Pick<EventCardPayload, "participants">,
+  query: string,
+): { friend: F; inGroup: boolean }[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return friends
+    .filter((friend) => friend.username.toLowerCase().includes(q) || !!friend.display_name?.toLowerCase().includes(q))
+    .map((friend) => ({ friend, inGroup: card.participants.some((p) => p.id === friend.id) }));
+}

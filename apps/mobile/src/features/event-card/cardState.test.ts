@@ -1,6 +1,6 @@
 import { EventCardPayload } from "@web/contract";
 import { describe, expect, it } from "vitest";
-import { byStart, canChangeSpot, canDeclineInvite, canInvite, invitableFriends, canOpenChat, cardKind, detectSwap, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows, votingTimeRemaining } from "./cardState";
+import { byStart, canChangeSpot, canDeclineInvite, canInvite, inviteSearch, canOpenChat, cardKind, detectSwap, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows, votingTimeRemaining } from "./cardState";
 import { FIXTURES, ME } from "./fixtures";
 
 const get = (label: string) => FIXTURES.find((f) => f.label === label)!.card;
@@ -175,9 +175,14 @@ describe("late invites (#345)", () => {
     expect(canDeclineInvite({ ...lateInvite, status: "voting" }, before)).toBe(false);
   });
 
-  it("leaves friends already on the card out of the picker", () => {
+  it("shows nobody until you search, then marks people already in the group", () => {
     const card = get("Voting");
-    const stranger = { id: "00000000-0000-4000-8000-0000000000ff", username: "newbie" };
-    expect(invitableFriends([...card.participants, stranger], card)).toEqual([stranger]);
+    const inGroup = card.participants.find((p) => p.id !== ME.id)!;
+    const newbie = { id: "00000000-0000-4000-8000-0000000000ff", username: "newbie", display_name: "Nadia Q" };
+    const friends = [inGroup, newbie];
+    expect(inviteSearch(friends, card, "")).toEqual([]);
+    expect(inviteSearch(friends, card, "   ")).toEqual([]);
+    expect(inviteSearch(friends, card, "  NADIA ")).toEqual([{ friend: newbie, inGroup: false }]);
+    expect(inviteSearch(friends, card, inGroup.username.slice(0, 3))).toEqual([{ friend: inGroup, inGroup: true }]);
   });
 });
