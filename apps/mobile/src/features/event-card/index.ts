@@ -4,4 +4,7 @@ export { EmptyFeedCard, EventCard, FindingCard, type CardActions } from "./Event
 export { FIXTURES } from "./fixtures";
 export { useEvents } from "./useEvents";
 export { useEventSocket, useFriendEvents, useSessionSocket } from "./useEventSocket";
+export { filterHangoutsByTab, hasPendingNotification, pendingNotificationCount, type HangoutTab } from "./feedTabs";
+export { HangoutSubTabs } from "./HangoutSubTabs";
+
 
