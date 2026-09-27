@@ -796,6 +796,12 @@ deterministic fallback. A fine-tuned, self-hosted Laya in front of Jev is
 deferred to #274 (set `LAYA_URL` to turn it on). It makes three
 decisions: whether to propose to a group now, which feasible vibe to use
 (§5), and which venues fit the vibe (§8). Code computes every option it chooses from.
+It also reads each event-chat message's intent (#325: can't make it,
+running late, change spot, logistics, just chatting). When the top intent
+is at least 0.75 and actionable, only the sender is offered Pass (while
+they can still pass, #210), Change spot (while #214 allows it) or a
+running-late hint. It runs in the background, sees only that message's
+text, and nothing is stored.
 
 **Gemini, text only:** the vote blurbs and the card's `match_reason` (§8),
 and, in the automated flow, an activity label and typical length for each
@@ -928,6 +934,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-27 | **Venue swap privacy scoping (#333).** Venue swap routes (`POST /events/:id/report-closed` and `change-spot`) scope socket `event:venue_changed` and Expo push notifications to `eventAudience(…, false)` so that ghost-passers (direct invitees who passed) do not receive swap alerts. Callers must satisfy `canSeeEvent()` / `keepsAccess()`, and the 409 stale-venue response checks `canSeeEvent()` to prevent card leakage. |
 | 2026-09-27 | **Squads only; closeness deferred (#320).** The scheduler (weekly cron, demo button, `/internal/run-matcher`) proposes only to whole squads with 3–6 active members and to Riley's Mixers (#215); friend pairs, cliques and one-drop subsets are skipped. Manual hangouts are unchanged. Ranking is `0.6 · staleness + 0.4 · soonness`; closeness is documented as deferred in §5. The demo trio forms a squad instead of starring each other. |
 | 2026-09-27 | **No fixed activity list in the automated flow (#322).** One broad Places Nearby Search finds leisure places near the squad; code keeps the ones open in the free window, ranks them by worst commute, and times each option at or after the slot start. Gemini only labels each place as an activity with a typical length. Until preference fit (#311), code picks the 3 best by commute with distinct labels (`pickActivities`). Fewer than 3 → the fixed-vibe venues. Manual New hangout keeps the fixed vibes. |
+| 2026-09-27 | **Chat intent suggestions (#325).** After a chat message is saved, `askDecision` classifies it in the background (`chatIntentRequest`: the message text only, capped at 300 chars). At ≥ 0.75 on `cant_make_it` or `change_spot` the sender alone gets `chat:suggestion` (`{ event_id, message_id, kind }`) and a chip that runs the existing Pass or Change spot action; `running_late` gets a hint chip; `logistics` and `just_chatting` get nothing. Sender-only because a direct invitee's Pass is a Ghost Pass. Nothing is stored; a failed call does nothing. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)
 

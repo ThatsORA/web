@@ -29,6 +29,17 @@ export const FriendSocketEvents = {
 } as const;
 export const FriendPayload = z.object({ user_id: Id });
 
+// Also kept out of SocketEvents. Sent only to the message's own sender, never to other members, and never
+// stored (#325): the server read their chat message and offers them one action. "pass" goes through the pass
+// endpoint, which applies #210's rules; "running_late_hint" has no action.
+export const ChatSocketEvents = {
+  chatSuggestion: "chat:suggestion",
+} as const;
+export const ChatSuggestionKind = z.enum(["pass", "change_spot", "running_late_hint"]);
+export const ChatSuggestionPayload = z.object({ event_id: Id, message_id: Id, kind: ChatSuggestionKind });
+export type ChatSuggestionKind = z.infer<typeof ChatSuggestionKind>;
+export type ChatSuggestionPayload = z.infer<typeof ChatSuggestionPayload>;
+
 export interface ServerToClientEvents {
   "event:created": (p: z.infer<typeof EventCreatedPayload>) => void;
   "event:progress": (p: z.infer<typeof EventProgressPayload>) => void;
@@ -37,6 +48,7 @@ export interface ServerToClientEvents {
   "event:message": (p: z.infer<typeof EventMessagePayload>) => void;
   "friend:request": (p: z.infer<typeof FriendPayload>) => void;
   "friend:accepted": (p: z.infer<typeof FriendPayload>) => void;
+  "chat:suggestion": (p: ChatSuggestionPayload) => void;
 }
 
 /** Room every authenticated socket joins. */
