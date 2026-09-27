@@ -55,4 +55,36 @@ describe("scheduleTransform", () => {
     expect(result[0].items[2].venueName).toBe("Sergio's Pizza");
     expect(result[0].items[2].status).toBe("confirmed");
   });
+
+  it("only transforms confirmed hangouts and filters out voting or cancelled hangouts", () => {
+    const events: Partial<EventCardPayload>[] = [
+      {
+        id: "evt-confirmed",
+        status: "confirmed",
+        starts_at: "2026-10-01T18:00:00.000Z",
+        ends_at: "2026-10-01T20:00:00.000Z",
+        vibe_tag: "dinner",
+      },
+      {
+        id: "evt-voting",
+        status: "voting",
+        starts_at: "2026-10-01T21:00:00.000Z",
+        ends_at: "2026-10-01T22:00:00.000Z",
+        vibe_tag: "casual_hangout",
+      },
+      {
+        id: "evt-cancelled",
+        status: "expired",
+        starts_at: "2026-10-01T22:00:00.000Z",
+        ends_at: "2026-10-01T23:00:00.000Z",
+        vibe_tag: "quick_coffee",
+      },
+    ];
+
+    const result = transformScheduleItems([], events as EventCardPayload[], []);
+    expect(result.length).toBe(1);
+    expect(result[0].items.length).toBe(1);
+    expect(result[0].items[0].eventId).toBe("evt-confirmed");
+    expect(result[0].items[0].status).toBe("confirmed");
+  });
 });

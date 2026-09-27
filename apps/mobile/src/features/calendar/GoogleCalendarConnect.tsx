@@ -78,53 +78,53 @@ export function GoogleCalendarConnect() {
   };
 
   if (!status) {
-    return <ActivityIndicator size="small" />;
+    return (
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <Txt variant="small" color="textMuted">Google Calendar: Checking status...</Txt>
+        <ActivityIndicator size="small" />
+      </View>
+    );
   }
 
+  const isConnected = status.connected;
+  const isRevoked = status.revoked;
+
   return (
-    <View style={{ marginVertical: theme.spacing.md }}>
-      {status.revoked ? (
-        <View style={{
-          padding: theme.spacing.md,
-          backgroundColor: theme.colors.surfaceMuted,
-          borderRadius: theme.radius.md,
-          gap: theme.spacing.sm,
-        }}>
-          <Txt variant="label" color="danger">Google Calendar Revoked</Txt>
-          <Txt variant="small" color="textMuted">Your connection has expired or was revoked.</Txt>
-          <Button 
-            label="Reconnect Google Calendar" 
-            onPress={handleConnect} 
-            disabled={loading} 
-          />
+    <View
+      style={{
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: theme.spacing.xs,
+      }}
+    >
+      <View style={{ flex: 1, minWidth: 140 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.xs }}>
+          <Txt variant="small" color="textMuted">
+            Google Calendar:
+          </Txt>
+          <Txt
+            variant="small"
+            color={isRevoked ? "danger" : isConnected ? "heading" : "textMuted"}
+          >
+            {isRevoked ? "Revoked" : isConnected ? "Connected" : "Not connected"}
+          </Txt>
         </View>
-      ) : status.connected ? (
-        <View style={{
-          padding: theme.spacing.md,
-          backgroundColor: theme.colors.surfaceMuted,
-          borderRadius: theme.radius.md,
-          gap: theme.spacing.sm,
-        }}>
-          <Txt variant="label">Google Calendar Connected</Txt>
-          {status.last_synced_at && (
-            <Txt variant="small" color="textMuted">
-              Last synced: {new Date(status.last_synced_at).toLocaleString()}
-            </Txt>
-          )}
-          <Button 
-            label="Disconnect Google Calendar" 
-            onPress={handleDisconnect} 
-            disabled={loading} 
-            variant="secondary"
-          />
-        </View>
-      ) : (
-        <Button 
-          label="Connect Google Calendar" 
-          onPress={handleConnect} 
-          disabled={loading} 
-        />
-      )}
+        {isConnected && status.last_synced_at ? (
+          <Txt variant="small" color="textMuted" numeric>
+            Last synced: {new Date(status.last_synced_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+          </Txt>
+        ) : null}
+      </View>
+      <Button
+        label={isRevoked ? "Reconnect" : isConnected ? "Disconnect" : "Connect"}
+        variant="outline"
+        size="sm"
+        onPress={isRevoked || !isConnected ? handleConnect : handleDisconnect}
+        disabled={loading}
+        loading={loading}
+      />
     </View>
   );
 }
