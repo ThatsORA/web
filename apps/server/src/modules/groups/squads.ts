@@ -19,13 +19,14 @@ export const hasRoom = (members: number, adding: number) => members + adding <= 
 /** When an accepted invite may become active. */
 export const joinsAt = (m: Membership) => new Date((m.invitedAt ?? new Date(0)).getTime() + OBJECTION_WINDOW_MS);
 
-/** The invitee said yes: active now, or still waiting out the objection window? */
-export function onAccept(m: Membership, activeCount: number, now: Date): "active" | "waiting" {
-  return activeCount < CONSENT_QUORUM || now >= joinsAt(m) ? "active" : "waiting";
+/** The invitee said yes: instantly active without objection window delay (#275). */
+export function onAccept(_m: Membership, _activeCount: number, _now: Date): "active" {
+  return "active";
 }
 
-/** An accepted invite whose objection window has passed (the sweep promotes these). */
-export const isDue = (m: Membership, now: Date) => m.status === "invited" && m.acceptedAt !== null && now >= joinsAt(m);
+/** An accepted invite is instantly promoted upon response. */
+export const isDue = (_m: Membership, _now: Date) => false;
 
-/** What a member sees for someone's `joins_at`: only set while an accepted invite waits out the window. */
-export const visibleJoinsAt = (m: Membership) => (m.status === "invited" && m.acceptedAt ? joinsAt(m) : null);
+/** What a member sees for someone's `joins_at`: null since invites become active instantly. */
+export const visibleJoinsAt = (_m: Membership) => null;
+

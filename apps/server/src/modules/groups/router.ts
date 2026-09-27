@@ -26,7 +26,8 @@ async function toSquad(groupId: string, me: string) {
       .map((m) => ({
         ...toPublicUser(m.user),
         status: m.status,
-        joins_at: visibleJoinsAt(m)?.toISOString() ?? null,
+        joins_at: null,
+
       })),
   });
 }
@@ -115,10 +116,10 @@ squadsRouter.post(routes.squadRespond(":id"), requireAuth, async (req, res) => {
     return res.status(204).end();
   }
   const now = new Date();
-  const active = await prisma.groupMember.count({ where: { groupId, status: "active" } });
-  const status = onAccept(mine, active, now) === "active" ? "active" : "invited";
-  await prisma.groupMember.update({ where: { id: mine.id }, data: { status, acceptedAt: now } });
+  await prisma.groupMember.update({ where: { id: mine.id }, data: { status: "active", acceptedAt: now } });
   res.status(204).end();
+
+
 });
 
 squadsRouter.post(routes.squadLeave(":id"), requireAuth, async (req, res) => {
