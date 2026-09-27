@@ -72,8 +72,8 @@ export function FriendSearch({ friends = [], requests = { incoming: [], outgoing
   return (
     <View style={{ gap: t.spacing.sm }}>
       <TextField
-        label="Username"
-        placeholder="riley"
+        placeholder="search"
+        accessibilityLabel="Search friends by username"
         value={q}
         onChangeText={(text) => void handleSearch(text)}
         autoCorrect={false}

@@ -61,6 +61,14 @@ export function EmptyFeedCard({ onAddFriends }: { onAddFriends: () => void }) {
   );
 }
 
+/** Chat route params: the header shows the venue (or the vibe before one is picked) over the time. */
+const chatParams = (card: EventCardPayload) => ({
+  eventId: card.id,
+  ended: card.viewer?.chat === "read_only" || hasEnded(card) ? "1" : "0",
+  title: card.outcome?.venue?.name ?? vibeLabel(card.vibe_tag),
+  when: timeLabel(card),
+});
+
 export function EventCard(props: Props) {
   const { card } = props;
   const kind = cardKind(card);
@@ -109,7 +117,7 @@ function OpenCard({ card, actions, busy, notice }: Props) {
   const handleOpenChat = () => {
     router.push({
       pathname: CHAT_PATHNAME,
-      params: { eventId: card.id, ended: card.viewer?.chat === "read_only" || hasEnded(card) ? "1" : "0" },
+      params: chatParams(card),
     });
   };
 
@@ -334,7 +342,7 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
   const handleOpenChat = () => {
     router.push({
       pathname: CHAT_PATHNAME,
-      params: { eventId: card.id, ended: card.viewer?.chat === "read_only" || hasEnded(card) ? "1" : "0" },
+      params: chatParams(card),
     });
   };
 

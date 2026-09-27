@@ -3,6 +3,20 @@ import { router, useLocalSearchParams } from "expo-router";
 import { ChatScreen } from "../../../features/chat";
 
 export default function EventChat() {
-  const { eventId, ended } = useLocalSearchParams<{ eventId: string; ended?: string }>();
-  return <ChatScreen key={eventId} eventId={eventId} isEnded={ended === "1"} onBack={() => router.back()} />;
+  const { eventId, ended, title, when } = useLocalSearchParams<{
+    eventId: string;
+    ended?: string;
+    title?: string;
+    when?: string;
+  }>();
+  return (
+    <ChatScreen
+      key={eventId}
+      eventId={eventId}
+      title={title}
+      when={when}
+      isEnded={ended === "1"}
+      onBack={() => router.back()}
+    />
+  );
 }

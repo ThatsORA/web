@@ -22,6 +22,10 @@ import { getEventMessages, runSuggestion, sendChatMessage, SUGGESTION_LABEL } fr
 
 type Props = {
   eventId: string;
+  /** Header: the venue ("Cafe Bea"), or the vibe before one is picked. */
+  title?: string;
+  /** Small line under the title: "Thu · 6:30–8:30pm". */
+  when?: string;
   isEnded?: boolean;
   onBack?: () => void;
 };
@@ -39,7 +43,7 @@ function formatMessageTime(iso: string): string {
   }
 }
 
-export function ChatScreen({ eventId, isEnded = false, onBack }: Props) {
+export function ChatScreen({ eventId, title, when, isEnded = false, onBack }: Props) {
   const t = useTheme();
   const token = useToken();
   const currentUserId = userIdFromToken(token);
@@ -156,17 +160,14 @@ export function ChatScreen({ eventId, isEnded = false, onBack }: Props) {
               <Button label="← Back to card" variant="ghost" onPress={onBack} />
             </View>
           ) : null}
-          <Txt variant="eyebrow" color="textMuted">
-            GROUP CHAT
-          </Txt>
           <Txt variant="display" accessibilityRole="header">
-            Event Chat
+            {title ?? "Chat"}
           </Txt>
-          <Txt variant="body" color="textMuted">
-            {isEnded
-              ? "This event has ended (read-only)."
-              : "Coordinate with the group."}
-          </Txt>
+          {when ? (
+            <Txt variant="small" color="textMuted" numeric>
+              {when}
+            </Txt>
+          ) : null}
         </View>
 
         <ScrollView
@@ -213,9 +214,7 @@ export function ChatScreen({ eventId, isEnded = false, onBack }: Props) {
           ) : null}
 
           {!loading && messages.length === 0 && !error ? (
-            <Callout tone="info" title="No messages yet">
-              Say hi and make a plan together.
-            </Callout>
+            <Callout tone="info" title="No messages yet" />
           ) : null}
 
           {messages.map((m) => {
