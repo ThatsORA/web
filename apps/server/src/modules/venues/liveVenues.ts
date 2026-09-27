@@ -4,7 +4,7 @@ import { env } from "../../env";
 import { withFixture } from "../../lib/demoMode";
 import { getLocalParts, VIBE_TEMPLATES, type ClassifiedSlot } from "../matching/timeMath";
 
-const PLACES_URL = "https://places.googleapis.com/v1/places:searchNearby";
+export const PLACES_URL = "https://places.googleapis.com/v1/places:searchNearby";
 const ROUTES_URL = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix";
 const WEEK_MINUTES = 7 * 24 * 60;
 
@@ -42,7 +42,7 @@ export interface GoogleOpeningPeriod {
   close?: GoogleTimePoint;
 }
 
-interface GooglePlace {
+export interface GooglePlace {
   id?: string;
   displayName?: { text?: string };
   location?: { latitude?: number; longitude?: number };
@@ -51,6 +51,7 @@ interface GooglePlace {
   rating?: number;
   userRatingCount?: number;
   businessStatus?: string;
+  timeZone?: { id?: string };
   regularOpeningHours?: {
     periods?: GoogleOpeningPeriod[];
   };
@@ -133,7 +134,7 @@ export function isOpenForSlot(
   });
 }
 
-function validPlace(place: GooglePlace): place is GooglePlace & {
+export function validPlace(place: GooglePlace): place is GooglePlace & {
   id: string;
   displayName: { text: string };
   location: { latitude: number; longitude: number };
@@ -164,7 +165,7 @@ export function filterPlaces(
   return rated.length >= 5 ? rated : base;
 }
 
-function toCandidate(place: GooglePlace): VenueCandidate | null {
+export function toCandidate(place: GooglePlace): VenueCandidate | null {
   if (!validPlace(place)) return null;
   return {
     place_id: place.id,
@@ -178,7 +179,7 @@ function toCandidate(place: GooglePlace): VenueCandidate | null {
   };
 }
 
-async function googlePost<T>(url: string, fieldMask: string, body: unknown): Promise<T> {
+export async function googlePost<T>(url: string, fieldMask: string, body: unknown): Promise<T> {
   if (!env.GOOGLE_MAPS_API_KEY) throw new Error("GOOGLE_MAPS_API_KEY is required for live venue ranking");
   const response = await fetch(url, {
     method: "POST",
@@ -219,6 +220,7 @@ export function rankRouteMatrix(
   candidates: readonly VenueCandidate[],
   members: readonly Pick<VenueMember, "id">[],
   elements: readonly RouteMatrixElement[],
+  limit = 5,
 ): RankedVenue[] {
   const minutesByDestination = new Map<number, Map<string, number>>();
   for (const element of elements) {
@@ -249,13 +251,14 @@ export function rankRouteMatrix(
       max_travel_min,
       route_score: max_travel_min + 0.1 * minutes.reduce((sum, value) => sum + value, 0),
     }];
-  }).sort((a, b) => a.route_score - b.route_score || a.place_id.localeCompare(b.place_id)).slice(0, 5);
+  }).sort((a, b) => a.route_score - b.route_score || a.place_id.localeCompare(b.place_id)).slice(0, limit);
 }
 
 export async function routeCandidates(
   slot: ClassifiedSlot,
   members: readonly VenueMember[],
   candidates: readonly VenueCandidate[],
+  limit = 5,
 ): Promise<RankedVenue[]> {
   const departureTime = new Date(slot.start.getTime() - 30 * 60_000).toISOString();
   
@@ -304,16 +307,25 @@ export async function routeCandidates(
     }
   }
 
-  return rankRouteMatrix(candidates, members, allElements);
+  return rankRouteMatrix(candidates, members, allElements, limit);
+}
+
+/** The members' average home location; null when anyone has no home set. */
+export function homeCentroid(members: readonly VenueMember[]): { latitude: number; longitude: number } | null {
+  if (!members.length || members.some((member) => member.homeLat === null || member.homeLng === null)) return null;
+  return {
+    latitude: members.reduce((sum, member) => sum + member.homeLat!, 0) / members.length,
+    longitude: members.reduce((sum, member) => sum + member.homeLng!, 0) / members.length,
+  };
 }
 
 export async function fetchCandidates(
   slot: ClassifiedSlot,
   members: readonly VenueMember[],
 ): Promise<RankedVenue[]> {
-  if (!members.length || members.some((member) => member.homeLat === null || member.homeLng === null)) return [];
-  const latitude = members.reduce((sum, member) => sum + member.homeLat!, 0) / members.length;
-  const longitude = members.reduce((sum, member) => sum + member.homeLng!, 0) / members.length;
+  const center = homeCentroid(members);
+  if (!center) return [];
+  const { latitude, longitude } = center;
   const timezone = members[0]!.timezone;
   const template = VIBE_TEMPLATES[slot.vibe_tag];
 

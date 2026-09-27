@@ -58,11 +58,16 @@ touches before you write code.
   A fine-tuned, self-hosted Laya is deferred to #274; `askDecision`
   already tries it first when `LAYA_URL` is set, and it's empty today.
 - Gemini only writes text: the vote blurbs and `match_reason`, from
-  `curateVenues`. `rankWithGemini` was removed (#231).
+  `curateVenues`/`curateActivities`, and each discovered place's activity
+  label and typical length, from `describeActivities` (#322).
+  `rankWithGemini` was removed (#231).
 - Free windows, groups, which vibes are feasible for a slot, shortlist
-  scoring, venue filtering, route scoring and backups stay deterministic
-  TypeScript. The model only chooses among options code already computed
-  (the vibe among the feasible ones, which venues fit).
+  scoring, place discovery and filtering (opening hours included), route
+  scoring, each option's time, picking the 3 options and backups stay
+  deterministic TypeScript. The automated flow has no fixed activity
+  list; Gemini only labels places code already found. The model only
+  chooses among options code already computed (the vibe among the
+  feasible ones, which venues fit).
 - Every AI call has a timeout, a deterministic fallback, and goes through
   `withFixture`. Gemini output uses a JSON `responseSchema` with
   validated IDs.

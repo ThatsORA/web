@@ -68,14 +68,15 @@ const RESPONSE_SCHEMA = {
   required: ["options", "match_reason"],
 };
 
-async function callGemini(prompt: string, vibe: string): Promise<unknown> {
-  return withFixture("gemini", vibe, async () => {
+/** One Gemini JSON call (text only) with a response schema, a timeout and a fixture. */
+export async function callGemini(prompt: string, key: string, responseSchema: object = RESPONSE_SCHEMA): Promise<unknown> {
+  return withFixture("gemini", key, async () => {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA },
+        generationConfig: { responseMimeType: "application/json", responseSchema },
       }),
       signal: AbortSignal.timeout(env.GEMINI_TIMEOUT_MS),
     });
@@ -85,10 +86,14 @@ async function callGemini(prompt: string, vibe: string): Promise<unknown> {
   });
 }
 
-function buildPrompt(venues: (RankedVenue & { reviews: string[] })[], ctx: CurateContext): string {
+/** A venue, or an activity option (#322) that also carries its activity and its own time. */
+type Pick3 = RankedVenue & Pick<EventOption, "activity" | "starts_at" | "ends_at">;
+
+function buildPrompt(venues: (Pick3 & { reviews: string[] })[], ctx: CurateContext): string {
   const input = venues.map((v) => ({
     place_id: v.place_id,
     name: v.name,
+    activity: v.activity,
     primary_type: v.primary_type,
     price_level: v.price_level,
     rating: v.rating,
@@ -122,7 +127,7 @@ export interface Curation {
   matchReason: string | null;
 }
 
-const toOptions = (picks: RankedVenue[]): EventOption[] =>
+const toOptions = (picks: Pick3[]): EventOption[] =>
   picks.map((v, i) => ({ ...v, rank: i + 1, facts_line: factsLine(v), ai_blurb: null }));
 
 // ponytail: per-instance in-memory LRU, capped at 200 successful curations.
@@ -154,25 +159,34 @@ export async function curateVenues(venues: RankedVenue[], ctx: CurateContext): P
     // keep the top 3 by route_score
   }
 
-  const plain: Curation = { options: toOptions(picks), matchReason: null };
+  const result = await writeText(picks.map((v) => ({ ...v, reviews: reviews[top.indexOf(v)]! })), ctx);
+  if (decided && result.matchReason !== null) {
+    cache.set(key, result);
+    if (cache.size > 200) cache.delete(cache.keys().next().value!);
+  }
+  return result;
+}
+
+/** Activity options code already picked (#322): no venue-fit decision, Gemini writes only the text. */
+export async function curateActivities(picks: Pick3[], ctx: CurateContext): Promise<Curation> {
+  const reviews = await Promise.all(picks.map((v) => reviewSnippets(v.place_id)));
+  return writeText(picks.map((v, i) => ({ ...v, reviews: reviews[i]! })), ctx);
+}
+
+/** The ONE Gemini text call: blurbs + match reason for the 3 picks. Fails → facts only, no match reason. */
+async function writeText(picks: (Pick3 & { reviews: string[] })[], ctx: CurateContext): Promise<Curation> {
+  const plain: Curation = { options: toOptions(picks.map(({ reviews: _, ...v }) => v)), matchReason: null };
   if (!env.DEMO_MODE && !env.GEMINI_API_KEY) return plain;
 
   try {
-    const withReviews = picks.map((v) => ({ ...v, reviews: reviews[top.indexOf(v)]! }));
-    const parsed = GeminiResult.safeParse(await callGemini(buildPrompt(withReviews, ctx), ctx.vibe_tag));
+    const parsed = GeminiResult.safeParse(await callGemini(buildPrompt(picks, ctx), ctx.vibe_tag));
     if (!parsed.success) return plain;
     const blurbs = new Map(parsed.data.options.map((o) => [o.place_id, o.blurb.trim()]));
     if (blurbs.size !== 3 || !picks.every((v) => blurbs.has(v.place_id))) return plain;
-
-    const result: Curation = {
+    return {
       options: plain.options.map((o) => ({ ...o, ai_blurb: blurbs.get(o.place_id)! })),
       matchReason: parsed.data.match_reason.trim(),
     };
-    if (decided) {
-      cache.set(key, result);
-      if (cache.size > 200) cache.delete(cache.keys().next().value!);
-    }
-    return result;
   } catch {
     return plain;
   }
