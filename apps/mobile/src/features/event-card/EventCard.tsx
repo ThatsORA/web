@@ -9,7 +9,7 @@ import { CHAT_PATHNAME } from "../../lib/routes";
 import { Badge, Button, Callout, Card, Txt, useTheme } from "../../ui";
 import { ExpenseForm } from "../expenses";
 import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calendarSync";
-import { canChangeSpot, cardKind, freePeople, hasEnded, travelRows } from "./cardState";
+import { canChangeSpot, canOpenChat, cardKind, freePeople, hasEnded, passButtonLabel, passedNotice, travelRows } from "./cardState";
 import { changeSpotPrompt } from "./changeSpot";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
 import { progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
@@ -90,6 +90,13 @@ function Header({ card, eyebrow, badge, onBrand }: { card: EventCardPayload; eye
 
 function OpenCard({ card, actions, busy, notice }: Props) {
   const kind = cardKind(card);
+  const handleOpenChat = () => {
+    router.push({
+      pathname: CHAT_PATHNAME,
+      params: { eventId: card.id, ended: card.viewer?.chat === "read_only" || hasEnded(card) ? "1" : "0" },
+    });
+  };
+
   return (
     <Card>
       <Header card={card} eyebrow={vibeLabel(card.vibe_tag)} badge={kind === "voting" ? <Badge tone="new" label="New" /> : null} />
@@ -98,19 +105,20 @@ function OpenCard({ card, actions, busy, notice }: Props) {
         <>
           <Badge label={progressLabel(card.progress)} />
           {card.my_status === "ghost_passed" ? (
-            <Txt variant="small">You passed quietly. Nobody else can tell.</Txt>
-          ) : (
-            card.options.map((o) => (
-              <OptionRow
-                key={o.id ?? o.place_id}
-                option={o}
-                mine={!!o.id && o.id === card.my_option_id}
-                disabled={busy}
-                onVote={() => o.id && actions.vote(o.id)}
-              />
-            ))
-          )}
-          {kind === "voting" ? <Button label="Ghost Pass" variant="ghost" onPress={actions.ghostPass} disabled={busy} /> : null}
+            <Txt variant="small">{passedNotice(card.viewer)}</Txt>
+          ) : null}
+          {card.options.map((o) => (
+            <OptionRow
+              key={o.id ?? o.place_id}
+              option={o}
+              mine={!!o.id && o.id === card.my_option_id}
+              disabled={busy}
+              onVote={() => o.id && actions.vote(o.id)}
+            />
+          ))}
+          {kind === "voting" ? (
+            <Button label={passButtonLabel(card.viewer)} variant="ghost" onPress={actions.ghostPass} disabled={busy} />
+          ) : null}
         </>
       ) : null}
 
@@ -118,12 +126,6 @@ function OpenCard({ card, actions, busy, notice }: Props) {
         <>
           <Badge tone="warning" label="Not enough votes" />
           <Txt>Everyone’s free, you just need a place. Free: {freePeople(card).map((p) => p.display_name ?? p.username).join(", ")}</Txt>
-          <Button
-            label="Open chat"
-            onPress={() =>
-              router.push({ pathname: CHAT_PATHNAME, params: { eventId: card.id, ended: hasEnded(card) ? "1" : "0" } })
-            }
-          />
         </>
       ) : null}
 
@@ -132,6 +134,14 @@ function OpenCard({ card, actions, busy, notice }: Props) {
           <Badge label="Expired" />
           <Txt variant="small">Not enough people could make it this time.</Txt>
         </>
+      ) : null}
+
+      {canOpenChat(card) ? (
+        <Button
+          label="Open chat"
+          variant={kind === "chatted" ? "primary" : "outline"}
+          onPress={handleOpenChat}
+        />
       ) : null}
 
       {notice ? <Callout tone="danger">{notice}</Callout> : null}
@@ -228,6 +238,13 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
     }
   };
 
+  const handleOpenChat = () => {
+    router.push({
+      pathname: CHAT_PATHNAME,
+      params: { eventId: card.id, ended: card.viewer?.chat === "read_only" || hasEnded(card) ? "1" : "0" },
+    });
+  };
+
   return (
     <View>
       <Card brand>
@@ -289,6 +306,7 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
           disabled={busy}
         />
         {calendarNotice ? <Callout tone="warning">{calendarNotice}</Callout> : null}
+        {canOpenChat(card) ? <Button label="Open chat" variant="outline" onPress={handleOpenChat} /> : null}
         {attendees.length > 0 ? (
           showExpense ? (
             <View style={{ gap: t.spacing.sm }}>

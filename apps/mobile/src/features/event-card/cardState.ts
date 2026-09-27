@@ -1,5 +1,5 @@
 // Owner: Andy — which state the event card is in. Pure, no React Native.
-import type { EventCardPayload } from "@web/contract";
+import type { EventCardPayload, EventViewer } from "@web/contract";
 
 export type CardKind = "voting" | "waiting" | "confirmed" | "chatted" | "expired" | "completed";
 
@@ -45,3 +45,17 @@ export const hasEnded = (card: Pick<EventCardPayload, "ends_at">, now = Date.now
 
 /** The feed's order: soonest first. */
 export const byStart = (a: EventCardPayload, b: EventCardPayload) => Date.parse(a.starts_at) - Date.parse(b.starts_at);
+
+/** Direct invitees see "Ghost Pass"; squad invitees see "Pass (can't make it)". */
+export const passButtonLabel = (viewer: EventViewer) =>
+  viewer.pass_kind === "ghost" ? "Ghost Pass" : "Pass (can't make it)";
+
+/** Explanation shown when the caller has passed quietly or for a squad hangout. */
+export const passedNotice = (viewer: EventViewer) =>
+  viewer.pass_kind === "ghost"
+    ? "You passed quietly. Nobody else can tell."
+    : "You passed (can't make it).";
+
+/** Whether "Open chat" should be shown on this card (active squad/mixed hangouts from creation, or chatted fallback). */
+export const canOpenChat = (card: { viewer?: EventViewer | null }) => card.viewer?.chat != null;
+

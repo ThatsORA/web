@@ -1,6 +1,6 @@
 import { EventCardPayload } from "@web/contract";
 import { describe, expect, it } from "vitest";
-import { byStart, canChangeSpot, cardKind, detectSwap, freePeople, hasEnded, travelRows } from "./cardState";
+import { byStart, canChangeSpot, canOpenChat, cardKind, detectSwap, freePeople, hasEnded, passButtonLabel, passedNotice, travelRows } from "./cardState";
 import { FIXTURES, ME } from "./fixtures";
 
 const get = (label: string) => FIXTURES.find((f) => f.label === label)!.card;
@@ -93,4 +93,26 @@ describe("helpers", () => {
     const later = { ...get("Voting"), starts_at: "2026-10-02T18:30:00-04:00" };
     expect([later, get("Voting")].sort(byStart)[0]!.starts_at).toBe("2026-10-01T18:30:00-04:00");
   });
+
+  it("passButtonLabel returns Ghost Pass for direct invitees and Pass (can't make it) for squad invitees", () => {
+    expect(passButtonLabel({ invite_source: "direct", pass_kind: "ghost", full_roster: false, chat: null })).toBe("Ghost Pass");
+    expect(passButtonLabel({ invite_source: "squad", pass_kind: "visible", full_roster: false, chat: "open" })).toBe("Pass (can't make it)");
+  });
+
+  it("passedNotice returns quiet explanation for direct invitees and can't make it for squad invitees", () => {
+    expect(passedNotice({ invite_source: "direct", pass_kind: "ghost", full_roster: false, chat: null })).toBe(
+      "You passed quietly. Nobody else can tell."
+    );
+    expect(passedNotice({ invite_source: "squad", pass_kind: "visible", full_roster: false, chat: "open" })).toBe(
+      "You passed (can't make it)."
+    );
+  });
+
+  it("canOpenChat checks if viewer has chat access (open or read_only)", () => {
+    expect(canOpenChat({ viewer: { invite_source: "squad", pass_kind: "visible", full_roster: false, chat: "open" } })).toBe(true);
+    expect(canOpenChat({ viewer: { invite_source: "squad", pass_kind: "visible", full_roster: false, chat: "read_only" } })).toBe(true);
+    expect(canOpenChat({ viewer: { invite_source: "direct", pass_kind: "ghost", full_roster: false, chat: null } })).toBe(false);
+    expect(canOpenChat({ viewer: null })).toBe(false);
+  });
 });
+
