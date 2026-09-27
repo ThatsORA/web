@@ -83,7 +83,7 @@ export default function NewHangout() {
     .flatMap((d) => d.activeMembers)
     .filter((m, i, all) => all.findIndex((x) => x.id === m.id) === i);
   const pickedFriends = eligibleFriends.filter((f) => selectedFriendIds.includes(f.id) && !squadMemberIds.includes(f.id));
-  const results = inviteSearch(eligibleFriends, { participants: [] }, query)
+  const results = inviteSearch(eligibleFriends, [], query)
     .map(({ friend }) => friend)
     .filter((f) => !inviteeIds.includes(f.id));
 
