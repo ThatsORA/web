@@ -2,8 +2,8 @@
 // POST /events. The new card reaches the feed over the socket (`event:created`).
 // Invariant: privacy — the picker lists only people I added, never whether they added me back.
 import { EventCardPayload, Friend, FriendsResponse, Squad, SquadsResponse, routes, VibeTag } from "@web/contract";
-import { router, useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import type { z } from "zod";
 import { FindingCard } from "../../features/event-card";
@@ -34,11 +34,18 @@ type Phase = "form" | "finding" | "no_common_time" | "no_venues";
 
 export default function NewHangout() {
   const t = useTheme();
+  const params = useLocalSearchParams<{ squadId?: string }>();
   const [squads, setSquads] = useState<SquadT[] | null>(null);
   const [friends, setFriends] = useState<FriendT[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedSquadIds, setSelectedSquadIds] = useState<string[]>([]);
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (params.squadId && !selectedSquadIds.includes(params.squadId)) {
+      setSelectedSquadIds((prev) => [...prev, params.squadId!]);
+    }
+  }, [params.squadId]);
   const [squadsOpen, setSquadsOpen] = useState(true);
   const [peopleOpen, setPeopleOpen] = useState(true);
   const [vibe, setVibe] = useState<VibeTag | null>(null);

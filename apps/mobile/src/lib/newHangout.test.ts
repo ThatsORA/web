@@ -117,4 +117,21 @@ describe("getDeduplicatedInvitees", () => {
     expect(tooManyRes.totalCount).toBe(7);
     expect(tooManyRes.isValidCount).toBe(false);
   });
+
+  it("preselects a squad passed via route param shortcut (#209)", () => {
+    const squad = {
+      id: "sq-100",
+      name: "Apartment 4B",
+      members: [
+        { id: creator, status: "active" },
+        { id: ids[1], status: "active" },
+        { id: ids[2], status: "active" },
+      ],
+    };
+    const paramSquadId = "sq-100";
+    const res = getDeduplicatedInvitees([paramSquadId], [], [squad], creator);
+    expect(res.inviteeIds).toEqual([ids[1], ids[2]]);
+    expect(res.totalCount).toBe(3);
+    expect(res.isValidCount).toBe(true);
+  });
 });

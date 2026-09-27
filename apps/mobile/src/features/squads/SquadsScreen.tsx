@@ -8,12 +8,13 @@ import {
   SquadsResponse,
   routes,
 } from "@web/contract";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { View } from "react-native";
 import { z } from "zod";
 import { api, ApiError, getToken } from "../../lib/api";
 import { displayName } from "../../lib/displayName";
+import { NEW_HANGOUT_HREF } from "../../lib/routes";
 import { userIdFromToken } from "../../lib/session";
 import { Badge, Button, Callout, Card, Chip, Screen, TextField, Txt, useTheme } from "../../ui";
 import { PersonLink } from "../friends";
@@ -127,7 +128,11 @@ export function SquadsScreen() {
               />
             </>
           ) : null}
-          <View style={{ flexDirection: "row", gap: t.spacing.sm }}>
+          <View style={{ flexDirection: "row", gap: t.spacing.sm, flexWrap: "wrap" }}>
+            <Button
+              label="New hangout"
+              onPress={() => router.push({ pathname: NEW_HANGOUT_HREF, params: { squadId: s.id } })}
+            />
             <Button label={picker === s.id ? "Cancel" : "Invite friends"} variant="outline" onPress={() => openPicker(s.id)} />
             <Button label="Leave" variant="ghost" onPress={() => void run(() => post(routes.squadLeave(s.id)))} />
           </View>
