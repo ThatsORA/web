@@ -1,8 +1,7 @@
 // Owner: Andy — event feed; renders the event card in every state.
 import { Link, router, useLocalSearchParams } from "expo-router";
-import { SymbolView } from "expo-symbols";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { RefreshControl, ScrollView, View } from "react-native";
 import {
   CancelledHangoutCard,
   EmptyFeedCard,
@@ -17,7 +16,7 @@ import {
 } from "../../features/event-card";
 import { useFindNow } from "../../lib/findNow";
 import { useFeedEmptyState } from "../../lib/matcherTrigger";
-import { FRIENDS_HREF, NEW_HANGOUT_HREF, SETTINGS_HREF } from "../../lib/routes";
+import { FRIENDS_HREF, NEW_HANGOUT_HREF } from "../../lib/routes";
 import { Button, Callout, Screen, Txt, useTheme } from "../../ui";
 
 /** A tapped push opens the feed with `?event=<id>` (#79): scroll to that card once it has laid out, then drop the param. */
@@ -61,24 +60,8 @@ export default function Home() {
           progressBackgroundColor={t.colors.surface}
         />
       }
-      headerRight={
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Settings"
-          onPress={() => router.push(SETTINGS_HREF)}
-          style={({ pressed }) => ({
-            opacity: pressed ? 0.6 : 1,
-            padding: t.spacing.xs,
-          })}
-        >
-          <SymbolView
-            name={{ ios: "gearshape", android: "settings", web: "settings" }}
-            tintColor={t.colors.textMuted}
-            size={24}
-          />
-        </Pressable>
-      }
     >
+
       <Button label="+ New hangout" onPress={() => router.push(NEW_HANGOUT_HREF)} />
       {/* Demo step 5 (#233): runs the scheduler now; the card arrives over the socket. */}
       <Button label="Find a hangout now" variant="outline" loading={findNow.state === "finding"} onPress={() => void findNow.find()} />

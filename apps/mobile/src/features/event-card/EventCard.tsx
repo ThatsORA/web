@@ -75,11 +75,11 @@ function Header({ card, eyebrow, badge, onBrand }: { card: EventCardPayload; eye
 
   return (
     <View style={{ gap: t.spacing.xs }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: t.spacing.sm }}>
-        <Txt variant="eyebrow" color={color}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: t.spacing.sm, flexWrap: "wrap" }}>
+        <Txt variant="eyebrow" color={color} style={{ flexShrink: 1 }}>
           {eyebrow}
         </Txt>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: t.spacing.xs }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: t.spacing.xs, flexShrink: 0 }}>
           {isSquad ? <Badge tone="info" label="Squad Hangout" /> : null}
           {badge}
         </View>
@@ -96,6 +96,7 @@ function Header({ card, eyebrow, badge, onBrand }: { card: EventCardPayload; eye
     </View>
   );
 }
+
 
 function OpenCard({ card, actions, busy, notice }: Props) {
   const t = useTheme();
@@ -331,9 +332,10 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
         <Header
           card={card}
           onBrand
-          eyebrow={`${status} · ${squadPrefix}${vibeLabel(card.vibe_tag)}`}
+          eyebrow={status}
           badge={swapped ? <Badge tone="new" label="Swapped" /> : null}
         />
+
         <Txt variant="headline" color="onPrimary" accessibilityRole="header">
           {venue.name}
         </Txt>
