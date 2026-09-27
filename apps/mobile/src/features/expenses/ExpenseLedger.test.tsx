@@ -121,6 +121,40 @@ describe("ExpenseLedger", () => {
     expect(onToggle).toHaveBeenCalledWith("s-2", true);
   });
 
+  it("renders 'Mark unsettled' on settled splits and allows toggling back to unsettled", () => {
+    const onToggle = vi.fn();
+    const expense: Expense = {
+      id: "exp-1",
+      paid_by: "u-andy",
+      total_cents: 2000,
+      description: "Coffee",
+      created_at: "2026-09-26T20:00:00.000Z",
+      splits: [
+        { id: "s-1", user_id: "u-andy", amount_owed_cents: 1000, settled: true },
+        { id: "s-2", user_id: "u-riley", amount_owed_cents: 1000, settled: true },
+      ],
+    };
+
+    const rendered = elements(
+      ExpenseLedgerView({
+        expenses: [expense],
+        attendees,
+        currentUserId: "u-riley",
+        onToggleSplit: onToggle,
+      })
+    );
+
+    const buttons = rendered
+      .filter((el) => el.type === Button)
+      .map((el) => el.props as { label: string; onPress: () => void; variant?: string });
+
+    const toggleButton = buttons.find((b) => b.label === "Mark unsettled");
+    expect(toggleButton).toBeDefined();
+    expect(toggleButton!.variant).toBe("ghost");
+    toggleButton!.onPress();
+    expect(onToggle).toHaveBeenCalledWith("s-2", false);
+  });
+
   it("renders 'All balances settled' when all debts are settled", () => {
     const expense: Expense = {
       id: "exp-1",
