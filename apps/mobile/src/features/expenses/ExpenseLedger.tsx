@@ -2,7 +2,7 @@
 // net balance breakdown, and settled toggles per split. Mounted on ConfirmedCard.
 import { ExpensesResponse, type Expense, type PatchExpenseSplitRequest, routes } from "@web/contract";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Modal, View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 import { z } from "zod";
 import { api } from "../../lib/api";
 import { Badge, Button, Callout, Modal, Txt, useTheme } from "../../ui";
