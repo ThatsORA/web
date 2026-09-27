@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 const mocks = vi.hoisted(() => ({
   eventFindUnique: vi.fn(),
+  participantFindMany: vi.fn(),
   userFindUnique: vi.fn(),
   chatMessageFindMany: vi.fn(),
   chatMessageCreate: vi.fn(),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../lib/prisma", () => ({
   prisma: {
     event: { findUnique: mocks.eventFindUnique },
+    eventParticipant: { findMany: mocks.participantFindMany },
     user: { findUnique: mocks.userFindUnique },
     chatMessage: {
       findMany: mocks.chatMessageFindMany,
@@ -31,19 +33,29 @@ import { signToken } from "../../lib/auth";
 const userId = "6f48fb35-1518-481d-ab60-cfd2dcc28acf";
 const friendId = "7a48fb35-1518-481d-ab60-cfd2dcc28ac0";
 const ghostId = "8b48fb35-1518-481d-ab60-cfd2dcc28ac1";
+const squadPasserId = "9c48fb35-1518-481d-ab60-cfd2dcc28ac3";
 const eventId = "3c48fb35-1518-481d-ab60-cfd2dcc28ac2";
 
 const makeEvent = (overrides = {}) => ({
   id: eventId,
   status: "chatted",
   endsAt: new Date(Date.now() + 3600_000),
-  participants: [
-    { userId, voteStatus: "voted" },
-    { userId: friendId, voteStatus: "voted" },
-    { userId: ghostId, voteStatus: "ghost_passed" },
-  ],
   ...overrides,
 });
+// userId made the hangout and invited friendId and ghostId directly; ghostId passed (Ghost Pass).
+const inEvent = (event: { createdById: string | null; sourceGroupId: string | null }, rows: { userId: string; voteStatus: string }[]) =>
+  rows.map((row) => ({ ...row, event }));
+const participants = inEvent({ createdById: userId, sourceGroupId: null }, [
+  { userId, voteStatus: "voted" },
+  { userId: friendId, voteStatus: "voted" },
+  { userId: ghostId, voteStatus: "ghost_passed" },
+]);
+// A squad's hangout made by userId: friendId and squadPasserId came in with the squad; squadPasserId passed (visible Pass, #210).
+const squadParticipants = inEvent({ createdById: userId, sourceGroupId: "s1" }, [
+  { userId, voteStatus: "voted" },
+  { userId: friendId, voteStatus: "voted" },
+  { userId: squadPasserId, voteStatus: "ghost_passed" },
+]);
 
 let base: string;
 let close: () => void;
@@ -62,6 +74,7 @@ afterAll(() => close());
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.eventFindUnique.mockResolvedValue(makeEvent());
+  mocks.participantFindMany.mockResolvedValue(participants);
   mocks.userFindUnique.mockResolvedValue({ id: userId, username: "ojas" });
 });
 
@@ -142,6 +155,13 @@ describe("chatRouter", () => {
       expect(res.status).toBe(403);
     });
 
+    it("lets a squad invitee who passed (visible Pass) keep reading", async () => {
+      mocks.participantFindMany.mockResolvedValueOnce(squadParticipants);
+      mocks.chatMessageFindMany.mockResolvedValueOnce([]);
+      const res = await get("", signToken(squadPasserId));
+      expect(res.status).toBe(200);
+    });
+
     it("rejects reading when event is not chatted", async () => {
       mocks.eventFindUnique.mockResolvedValueOnce(makeEvent({ status: "voting" }));
       const res = await get();
@@ -195,6 +215,25 @@ describe("chatRouter", () => {
         "event:message",
         { event_id: eventId }
       );
+    });
+
+    it("lets a squad invitee who passed (visible Pass) keep posting", async () => {
+      mocks.participantFindMany.mockResolvedValueOnce(squadParticipants);
+      mocks.userFindUnique.mockResolvedValueOnce({ id: squadPasserId, username: "sam" });
+      mocks.chatMessageCreate.mockResolvedValueOnce({
+        id: messageId2, eventId, userId: squadPasserId, body: "Can't make it, have fun", createdAt: new Date(),
+      });
+      const res = await post({ body: "Can't make it, have fun" }, signToken(squadPasserId));
+      expect(res.status).toBe(201);
+      expect(mocks.emitToUsers).toHaveBeenCalledWith([userId, friendId], "event:message", { event_id: eventId });
+    });
+
+    it("keeps the squad passer to the normal time limit (read-only after endsAt)", async () => {
+      mocks.participantFindMany.mockResolvedValueOnce(squadParticipants);
+      mocks.eventFindUnique.mockResolvedValueOnce(makeEvent({ endsAt: new Date(Date.now() - 60_000) }));
+      const res = await post({ body: "Hello" }, signToken(squadPasserId));
+      expect(res.status).toBe(400);
+      expect(mocks.chatMessageCreate).not.toHaveBeenCalled();
     });
 
     it("rejects non-participants with 403", async () => {

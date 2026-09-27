@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EventOption, VoteStatus } from "@web/contract";
-import { progress, resolveEvent, voteClosesAt } from "./resolution";
+import { progress, resolveEvent, voteClosesAt, votingOpen } from "./resolution";
 
 const opt = (id: string, rank: number, route_score: number) =>
   ({
@@ -21,6 +21,16 @@ describe("voteClosesAt", () => {
   });
   it("caps at 2 h before the slot", () => {
     expect(voteClosesAt(opened, new Date("2026-09-26T20:00:00Z"), 43200)).toEqual(new Date("2026-09-26T18:00:00Z"));
+  });
+});
+
+describe("votingOpen", () => {
+  const now = new Date("2026-09-26T12:00:00Z");
+  const later = new Date("2026-09-26T12:01:00Z");
+  it("is open only while voting and before the deadline", () => {
+    expect(votingOpen({ status: "voting", voteClosesAt: later }, now)).toBe(true);
+    expect(votingOpen({ status: "voting", voteClosesAt: now }, now)).toBe(false); // the sweep hasn't run yet
+    expect(votingOpen({ status: "confirmed", voteClosesAt: later }, now)).toBe(false); // closed early
   });
 });
 

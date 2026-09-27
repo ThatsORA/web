@@ -1,9 +1,11 @@
-// Owner: Ojas — votes + Ghost Pass (plan §9). Never expose who voted for what.
+// Owner: Ojas — votes + passes (plan §9). Never expose who voted for what.
+// A vote can replace a pass (and vice versa) until voting closes; after that both are final (#210).
 import { Router, type Request, type Response } from "express";
 import { routes, VoteRequest } from "@web/contract";
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { afterResponse } from "./lifecycle";
+import { votingOpen } from "./resolution";
 
 export const votingRouter = Router();
 
@@ -18,7 +20,7 @@ async function openEventFor(req: Request, res: Response) {
     res.status(404).json({ error: "not_found" });
     return null;
   }
-  if (event.status !== "voting" || event.voteClosesAt <= new Date()) {
+  if (!votingOpen(event, new Date())) {
     res.status(409).json({ error: "voting_closed" });
     return null;
   }
@@ -48,6 +50,8 @@ votingRouter.post(routes.vote(":id"), requireAuth, async (req, res) => {
   res.status(204).end();
 });
 
+// Every invitee's pass. It's stored the same way for all; the invite source decides whether it's a Ghost Pass
+// (direct) or a visible "can't make it" (creator, squad) — see passKind() in events/invitations.ts (#210).
 votingRouter.post(routes.ghostPass(":id"), requireAuth, async (req, res) => {
   const found = await openEventFor(req, res);
   if (!found) return;
