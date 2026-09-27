@@ -67,8 +67,13 @@ export function formatEventCreatedBody(details?: { startsAt?: Date; vibeTag?: st
 
 export function buildEventCreatedMessage(
   eventId: string,
-  details?: { startsAt?: Date; vibeTag?: string; timezone?: string },
+  details?: { startsAt?: Date; vibeTag?: string; timezone?: string; isMixer?: boolean },
 ): { title: string; body: string; data: { event_id: string } } {
+  if (details?.isMixer) return {
+    title: "Mixer invitation",
+    body: "Choose a spot and commit to attend. Responses stay private.",
+    data: { event_id: eventId },
+  };
   return {
     title: "New hangout idea",
     body: formatEventCreatedBody(details),
@@ -180,7 +185,7 @@ export async function pushVenueChanged(userIds: string[], eventId: string): Prom
 export async function pushEventCreated(
   userIds: string[],
   eventId: string,
-  details?: { startsAt?: Date; vibeTag?: string; timezone?: string },
+  details?: { startsAt?: Date; vibeTag?: string; timezone?: string; isMixer?: boolean },
 ): Promise<void> {
   return sendToUserTokens(userIds, buildEventCreatedMessage(eventId, details));
 }

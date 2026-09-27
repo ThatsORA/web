@@ -44,6 +44,23 @@ describe("progress", () => {
 });
 
 describe("resolveEvent", () => {
+  it.each([
+    [4, 3], [5, 4], [6, 5],
+  ])("requires %i Mixer invitees to have %i attendance commitments", (invited, quorum) => {
+    const participants = Array.from({ length: invited }, (_, i) => ({
+      userId: `u${i}`, voteStatus: i < quorum ? "voted" as const : "invited" as const,
+    }));
+    const votes = participants.slice(0, quorum).map(({ userId }) => ({ userId, optionId: "a" }));
+    expect(resolveEvent({ isMixer: true, participants, votes, options, unusedVenues: [] }).status).toBe("confirmed");
+    expect(resolveEvent({ isMixer: true, participants, votes: votes.slice(0, -1), options, unusedVenues: [] }).status).toBe("expired");
+  });
+
+  it("does not count a Ghost Pass or a stale vote as a Mixer commitment", () => {
+    const participants = people("voted", "voted", "ghost_passed", "invited");
+    const votes = [0, 1, 2, 3].map((i) => ({ userId: `u${i}`, optionId: "a" }));
+    expect(resolveEvent({ isMixer: true, participants, votes, options, unusedVenues: [] })).toEqual({ status: "expired" });
+  });
+
   it("expires when fewer than 2 remain after ghost passes", () => {
     const r = resolveEvent({ participants: people("voted", "ghost_passed", "ghost_passed"), votes: [{ userId: "u0", optionId: "a" }], options, unusedVenues: unused });
     expect(r).toEqual({ status: "expired" });
