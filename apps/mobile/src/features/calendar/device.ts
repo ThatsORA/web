@@ -2,6 +2,15 @@ import { PutBusyBlocksResponse, routes } from "@web/contract";
 import { api, getToken } from "../../lib/api";
 import { createCalendarSync } from "./sync";
 
+export const deviceTimezone = (): string => {
+  try {
+    const { getCalendars } = require("expo-localization");
+    return getCalendars?.()[0]?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  } catch {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  }
+};
+
 let cached: { token: string; sync: ReturnType<typeof createCalendarSync> } | null = null;
 
 // SDK 57 includes the legacy calendar API in Expo Go.
