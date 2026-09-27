@@ -3,12 +3,16 @@ import { Router } from "express";
 import express from "express";
 import { CreateEventRequest } from "@web/contract";
 import { withMatcherMutex, createUserHangout } from "../matching/matcher";
-import { EventCardPayload, EventsListResponse, Id, routes } from "@web/contract";
+import { EventCardPayload, EventsListResponse, Id, InviteToEventRequest, routes } from "@web/contract";
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { publicUserSelect } from "../auth/helpers";
 import { resolveManualSelection } from "../matching/manualSelection";
+import { emitToUsers, pushEventCreated } from "../../realtime";
+import { votingOpen } from "../voting/resolution";
 import { assembleEventCard, canSeeEvent } from "./assembleEventCard";
+import { eventAudience, eventParticipants } from "./invitations";
+import { canDecline, inviteBlock, lateInvitees } from "./lateInvite";
 
 export const eventsRouter = Router();
 
@@ -89,4 +93,72 @@ eventsRouter.get(routes.event(":id"), requireAuth, async (req, res) => {
   // A ghost passer after close gets the same 404 as a stranger (#210).
   if (!event || !canSeeEvent(event, userId, new Date())) return res.status(404).json({ error: "not_found" });
   res.json(EventCardPayload.parse(assembleEventCard(event, userId)));
+});
+
+/** The event's fields the invite rules read, or null. */
+const findInviteEvent = (id: string) => prisma.event.findUnique({
+  where: { id },
+  select: { id: true, status: true, isMixer: true, startsAt: true, voteClosesAt: true, vibeTag: true, timezone: true },
+});
+
+/**
+ * Invite accepted friends into an existing hangout (#345). They join as direct invites (lateInvite.ts), get the
+ * card over the socket and push, and everyone who has the event refetches its progress. 204 even when some were
+ * already in it, so the response never reveals a hidden direct invitee.
+ */
+eventsRouter.post(routes.eventInvite(":id"), requireAuth, express.json(), async (req, res) => {
+  const id = Id.safeParse(req.params.id);
+  if (!id.success) return res.status(404).json({ error: "not_found" });
+  const body = InviteToEventRequest.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ error: "bad_request" });
+  const userId = (req as AuthedRequest).userId;
+
+  const event = await findInviteEvent(id.data);
+  if (!event) return res.status(404).json({ error: "not_found" });
+  const participants = await eventParticipants(event.id);
+  const now = new Date();
+  const block = inviteBlock(event, participants.find((p) => p.userId === userId), now);
+  if (block === "not_found") return res.status(404).json({ error: "not_found" });
+  if (block) return res.status(409).json({ error: "invites_closed" });
+
+  const friendships = await prisma.friendship.findMany({
+    where: { status: "accepted", OR: body.data.invitee_ids.map((invitee) => {
+      const [userLowId, userHighId] = userId < invitee ? [userId, invitee] : [invitee, userId];
+      return { userLowId, userHighId };
+    }) },
+    select: { userLowId: true, userHighId: true, status: true },
+  });
+  const added = lateInvitees(userId, body.data.invitee_ids, friendships, participants.map((p) => p.userId));
+  if ("error" in added) return res.status(400).json({ error: added.error });
+  if (added.length === 0) return res.status(204).end();
+
+  await prisma.$transaction(added.map((invitee) => prisma.eventParticipant.create({
+    data: { eventId: event.id, userId: invitee, voteStatus: "invited", inviteSource: "direct", sourceGroupIds: [] },
+  })));
+
+  emitToUsers(added, "event:created", { event_id: event.id });
+  void pushEventCreated(added, event.id, { startsAt: event.startsAt, vibeTag: event.vibeTag, timezone: event.timezone });
+  emitToUsers(eventAudience(participants, votingOpen(event, now)), "event:progress", { event_id: event.id });
+  res.status(204).end();
+});
+
+/** A direct invitee bows out of a confirmed hangout before it starts (#345): a Ghost Pass, so they lose the card. */
+eventsRouter.post(routes.declineInvite(":id"), requireAuth, async (req, res) => {
+  const id = Id.safeParse(req.params.id);
+  if (!id.success) return res.status(404).json({ error: "not_found" });
+  const userId = (req as AuthedRequest).userId;
+
+  const event = await findInviteEvent(id.data);
+  const participants = event ? await eventParticipants(event.id) : [];
+  const me = participants.find((p) => p.userId === userId);
+  if (!event || !me) return res.status(404).json({ error: "not_found" });
+  if (!canDecline(event, me, new Date())) return res.status(409).json({ error: "cannot_decline" });
+
+  await prisma.eventParticipant.update({
+    where: { eventId_userId: { eventId: event.id, userId } },
+    data: { voteStatus: "ghost_passed" },
+  });
+  // Only the creator can see a direct invitee, so this just refreshes their attendee list; the payload is thin.
+  emitToUsers(eventAudience(participants, false).filter((other) => other !== userId), "event:progress", { event_id: event.id });
+  res.status(204).end();
 });

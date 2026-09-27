@@ -1,6 +1,6 @@
 import { EventCardPayload } from "@web/contract";
 import { describe, expect, it } from "vitest";
-import { byStart, canChangeSpot, canOpenChat, cardKind, detectSwap, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows, votingTimeRemaining } from "./cardState";
+import { byStart, canChangeSpot, canDeclineInvite, canInvite, invitableFriends, canOpenChat, cardKind, detectSwap, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows, votingTimeRemaining } from "./cardState";
 import { FIXTURES, ME } from "./fixtures";
 
 const get = (label: string) => FIXTURES.find((f) => f.label === label)!.card;
@@ -143,5 +143,35 @@ describe("helpers", () => {
     const breakdown = participantBreakdown(card);
     expect(breakdown.responded.map((p) => p.username)).toEqual(["presenter", "riley", "ojas"]);
     expect(breakdown.passed).toEqual([]);
+  });
+});
+
+describe("late invites (#345)", () => {
+  const confirmed = get("Confirmed");
+  const before = Date.parse(confirmed.starts_at) - 60_000;
+  const after = Date.parse(confirmed.starts_at) + 60_000;
+
+  it("offers Invite friends on voting and confirmed cards until the start, not after a pass or on a Mixer", () => {
+    expect(canInvite(get("Voting"), before)).toBe(true);
+    expect(canInvite(confirmed, before)).toBe(true);
+    expect(canInvite(confirmed, after)).toBe(false);
+    expect(canInvite(get("Waiting (ghost passed)"), before)).toBe(false);
+    expect(canInvite({ ...get("Voting"), is_mixer: true }, before)).toBe(false);
+    expect(canInvite(get("Chatted"), before)).toBe(false);
+  });
+
+  it("offers Can't make it only to a direct invitee who hasn't responded to a confirmed hangout", () => {
+    const lateInvite = { ...confirmed, my_status: "invited" as const, viewer: { ...confirmed.viewer, invite_source: "direct" as const } };
+    expect(canDeclineInvite(lateInvite, before)).toBe(true);
+    expect(canDeclineInvite(lateInvite, after)).toBe(false);
+    expect(canDeclineInvite({ ...lateInvite, my_status: "confirmed" }, before)).toBe(false);
+    expect(canDeclineInvite({ ...lateInvite, viewer: { ...lateInvite.viewer, invite_source: "squad" } }, before)).toBe(false);
+    expect(canDeclineInvite({ ...lateInvite, status: "voting" }, before)).toBe(false);
+  });
+
+  it("leaves friends already on the card out of the picker", () => {
+    const card = get("Voting");
+    const stranger = { id: "00000000-0000-4000-8000-0000000000ff", username: "newbie" };
+    expect(invitableFriends([...card.participants, stranger], card)).toEqual([stranger]);
   });
 });

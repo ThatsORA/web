@@ -383,6 +383,9 @@ export type EventsListResponse = z.infer<typeof EventsListResponse>;
 export const VoteRequest = z.object({ option_id: Id });
 export const ReportClosedRequest = z.object({ current_place_id: z.string() });
 export const ChangeSpotRequest = ReportClosedRequest;
+/** Invite accepted friends into an existing hangout as direct invites (#345). */
+export const InviteToEventRequest = z.object({ invitee_ids: z.array(Id).min(1).max(5) });
+export type InviteToEventRequest = z.infer<typeof InviteToEventRequest>;
 
 // ---------- expenses (Ojas, stretch) ----------
 export const CreateExpenseRequest = z.object({

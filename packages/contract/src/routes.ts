@@ -38,6 +38,8 @@ export const routes = {
   ghostPass: (id: string) => `/events/${id}/ghost-pass`,
   reportClosed: (id: string) => `/events/${id}/report-closed`,
   changeSpot: (id: string) => `/events/${id}/change-spot`,
+  eventInvite: (id: string) => `/events/${id}/invite`, // POST InviteToEventRequest → 204 (#345)
+  declineInvite: (id: string) => `/events/${id}/decline`, // POST → 204: a direct invitee's "Can't make it" after close (#345)
   runMatcher: "/internal/run-matcher", // header X-Internal-Secret
   runScheduler: "/scheduler/run", // POST → 202, runs the scheduler with force; the card arrives over the socket
   expenses: (id: string) => `/events/${id}/expenses`,

@@ -4,7 +4,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { EventCardPayload, EventsListResponse } from "@web/contract";
 
 const mocks = vi.hoisted(() => ({ findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), groupFindMany: vi.fn() }));
-vi.mock("../../lib/prisma", () => ({ prisma: { event: mocks, friendship: mocks, explicitGroup: { findMany: mocks.groupFindMany }, user: { findUnique: async () => ({ passwordChangedAt: null }) } } }));
+const participantMocks = vi.hoisted(() => ({ findMany: vi.fn(), create: vi.fn(async (args) => args), update: vi.fn() }));
+vi.mock("../../lib/prisma", () => ({ prisma: {
+  event: mocks, friendship: mocks, explicitGroup: { findMany: mocks.groupFindMany }, eventParticipant: participantMocks,
+  $transaction: async (ops: unknown[]) => Promise.all(ops),
+  user: { findUnique: async () => ({ passwordChangedAt: null }) },
+} }));
+const realtimeMocks = vi.hoisted(() => ({ emitToUsers: vi.fn(), pushEventCreated: vi.fn(async () => {}) }));
+vi.mock("../../realtime", () => realtimeMocks);
 
 const matcherMocks = vi.hoisted(() => ({
   withMatcherMutex: vi.fn(async (cb) => cb()),
@@ -406,5 +413,95 @@ describe("events router", () => {
     expect(mocks.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ participants: { some: { userId: "1ee42e66-229c-4669-a148-cb7b1ea69545" } } }),
     }));
+  });
+});
+
+describe("inviting into an existing hangout (#345)", () => {
+  const carol = "1ee42e66-229c-4669-a148-cb7b1ea69545";
+  const dave = "4c1d3f0e-8a2b-4c6d-9e1f-2a3b4c5d6e7f";
+  const future = new Date(Date.now() + 24 * 3600_000);
+  const inviteEvent = (over: Record<string, unknown> = {}) => ({
+    id: eventId, status: "voting", isMixer: false, startsAt: future, voteClosesAt: new Date(Date.now() + 3600_000),
+    vibeTag: "dinner", timezone: "America/New_York", ...over,
+  });
+  // alice created it, bob came in directly, ghost passed.
+  const rows = (over: Record<string, unknown> = {}) => [
+    { userId: alice, voteStatus: "voted", inviteSource: "creator", sourceGroupIds: [] },
+    { userId: bob, voteStatus: "invited", inviteSource: "direct", sourceGroupIds: [] },
+    { userId: ghost, voteStatus: "ghost_passed", inviteSource: "direct", sourceGroupIds: [] },
+  ].map((row) => ({ ...row, event: { isMixer: false, createdById: alice, sourceGroupId: null, sourceGroupIds: [], ...over } }));
+  const friends = (...ids: string[]) => ids.map((id) => {
+    const [userLowId, userHighId] = [alice, id].sort();
+    return { userLowId, userHighId, status: "accepted" };
+  });
+  const post = (path: string, userId: string, body?: unknown) => fetch(`${base}${path}`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${signToken(userId)}`, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  it("adds accepted friends as direct invitees and sends them the card", async () => {
+    mocks.findUnique.mockResolvedValueOnce(inviteEvent());
+    participantMocks.findMany.mockResolvedValueOnce(rows());
+    mocks.findMany.mockResolvedValueOnce(friends(carol, dave));
+    const response = await post(`/events/${eventId}/invite`, alice, { invitee_ids: [carol, dave] });
+    expect(response.status).toBe(204);
+    expect(participantMocks.create.mock.calls.map(([args]) => args.data)).toEqual([carol, dave].map((userId) => ({
+      eventId, userId, voteStatus: "invited", inviteSource: "direct", sourceGroupIds: [],
+    })));
+    expect(realtimeMocks.emitToUsers).toHaveBeenCalledWith([carol, dave], "event:created", { event_id: eventId });
+    expect(realtimeMocks.pushEventCreated).toHaveBeenCalledWith([carol, dave], eventId, expect.objectContaining({ vibeTag: "dinner" }));
+  });
+
+  it("lets a non-creator invite on a confirmed hangout, and silently skips people already in it", async () => {
+    mocks.findUnique.mockResolvedValueOnce(inviteEvent({ status: "confirmed", voteClosesAt: new Date(Date.now() - 60_000) }));
+    participantMocks.findMany.mockResolvedValueOnce(rows());
+    // bob can't see ghost (a direct invitee), so inviting ghost must look exactly like a fresh invite.
+    mocks.findMany.mockResolvedValueOnce([{ userLowId: [bob, ghost].sort()[0], userHighId: [bob, ghost].sort()[1], status: "accepted" }]);
+    const response = await post(`/events/${eventId}/invite`, bob, { invitee_ids: [ghost] });
+    expect(response.status).toBe(204);
+    expect(participantMocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-friends, and outsiders get a 404", async () => {
+    mocks.findUnique.mockResolvedValueOnce(inviteEvent());
+    participantMocks.findMany.mockResolvedValueOnce(rows());
+    mocks.findMany.mockResolvedValueOnce([]);
+    expect((await post(`/events/${eventId}/invite`, alice, { invitee_ids: [carol] })).status).toBe(400);
+
+    mocks.findUnique.mockResolvedValueOnce(inviteEvent());
+    participantMocks.findMany.mockResolvedValueOnce(rows());
+    expect((await post(`/events/${eventId}/invite`, carol, { invitee_ids: [dave] })).status).toBe(404);
+    expect((await post(`/events/${eventId}/invite`, alice, { invitee_ids: [] })).status).toBe(400);
+    expect(participantMocks.create).not.toHaveBeenCalled();
+  });
+
+  it("closes invites on Mixers and once the hangout has started", async () => {
+    mocks.findUnique.mockResolvedValueOnce(inviteEvent({ isMixer: true }));
+    participantMocks.findMany.mockResolvedValueOnce(rows());
+    expect((await post(`/events/${eventId}/invite`, alice, { invitee_ids: [carol] })).status).toBe(409);
+
+    mocks.findUnique.mockResolvedValueOnce(inviteEvent({ status: "confirmed", startsAt: new Date(Date.now() - 60_000), voteClosesAt: new Date(Date.now() - 3600_000) }));
+    participantMocks.findMany.mockResolvedValueOnce(rows());
+    expect((await post(`/events/${eventId}/invite`, alice, { invitee_ids: [carol] })).status).toBe(409);
+  });
+
+  it("lets a direct invitee bow out of a confirmed hangout, and nobody else", async () => {
+    const confirmed = inviteEvent({ status: "confirmed", voteClosesAt: new Date(Date.now() - 60_000) });
+    mocks.findUnique.mockResolvedValueOnce(confirmed);
+    participantMocks.findMany.mockResolvedValueOnce(rows());
+    expect((await post(`/events/${eventId}/decline`, bob)).status).toBe(204);
+    expect(participantMocks.update).toHaveBeenCalledWith({
+      where: { eventId_userId: { eventId, userId: bob } }, data: { voteStatus: "ghost_passed" },
+    });
+
+    mocks.findUnique.mockResolvedValueOnce(confirmed);
+    participantMocks.findMany.mockResolvedValueOnce(rows());
+    expect((await post(`/events/${eventId}/decline`, alice)).status).toBe(409); // the creator isn't a direct invitee
+
+    mocks.findUnique.mockResolvedValueOnce(inviteEvent()); // still voting: use Ghost Pass instead
+    participantMocks.findMany.mockResolvedValueOnce(rows());
+    expect((await post(`/events/${eventId}/decline`, bob)).status).toBe(409);
+    expect(participantMocks.update).toHaveBeenCalledTimes(1);
   });
 });
