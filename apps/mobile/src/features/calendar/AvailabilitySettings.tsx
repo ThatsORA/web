@@ -6,7 +6,7 @@ import { Me, routes } from "@web/contract";
 import type { z } from "zod";
 import { api } from "../../lib/api";
 import { roundedHome } from "../../lib/geo";
-import { createDeviceCalendarSync } from "./device";
+import { createDeviceCalendarSync, deviceTimezone } from "./device";
 import { GoogleCalendarSyncButton } from "./GoogleCalendarConnect";
 import { ManualAvailability } from "./ManualAvailability";
 import { UnifiedCalendarView } from "./UnifiedCalendarView";
@@ -51,7 +51,7 @@ export function AvailabilitySettings() {
         return;
       }
       const position = await Location.getCurrentPositionAsync({});
-      const body = roundedHome(position.coords);
+      const body = { ...roundedHome(position.coords), timezone: deviceTimezone() };
       const updated = await api(routes.me, Me, { method: "PATCH", body });
       setMe(updated);
     } catch (e) {
@@ -99,6 +99,7 @@ export function AvailabilitySettings() {
       <Card>
         <UnifiedCalendarView
           key={scheduleKey}
+          userTimezone={me?.timezone ?? deviceTimezone()}
           onScheduleChanged={refreshSchedule}
           actions={
             <>

@@ -237,7 +237,15 @@ export function UnifiedScheduleView({
   );
 }
 
-export function UnifiedCalendarView({ onScheduleChanged, actions }: { onScheduleChanged?: () => void; actions?: ReactNode }) {
+export function UnifiedCalendarView({
+  onScheduleChanged,
+  actions,
+  userTimezone,
+}: {
+  onScheduleChanged?: () => void;
+  actions?: ReactNode;
+  userTimezone?: string;
+}) {
   const router = useRouter();
   const [schedule, setSchedule] = useState<ScheduleDayGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -250,7 +258,7 @@ export function UnifiedCalendarView({ onScheduleChanged, actions }: { onSchedule
       api(routes.events, EventsListResponse).catch(() => ({ events: [] })),
     ])
       .then(([availRes, eventsRes]) => {
-        const grouped = transformScheduleItems(availRes.windows, eventsRes.events, availRes.busy_blocks);
+        const grouped = transformScheduleItems(availRes.windows, eventsRes.events, availRes.busy_blocks, userTimezone);
         setSchedule(grouped);
         setLoading(false);
       })
@@ -270,7 +278,7 @@ export function UnifiedCalendarView({ onScheduleChanged, actions }: { onSchedule
     ])
       .then(([availRes, eventsRes]) => {
         if (!cancelled) {
-          const grouped = transformScheduleItems(availRes.windows, eventsRes.events, availRes.busy_blocks);
+          const grouped = transformScheduleItems(availRes.windows, eventsRes.events, availRes.busy_blocks, userTimezone);
           setSchedule(grouped);
           setLoading(false);
         }

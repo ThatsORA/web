@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { transformScheduleItems } from "./scheduleTransform";
+import { formatDateLabel, formatTimeRange, getDateKey, transformScheduleItems } from "./scheduleTransform";
 import type { EventCardPayload } from "@web/contract";
 
 describe("scheduleTransform", () => {
-  it("transforms and groups free windows, busy blocks and web hangouts chronologically", () => {
+  it("transforms and groups free windows, busy blocks and web hangouts chronologically in UTC", () => {
     const freeWindows = [
       { starts_at: "2026-10-01T09:00:00.000Z", ends_at: "2026-10-01T12:00:00.000Z" },
     ];
@@ -36,7 +36,7 @@ describe("scheduleTransform", () => {
       },
     ];
 
-    const result = transformScheduleItems(freeWindows, events as EventCardPayload[], busyBlocks);
+    const result = transformScheduleItems(freeWindows, events as EventCardPayload[], busyBlocks, "UTC");
     expect(result.length).toBe(1);
     expect(result[0].dateKey).toBe("2026-10-01");
     expect(result[0].items.length).toBe(3);
@@ -54,6 +54,40 @@ describe("scheduleTransform", () => {
     expect(result[0].items[2].title).toBe("Dinner Hangout");
     expect(result[0].items[2].venueName).toBe("Sergio's Pizza");
     expect(result[0].items[2].status).toBe("confirmed");
+  });
+
+  it("groups evening events crossing UTC midnight into user local day in specified timezone", () => {
+    // 2026-10-02T01:00:00.000Z is 2026-10-01 21:00:00 (9:00 PM) in America/New_York (EDT, UTC-4)
+    const eveningEvent: Partial<EventCardPayload>[] = [
+      {
+        id: "evt-night",
+        status: "confirmed",
+        starts_at: "2026-10-02T01:00:00.000Z",
+        ends_at: "2026-10-02T03:00:00.000Z",
+        timezone: "America/New_York",
+        vibe_tag: "night_out",
+      },
+    ];
+
+    const result = transformScheduleItems([], eveningEvent as EventCardPayload[], [], "America/New_York");
+    expect(result.length).toBe(1);
+    // Grouped under Oct 1 in New York, not Oct 2
+    expect(result[0].dateKey).toBe("2026-10-01");
+    expect(result[0].items[0].subtitle).toMatch(/9:00\s?PM\s?–\s?11:00\s?PM/);
+  });
+
+  it("computes accurate date labels relative to user timezone", () => {
+    // Reference now: 2026-10-01 12:00:00 EDT (16:00:00 UTC)
+    const now = new Date("2026-10-01T16:00:00.000Z");
+
+    const todayDate = new Date("2026-10-02T01:00:00.000Z"); // 9:00 PM Oct 1 in NY -> "Today"
+    expect(formatDateLabel(todayDate, "America/New_York", now)).toBe("Today");
+
+    const tomorrowDate = new Date("2026-10-02T16:00:00.000Z"); // 12:00 PM Oct 2 in NY -> "Tomorrow"
+    expect(formatDateLabel(tomorrowDate, "America/New_York", now)).toBe("Tomorrow");
+
+    const futureDate = new Date("2026-10-05T16:00:00.000Z"); // Oct 5 in NY -> Mon, Oct 5
+    expect(formatDateLabel(futureDate, "America/New_York", now)).toBe("Mon, Oct 5");
   });
 
   it("only transforms confirmed hangouts and filters out voting or cancelled hangouts", () => {
