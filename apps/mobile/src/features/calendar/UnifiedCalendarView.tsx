@@ -122,7 +122,7 @@ export function UnifiedCalendarView() {
                   key={item.id}
                   onPress={() => {
                     if (item.eventId) {
-                      router.push(`/(main)/?eventId=${item.eventId}`);
+                      router.push({ pathname: "/", params: { eventId: item.eventId } });
                     }
                   }}
                   style={({ pressed }) => ({

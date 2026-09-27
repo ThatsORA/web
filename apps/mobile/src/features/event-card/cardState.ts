@@ -63,4 +63,40 @@ export const canOpenChat = (card: { viewer?: EventViewer | null }) => card.viewe
 export const isSquadHangout = (card: { viewer?: Pick<EventViewer, "invite_source"> | null }) =>
   card.viewer?.invite_source === "squad";
 
+/** Categorizes participants into responded (voted/confirmed), pending, and passed arrays. */
+export function participantBreakdown(card: EventCardPayload) {
+  const responded: { id: string; username: string; display_name?: string }[] = [];
+  const pending: { id: string; username: string; display_name?: string }[] = [];
+  const passed: { id: string; username: string; display_name?: string }[] = [];
+
+  for (const p of card.participants) {
+    if (p.passed === true) {
+      passed.push(p);
+    } else if (card.outcome?.attendees?.some((a) => a.id === p.id)) {
+      responded.push(p);
+    } else {
+      pending.push(p);
+    }
+  }
+
+  return { responded, pending, passed };
+}
+
+/** Formats time remaining for voting based on vote_closes_at ISO string. */
+export function votingTimeRemaining(voteClosesAtStr: string, now = Date.now()): string {
+  const closesAt = Date.parse(voteClosesAtStr);
+  const diffMs = closesAt - now;
+  if (diffMs <= 0) return "Voting ending…";
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin >= 60) {
+    const hours = Math.floor(diffMin / 60);
+    return `${hours}h remaining`;
+  }
+  if (diffMin >= 1) {
+    return `${diffMin}m remaining`;
+  }
+  return `${diffSec}s remaining`;
+}
+
 

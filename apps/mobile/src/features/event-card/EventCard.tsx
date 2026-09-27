@@ -8,10 +8,10 @@ import { ActionSheetIOS, ActivityIndicator, Linking, Platform, View } from "reac
 import { getToken } from "../../lib/api";
 import { CHAT_PATHNAME } from "../../lib/routes";
 import { userIdFromToken } from "../../lib/session";
-import { Badge, Button, Callout, Card, Txt, useTheme } from "../../ui";
+import { Badge, Button, Callout, Card, Chip, Txt, useTheme } from "../../ui";
 import { ExpenseForm, ExpenseLedger } from "../expenses";
 import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calendarSync";
-import { canChangeSpot, canOpenChat, cardKind, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, travelRows } from "./cardState";
+import { canChangeSpot, canOpenChat, cardKind, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows, votingTimeRemaining } from "./cardState";
 import { changeSpotPrompt } from "./changeSpot";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
 import { progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
@@ -96,6 +96,7 @@ function Header({ card, eyebrow, badge, onBrand }: { card: EventCardPayload; eye
 }
 
 function OpenCard({ card, actions, busy, notice }: Props) {
+  const t = useTheme();
   const kind = cardKind(card);
   const isSquad = isSquadHangout(card);
   const handleOpenChat = () => {
@@ -106,6 +107,7 @@ function OpenCard({ card, actions, busy, notice }: Props) {
   };
 
   const eyebrow = isSquad ? `Squad · ${vibeLabel(card.vibe_tag)}` : vibeLabel(card.vibe_tag);
+  const breakdown = participantBreakdown(card);
 
   return (
     <Card tint={isSquad}>
@@ -113,7 +115,10 @@ function OpenCard({ card, actions, busy, notice }: Props) {
 
       {kind === "voting" || kind === "waiting" ? (
         <>
-          <Badge label={progressLabel(card.progress)} />
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Badge label={progressLabel(card.progress)} />
+            <Txt variant="small" numeric>{votingTimeRemaining(card.vote_closes_at)}</Txt>
+          </View>
           {card.my_status === "ghost_passed" ? (
             <Txt variant="small">{passedNotice(card.viewer)}</Txt>
           ) : null}
@@ -135,7 +140,43 @@ function OpenCard({ card, actions, busy, notice }: Props) {
       {kind === "chatted" ? (
         <>
           <Badge tone="warning" label="Not enough votes" />
-          <Txt>Everyone’s free, you just need a place. Free: {freePeople(card).map((p) => p.display_name ?? p.username).join(", ")}</Txt>
+          <Txt variant="small">
+            {card.progress.responded === 1
+              ? "1 person voted before time ran out. Discuss options or nominate a spot in chat."
+              : `${card.progress.responded} of ${card.progress.total} people responded before voting closed.`}
+          </Txt>
+
+          <View style={{ gap: t.spacing.xs, marginVertical: t.spacing.xs }}>
+            {breakdown.responded.length > 0 ? (
+              <View style={{ gap: t.spacing.xs }}>
+                <Txt variant="small">Responded:</Txt>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.xs }}>
+                  {breakdown.responded.map((p) => (
+                    <Chip key={p.id} label={p.display_name ?? p.username} selected />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+            {breakdown.pending.length > 0 ? (
+              <View style={{ gap: t.spacing.xs }}>
+                <Txt variant="small">Didn’t vote:</Txt>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.xs }}>
+                  {breakdown.pending.map((p) => (
+                    <Chip key={p.id} label={p.display_name ?? p.username} />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </View>
+
+          {card.options.map((o) => (
+            <OptionRow
+              key={o.id ?? o.place_id}
+              option={o}
+              mine={!!o.id && o.id === card.my_option_id}
+              tally={o.id && card.outcome?.tallies ? card.outcome.tallies[o.id] : undefined}
+            />
+          ))}
         </>
       ) : null}
 
@@ -159,7 +200,19 @@ function OpenCard({ card, actions, busy, notice }: Props) {
   );
 }
 
-function OptionRow({ option, mine, disabled, onVote }: { option: EventOption; mine: boolean; disabled?: boolean; onVote: () => void }) {
+function OptionRow({
+  option,
+  mine,
+  tally,
+  disabled,
+  onVote,
+}: {
+  option: EventOption;
+  mine: boolean;
+  tally?: number;
+  disabled?: boolean;
+  onVote?: () => void;
+}) {
   const t = useTheme();
   return (
     <View
@@ -171,14 +224,23 @@ function OptionRow({ option, mine, disabled, onVote }: { option: EventOption; mi
         gap: t.spacing.xs,
       }}
     >
-      <Txt variant="label" color="heading">
-        {option.name}
-      </Txt>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <Txt variant="label" color="heading">
+          {option.name}
+        </Txt>
+        {tally !== undefined ? (
+          <Badge tone={tally > 0 ? "info" : undefined} label={`${tally} ${tally === 1 ? "vote" : "votes"}`} />
+        ) : null}
+      </View>
       <Txt variant="small" numeric>
         {option.facts_line}
       </Txt>
       {option.ai_blurb ? <Txt>{option.ai_blurb}</Txt> : null}
-      {mine ? <Badge tone="info" label="Your vote" /> : <Button label="Vote" onPress={onVote} disabled={disabled} />}
+      {mine ? (
+        <Badge tone="info" label="Your vote" />
+      ) : onVote ? (
+        <Button label="Vote" onPress={onVote} disabled={disabled} />
+      ) : null}
     </View>
   );
 }
