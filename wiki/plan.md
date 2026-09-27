@@ -250,8 +250,6 @@ events
 
 event_participants
   event_id, user_id, vote_status enum(invited, voted, ghost_passed, confirmed)
-  invite_source enum(creator, direct, squad) default 'direct'   -- #206; picked both ways → squad
-  squad_ids text[] default '{}'    -- the selected squads that brought them in; empty unless squad
   pk(event_id, user_id)
 
 event_options                      -- the 3 vote choices
@@ -537,17 +535,22 @@ so it never looks broken.
 
 ### Who sees what (#206)
 
-Every participant row stores how the person got in (`invite_source`) and,
-for squad invites, which selected squads brought them (`squad_ids`):
+How each person got in (`invite_source`) is derived from fields the
+event already has, not stored per participant (`inviteSource()` in
+`invitations.ts`):
 
-- **`creator`**: the human who made the hangout, when they aren't in a
-  selected squad. Automated hangouts have no creator row and no creator
-  view.
-- **`direct`**: picked as a person, or proposed automatically outside a
-  squad (close-friend cliques, later Mixers #215/#220).
-- **`squad`**: brought in by a selected squad. Someone picked both
-  directly and through a squad (or through several squads) is one row,
-  and squad rules apply.
+- **`creator`**: the participant who is the event's `created_by_id`.
+  Automated hangouts have no creator and no creator view.
+- **`squad`**: everyone else in an event with a `source_group_id` (today,
+  an automated squad proposal).
+- **`direct`**: everyone else: people picked for a user-made hangout, and
+  automated proposals outside a squad (close-friend cliques, later Mixers
+  #215/#220).
+
+Every event that exists today has one squad at most, so this is exact.
+Mixed events (several squads plus people, #207) need stored provenance
+per participant. That's a schema change for the schema steward, tracked in
+its own `schema` issue; until it lands, #207 can't record several squads.
 
 Pass kind follows the source: a direct invite's pass is a **Ghost Pass**
 (looks exactly like a vote, never shown to anyone); the creator's and a
@@ -559,7 +562,7 @@ viewer gets on the card, list, and any future chat membership or presence
 | Viewer | Sees these people | Sees these passes | Tallies after close |
 | --- | --- | --- | --- |
 | Human creator | Everyone (`viewer.full_roster`) | Visible passes; attendees after close, so they alone can infer a Ghost Pass | Yes |
-| Squad member | Themselves, the creator, and members of a squad they came in with | Those people's visible passes | Only if they can see everyone |
+| Squad member | Themselves, the creator, and the other squad members | Those people's visible passes | Only if they can see everyone |
 | Direct invitee | Themselves and the creator | The creator's visible pass | Only if they can see everyone |
 | Anyone, automated hangout | As above, with no creator | As above | As above |
 
@@ -755,7 +758,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-26 | **Profiles (#96, after the demo).** Every user in an API payload is a `PublicUser` `{ id, username, display_name }` where `display_name` falls back to the username. Avatar upload is deferred until a DigitalOcean Spaces bucket exists. |
 | 2026-09-26 | **Display labels (#211).** Andy owns how a person is labeled across the mobile app: `displayName()` in `apps/mobile/src/lib/displayName.ts` (the display name, else the username). Lists and profiles keep `@username` under the name where people need to tell accounts apart or search. Onboarding asks for the name right after sign-up (skippable, never on login). Label-only edits to Ojas's feature screens get Ojas's review; `features/friends/PersonLink.tsx` is co-owned. |
 | 2026-09-26 | **Demo location: around FIU's Modesto A. Maidique Campus (Miami).** It's the hackathon venue, so the presenter's live device location is on campus. |
-| 2026-09-26 | **Invite source and per-viewer privacy (#206).** Each participant stores `invite_source` (creator/direct/squad) and `squad_ids`; picked both ways means squad. Only the human creator sees the whole roster and can infer a Ghost Pass; squad members see their squad and its visible passes; direct invitees see themselves and the creator. Automated close-friend proposals are direct invites with no creator view; automated squad proposals use squad rules. The creator's own pass is visible to everyone (they're the host). This supersedes the shared participant card and attendee list (§9 "Who sees what"). **Backfill** (`scripts/backfill.ts`, every deploy): participants of events with `source_group_id` → squad with that squad; the event's `created_by_id` → creator; everyone else → direct. |
+| 2026-09-26 | **Invite source and per-viewer privacy (#206).** Each participant's `invite_source` (creator/direct/squad) is derived from the event's `created_by_id` and `source_group_id`, with no new columns (the schema stays with its steward). Only the human creator sees the whole roster and can infer a Ghost Pass; squad members see their squad and its visible passes; direct invitees see themselves and the creator. Automated close-friend proposals are direct invites with no creator view; automated squad proposals use squad rules. The creator's own pass is visible to everyone (they're the host). This supersedes the shared participant card and attendee list (§9 "Who sees what"). Stored per-participant provenance for mixed events (#207) is a `schema` issue for Ojas. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)
 
