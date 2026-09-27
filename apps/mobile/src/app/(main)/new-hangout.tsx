@@ -4,7 +4,7 @@
 import { EventCardPayload, Friend, FriendsResponse, Squad, SquadsResponse, routes, VibeTag } from "@web/contract";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { View } from "react-native";
+import { RefreshControl, View } from "react-native";
 import type { z } from "zod";
 import { FindingCard } from "../../features/event-card";
 import { inviteSearch } from "../../features/event-card/cardState";
@@ -40,6 +40,7 @@ export default function NewHangout() {
   const [squads, setSquads] = useState<SquadT[] | null>(null);
   const [friends, setFriends] = useState<FriendT[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedSquadIds, setSelectedSquadIds] = useState<string[]>([]);
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
 
@@ -55,19 +56,29 @@ export default function NewHangout() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Reload on every visit: squads and friends added elsewhere should show up here.
-  const loadData = useCallback(() => {
+  const loadData = useCallback(async () => {
     setLoadError(null);
-    Promise.all([
-      api(routes.squads, SquadsResponse).catch(() => ({ squads: [] })),
-      api(routes.friends, FriendsResponse).catch(() => ({ friends: [] })),
-    ])
-      .then(([sqRes, frRes]) => {
-        setSquads(sqRes.squads.filter((s) => s.my_status === "active"));
-        setFriends(frRes.friends);
-      })
-      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)));
+    const [sqRes, frRes] = await Promise.allSettled([
+      api(routes.squads, SquadsResponse),
+      api(routes.friends, FriendsResponse),
+    ]);
+    if (sqRes.status === "fulfilled") setSquads(sqRes.value.squads.filter((s) => s.my_status === "active"));
+    if (frRes.status === "fulfilled") setFriends(frRes.value.friends);
+    const failed = [sqRes, frRes].find((result) => result.status === "rejected");
+    if (failed?.status === "rejected") setLoadError(failed.reason instanceof Error ? failed.reason.message : String(failed.reason));
   }, []);
-  useFocusEffect(loadData);
+  useFocusEffect(useCallback(() => {
+    void loadData();
+  }, [loadData]));
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await loadData();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   const currentUserId = userIdFromToken(getToken());
   const activeSquads = squads ?? [];
@@ -169,6 +180,15 @@ export default function NewHangout() {
   return (
     <Screen
       title="New hangout"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void refresh()}
+          tintColor={t.colors.primary}
+          colors={[t.colors.primary]}
+          progressBackgroundColor={t.colors.surface}
+        />
+      }
       footer={<Button label="Find a time" onPress={() => void submit(week)} disabled={!canSubmit} />}
     >
       {submitError ? (

@@ -2,7 +2,7 @@
 import { Me, routes } from "@web/contract";
 import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { View } from "react-native";
+import { RefreshControl, View } from "react-native";
 import type { z } from "zod";
 import { api } from "../../lib/api";
 import { displayName } from "../../lib/displayName";
@@ -18,6 +18,8 @@ export default function You() {
   const t = useTheme();
   const [me, setMe] = useState<z.infer<typeof Me> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [settingsVersion, setSettingsVersion] = useState(0);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState(false);
 
@@ -33,6 +35,16 @@ export default function You() {
   useEffect(() => {
     void Promise.resolve().then(load);
   }, [load]);
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await load();
+      setSettingsVersion((version) => version + 1);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   // Replace, not push: back can't return to (main) once the session is gone (#54).
   async function logOut() {
@@ -50,7 +62,18 @@ export default function You() {
   }
 
   return (
-    <Screen title="You">
+    <Screen
+      title="You"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void refresh()}
+          tintColor={t.colors.primary}
+          colors={[t.colors.primary]}
+          progressBackgroundColor={t.colors.surface}
+        />
+      }
+    >
       <View style={{ gap: t.spacing.xl }}>
         {loadError ? (
           <View style={{ gap: t.spacing.sm }}>
@@ -73,13 +96,13 @@ export default function You() {
         ) : null}
 
         {/* Section: Favorites */}
-        <FavoritesSettings />
+        <FavoritesSettings key={settingsVersion} />
 
         {/* Section: Availability Settings mount point (Riley) */}
-        {AvailabilitySettings ? <AvailabilitySettings /> : null}
+        {AvailabilitySettings ? <AvailabilitySettings key={settingsVersion} /> : null}
 
         {/* Section: Close Friends Settings mount point (Ojas) */}
-        {CloseFriendsSettings ? <CloseFriendsSettings /> : null}
+        {CloseFriendsSettings ? <CloseFriendsSettings key={settingsVersion} /> : null}
 
         {/* Section: Account & Log out */}
         <Card>

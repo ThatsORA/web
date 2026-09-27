@@ -179,7 +179,13 @@ export function ChatScreen({ eventId, title, when, isEnded = false, onBack }: Pr
           }}
           keyboardShouldPersistTaps="handled"
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={t.colors.primary}
+              colors={[t.colors.primary]}
+              progressBackgroundColor={t.colors.surface}
+            />
           }
         >
           {nextCursor ? (
