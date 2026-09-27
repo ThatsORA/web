@@ -19,8 +19,11 @@ describe("voteClosesAt", () => {
   it("uses the timeout when the slot is far away", () => {
     expect(voteClosesAt(opened, new Date("2026-10-01T18:00:00Z"), 90)).toEqual(new Date("2026-09-26T12:01:30Z"));
   });
-  it("caps at 2 h before the slot", () => {
+  it("caps at 2 h before the slot when created < 24 h in advance", () => {
     expect(voteClosesAt(opened, new Date("2026-09-26T20:00:00Z"), 43200)).toEqual(new Date("2026-09-26T18:00:00Z"));
+  });
+  it("caps at 24 h before the slot when created >= 24 h in advance", () => {
+    expect(voteClosesAt(opened, new Date("2026-09-28T18:00:00Z"), 172800)).toEqual(new Date("2026-09-27T18:00:00Z"));
   });
 });
 

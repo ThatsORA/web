@@ -2,10 +2,17 @@
 import type { EventOption, VoteStatus } from "@web/contract";
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
-/** Voting closes at whichever comes first: opened + timeout, or 2 h before the slot. */
+/**
+ * Voting closes at whichever comes first: opened + timeout, or before the slot:
+ * - for events created >= 24 h in advance, voting closes 24 h before the slot;
+ * - for events created < 24 h in advance, voting closes 2 h before the slot.
+ */
 export function voteClosesAt(openedAt: Date, startsAt: Date, timeoutSec: number): Date {
-  return new Date(Math.min(openedAt.getTime() + timeoutSec * 1000, startsAt.getTime() - TWO_HOURS_MS));
+  const advanceMs = startsAt.getTime() - openedAt.getTime();
+  const leadBufferMs = advanceMs >= TWENTY_FOUR_HOURS_MS ? TWENTY_FOUR_HOURS_MS : TWO_HOURS_MS;
+  return new Date(Math.min(openedAt.getTime() + timeoutSec * 1000, startsAt.getTime() - leadBufferMs));
 }
 
 /** Open until the event resolves or its deadline passes, whichever comes first (the sweep can lag the deadline). */
