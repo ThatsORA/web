@@ -1,10 +1,11 @@
 // Owner: Andy — "+ New hangout" (#70, #208): pick squads and individual friends, an optional vibe and week, then
 // POST /events. The new card reaches the feed over the socket (`event:created`).
 // Invariant: privacy — the picker lists only people I added, never whether they added me back.
-import { EventCardPayload, FriendsResponse, SquadsResponse, routes, VibeTag, type Friend, type Squad } from "@web/contract";
+import { EventCardPayload, Friend, FriendsResponse, Squad, SquadsResponse, routes, VibeTag } from "@web/contract";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, View } from "react-native";
+import type { z } from "zod";
 import { FindingCard } from "../../features/event-card";
 import { vibeLabel } from "../../features/event-card/format";
 import { api, getToken } from "../../lib/api";
@@ -21,6 +22,9 @@ import { FRIENDS_HREF } from "../../lib/routes";
 import { userIdFromToken } from "../../lib/session";
 import { Button, Callout, Card, Chip, Screen, Txt, useTheme } from "../../ui";
 
+type SquadT = z.infer<typeof Squad>;
+type FriendT = z.infer<typeof Friend>;
+
 const WEEKS: { week: Week; label: string }[] = [
   { week: "this", label: "This week" },
   { week: "next", label: "Next week" },
@@ -30,8 +34,8 @@ type Phase = "form" | "finding" | "no_common_time" | "no_venues";
 
 export default function NewHangout() {
   const t = useTheme();
-  const [squads, setSquads] = useState<Squad[] | null>(null);
-  const [friends, setFriends] = useState<Friend[] | null>(null);
+  const [squads, setSquads] = useState<SquadT[] | null>(null);
+  const [friends, setFriends] = useState<FriendT[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedSquadIds, setSelectedSquadIds] = useState<string[]>([]);
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
