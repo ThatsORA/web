@@ -27,6 +27,7 @@ export default function MainLayout() {
   return <>
     {userId ? <CalendarForegroundSync key={userId} /> : null}
     <Tabs
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: t.colors.background },
