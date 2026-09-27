@@ -1,24 +1,24 @@
-// Owner: Andy — "+ New hangout" (#70): pick up to 5 friends, an optional vibe and week, then
+// Owner: Andy — "+ New hangout" (#70, #208): pick squads and individual friends, an optional vibe and week, then
 // POST /events. The new card reaches the feed over the socket (`event:created`).
 // Invariant: privacy — the picker lists only people I added, never whether they added me back.
-import { EventCardPayload, routes, VibeTag, type CloseFriend } from "@web/contract";
+import { EventCardPayload, FriendsResponse, SquadsResponse, routes, VibeTag, type Friend, type Squad } from "@web/contract";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { FindingCard } from "../../features/event-card";
 import { vibeLabel } from "../../features/event-card/format";
-import { getCloseFriends } from "../../features/friends/friendsApi";
-import { api } from "../../lib/api";
+import { api, getToken } from "../../lib/api";
 import { displayName } from "../../lib/displayName";
 import {
   MAX_INVITEES,
   buildCreateEventRequest,
+  getDeduplicatedInvitees,
   noMatchReason,
   otherWeek,
-  toggleInvitee,
   type Week,
 } from "../../lib/newHangout";
 import { FRIENDS_HREF } from "../../lib/routes";
+import { userIdFromToken } from "../../lib/session";
 import { Button, Callout, Card, Chip, Screen, Txt, useTheme } from "../../ui";
 
 const WEEKS: { week: Week; label: string }[] = [
@@ -30,30 +30,53 @@ type Phase = "form" | "finding" | "no_common_time" | "no_venues";
 
 export default function NewHangout() {
   const t = useTheme();
-  const [friends, setFriends] = useState<CloseFriend[] | null>(null);
+  const [squads, setSquads] = useState<Squad[] | null>(null);
+  const [friends, setFriends] = useState<Friend[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selectedSquadIds, setSelectedSquadIds] = useState<string[]>([]);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+  const [squadsOpen, setSquadsOpen] = useState(true);
+  const [peopleOpen, setPeopleOpen] = useState(true);
   const [vibe, setVibe] = useState<VibeTag | null>(null);
   const [week, setWeek] = useState<Week | null>(null);
   const [phase, setPhase] = useState<Phase>("form");
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Reload on every visit: friends added on the Friends tab should show up here.
-  const loadFriends = useCallback(() => {
+  // Reload on every visit: squads and friends added elsewhere should show up here.
+  const loadData = useCallback(() => {
     setLoadError(null);
-    getCloseFriends()
-      .then(setFriends)
+    Promise.all([
+      api(routes.squads, SquadsResponse).catch(() => ({ squads: [] })),
+      api(routes.friends, FriendsResponse).catch(() => ({ friends: [] })),
+    ])
+      .then(([sqRes, frRes]) => {
+        setSquads(sqRes.squads.filter((s) => s.my_status === "active"));
+        setFriends(frRes.friends);
+      })
       .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)));
   }, []);
-  useFocusEffect(loadFriends);
+  useFocusEffect(loadData);
+
+  const currentUserId = userIdFromToken(getToken());
+  const activeSquads = squads ?? [];
+  const eligibleFriends = friends ?? [];
+
+  const { inviteeIds, squadMemberIds, totalCount, isValidCount } = getDeduplicatedInvitees(
+    selectedSquadIds,
+    selectedFriendIds,
+    activeSquads,
+    currentUserId,
+  );
 
   async function submit(forWeek: Week | null) {
-    const body = buildCreateEventRequest({ inviteeIds: selected, vibe, week: forWeek }, new Date());
+    if (!isValidCount) return;
+    const body = buildCreateEventRequest({ inviteeIds, vibe, week: forWeek }, new Date());
     setSubmitError(null);
     setPhase("finding");
     try {
       await api(routes.events, EventCardPayload, { method: "POST", body });
-      setSelected([]);
+      setSelectedSquadIds([]);
+      setSelectedFriendIds([]);
       setVibe(null);
       setWeek(null);
       setPhase("form");
@@ -117,41 +140,124 @@ export default function NewHangout() {
         <Button
           label="Find a time"
           onPress={() => void submit(week)}
-          disabled={selected.length === 0}
+          disabled={!isValidCount}
         />
       }
     >
       {submitError ? <Callout tone="danger">{submitError}</Callout> : null}
 
       <Card>
-        <Txt variant="section">Who’s coming</Txt>
-        <Txt variant="small" numeric>
-          {selected.length} of {MAX_INVITEES} picked
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <Txt variant="section">Who’s coming</Txt>
+          <Txt variant="small" numeric>
+            {totalCount} of 6 people total ({inviteeIds.length} of {MAX_INVITEES} picked)
+          </Txt>
+        </View>
+
+        <Txt variant="small">
+          Squad invitees use visible Pass and directly invited people use Ghost Pass; overlap uses squad rules.
         </Txt>
+
         {loadError ? (
           <>
-            <Callout tone="danger" title="Couldn't load friends">
+            <Callout tone="danger" title="Couldn't load squads and friends">
               {loadError}
             </Callout>
-            <Button label="Try again" variant="secondary" onPress={loadFriends} />
+            <Button label="Try again" variant="secondary" onPress={loadData} />
           </>
-        ) : friends && friends.length === 0 ? (
-          <>
-            <Txt variant="small">Add friends first, then invite them here.</Txt>
-            <Button label="Add friends" variant="outline" onPress={() => router.push(FRIENDS_HREF)} />
-          </>
-        ) : (
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm }}>
-            {(friends ?? []).map((f) => (
-              <Chip
-                key={f.id}
-                label={displayName(f)}
-                selected={selected.includes(f.id)}
-                onPress={() => setSelected((s) => toggleInvitee(s, f.id))}
-              />
-            ))}
-          </View>
-        )}
+        ) : null}
+
+        {/* Section 1: Squads */}
+        <View style={{ gap: t.spacing.xs, marginTop: t.spacing.xs }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Toggle Squads Section"
+            onPress={() => setSquadsOpen((o) => !o)}
+            style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: t.spacing.xs }}
+          >
+            <Txt variant="title">Squads ({activeSquads.length})</Txt>
+            <Txt variant="small">{squadsOpen ? "Collapse" : "Expand"}</Txt>
+          </Pressable>
+
+          {squadsOpen ? (
+            activeSquads.length === 0 ? (
+              <Txt variant="small">No active squads yet.</Txt>
+            ) : (
+              <View style={{ gap: t.spacing.xs }}>
+                {activeSquads.map((sq) => {
+                  const selected = selectedSquadIds.includes(sq.id);
+                  const activeMembers = sq.members.filter((m) => m.status === "active" && m.id !== currentUserId);
+                  const memberNames = activeMembers.map(displayName).join(", ");
+                  return (
+                    <View key={sq.id} style={{ gap: t.spacing.xs }}>
+                      <Chip
+                        label={sq.name}
+                        selected={selected}
+                        onPress={() =>
+                          setSelectedSquadIds((s) =>
+                            s.includes(sq.id) ? s.filter((x) => x !== sq.id) : [...s, sq.id],
+                          )
+                        }
+                      />
+                      {selected ? (
+                        <Txt variant="small" style={{ paddingLeft: t.spacing.xs }}>
+                          Active members: {memberNames || "Only you"}
+                        </Txt>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
+            )
+          ) : null}
+        </View>
+
+        {/* Section 2: People */}
+        <View style={{ gap: t.spacing.xs, marginTop: t.spacing.xs }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Toggle People Section"
+            onPress={() => setPeopleOpen((o) => !o)}
+            style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: t.spacing.xs }}
+          >
+            <Txt variant="title">People ({eligibleFriends.length})</Txt>
+            <Txt variant="small">{peopleOpen ? "Collapse" : "Expand"}</Txt>
+          </Pressable>
+
+          {peopleOpen ? (
+            eligibleFriends.length === 0 ? (
+              <View style={{ gap: t.spacing.xs }}>
+                <Txt variant="small">Add friends first, then invite them here.</Txt>
+                <Button label="Add friends" variant="outline" onPress={() => router.push(FRIENDS_HREF)} />
+              </View>
+            ) : (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm }}>
+                {eligibleFriends.map((f) => {
+                  const selected = selectedFriendIds.includes(f.id);
+                  const inSelectedSquad = squadMemberIds.includes(f.id);
+                  return (
+                    <Chip
+                      key={f.id}
+                      label={displayName(f)}
+                      selected={selected || inSelectedSquad}
+                      onPress={() =>
+                        setSelectedFriendIds((s) =>
+                          s.includes(f.id) ? s.filter((x) => x !== f.id) : [...s, f.id],
+                        )
+                      }
+                    />
+                  );
+                })}
+              </View>
+            )
+          ) : null}
+        </View>
+
+        {!isValidCount && inviteeIds.length > MAX_INVITEES ? (
+          <Callout tone="danger">
+            Hangouts are limited to 6 people max (including you). Pick fewer squads or people.
+          </Callout>
+        ) : null}
       </Card>
 
       <Card>

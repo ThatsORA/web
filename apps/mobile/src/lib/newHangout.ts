@@ -14,6 +14,61 @@ export function toggleInvitee(selected: string[], id: string): string[] {
   return selected.length >= MAX_INVITEES ? selected : [...selected, id];
 }
 
+export type SquadMemberLike = { id: string; status: string };
+export type SquadLike = { id: string; name: string; members: SquadMemberLike[] };
+
+export interface DeduplicatedInviteesResult {
+  inviteeIds: string[];
+  squadMemberIds: string[];
+  directPersonIds: string[];
+  totalCount: number;
+  isValidCount: boolean;
+}
+
+/**
+ * Deduplicates invitees selected via squads and direct individual friend picks.
+ * Overlap between squads and individual picks is counted once.
+ * The creator (caller) is excluded from invitees and included in totalCount.
+ */
+export function getDeduplicatedInvitees(
+  selectedSquadIds: string[],
+  selectedPersonIds: string[],
+  squads: SquadLike[],
+  creatorId?: string | null,
+): DeduplicatedInviteesResult {
+  const squadMemberIdSet = new Set<string>();
+  const selectedSquadSet = new Set(selectedSquadIds);
+
+  for (const squad of squads) {
+    if (selectedSquadSet.has(squad.id)) {
+      for (const member of squad.members) {
+        if (member.status === "active" && member.id !== creatorId) {
+          squadMemberIdSet.add(member.id);
+        }
+      }
+    }
+  }
+
+  const directPersonIdSet = new Set<string>();
+  for (const personId of selectedPersonIds) {
+    if (personId !== creatorId) {
+      directPersonIdSet.add(personId);
+    }
+  }
+
+  const inviteeIds = Array.from(new Set([...squadMemberIdSet, ...directPersonIdSet]));
+  const totalCount = inviteeIds.length + 1;
+  const isValidCount = inviteeIds.length >= 1 && inviteeIds.length <= MAX_INVITEES;
+
+  return {
+    inviteeIds,
+    squadMemberIds: Array.from(squadMemberIdSet),
+    directPersonIds: Array.from(directPersonIdSet),
+    totalCount,
+    isValidCount,
+  };
+}
+
 /**
  * Monday-start weeks in the phone's local time, sent as instants.
  * "this": now until next Monday 00:00. "next": next Monday 00:00 until the Monday after.

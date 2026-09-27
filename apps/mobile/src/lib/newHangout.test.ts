@@ -1,7 +1,7 @@
 import { CreateEventRequest } from "@web/contract";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { MAX_INVITEES, buildCreateEventRequest, noMatchReason, otherWeek, toggleInvitee, weekRange } from "./newHangout";
+import { MAX_INVITEES, buildCreateEventRequest, getDeduplicatedInvitees, noMatchReason, otherWeek, toggleInvitee, weekRange } from "./newHangout";
 
 const ids = Array.from({ length: 6 }, (_, i) => `00000000-0000-4000-8000-00000000000${i}`);
 
@@ -75,5 +75,46 @@ describe("noMatchReason", () => {
     expect(noMatchReason(new ApiError(422, { error: "no_venues" }))).toBe("no_venues");
     expect(noMatchReason(new ApiError(400, { error: "invalid_invitees" }))).toBeNull();
     expect(noMatchReason(new Error("network"))).toBeNull();
+  });
+});
+
+describe("getDeduplicatedInvitees", () => {
+  const creator = ids[0];
+  const squad1 = {
+    id: "sq-1",
+    name: "Roommates",
+    members: [
+      { id: creator, status: "active" },
+      { id: ids[1], status: "active" },
+      { id: ids[2], status: "active" },
+      { id: ids[3], status: "invited" }, // non-active
+    ],
+  };
+
+  it("extracts active squad members excluding creator", () => {
+    const res = getDeduplicatedInvitees(["sq-1"], [], [squad1], creator);
+    expect(res.inviteeIds).toEqual([ids[1], ids[2]]);
+    expect(res.totalCount).toBe(3); // 2 invitees + creator
+    expect(res.isValidCount).toBe(true);
+  });
+
+  it("counts overlap between squad and direct picks once", () => {
+    const res = getDeduplicatedInvitees(["sq-1"], [ids[2], ids[4]], [squad1], creator);
+    expect(res.inviteeIds).toEqual([ids[1], ids[2], ids[4]]);
+    expect(res.squadMemberIds).toEqual([ids[1], ids[2]]);
+    expect(res.directPersonIds).toEqual([ids[2], ids[4]]);
+    expect(res.totalCount).toBe(4);
+    expect(res.isValidCount).toBe(true);
+  });
+
+  it("prevents submission outside 2-6 person limit (0 invitees or >5 invitees)", () => {
+    const emptyRes = getDeduplicatedInvitees([], [], [squad1], creator);
+    expect(emptyRes.totalCount).toBe(1);
+    expect(emptyRes.isValidCount).toBe(false);
+
+    const sixInvitees = [ids[1], ids[2], ids[3], ids[4], ids[5], "00000000-0000-4000-8000-000000000006"];
+    const tooManyRes = getDeduplicatedInvitees([], sixInvitees, [], creator);
+    expect(tooManyRes.totalCount).toBe(7);
+    expect(tooManyRes.isValidCount).toBe(false);
   });
 });
