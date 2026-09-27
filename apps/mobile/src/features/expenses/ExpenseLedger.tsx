@@ -1,8 +1,8 @@
 // Owner: Ojas — expense ledger component. Displays expenses, equal split calculations,
-// who owes whom breakdown, and settled toggles per split. Mounted on ConfirmedCard.
+// net balance breakdown, and settled toggles per split. Mounted on ConfirmedCard.
 import { ExpensesResponse, type Expense, type PatchExpenseSplitRequest, routes } from "@web/contract";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Modal, View } from "react-native";
 import { z } from "zod";
 import { api } from "../../lib/api";
 import { Badge, Button, Callout, Modal, Txt, useTheme } from "../../ui";
@@ -12,7 +12,10 @@ import {
   calculateWhoOwesWhom,
   canToggleSplit,
   formatDebtLine,
+  getDebtColorTone,
+  isUserInvolvedInDebt,
   type AttendeeInfo,
+  type DebtSummary,
 } from "./ledger";
 
 const VoidResponse = z.unknown();
@@ -24,7 +27,12 @@ export type ExpenseLedgerViewProps = {
   loading?: boolean;
   error?: string | null;
   togglingSplitId?: string | null;
+  confirmingDebt?: DebtSummary | null;
   onToggleSplit?: (splitId: string, nextSettled: boolean) => void;
+  onSettleDebt?: (fromUserId: string, toUserId: string) => void;
+  onPressSettleDebt?: (debt: DebtSummary) => void;
+  onConfirmSettleDebt?: (debt: DebtSummary) => void;
+  onCancelSettleDebt?: () => void;
   onAddExpense?: () => void;
   hideAddButton?: boolean;
   initialModalOpen?: boolean;
@@ -37,7 +45,12 @@ export function ExpenseLedgerView({
   loading = false,
   error = null,
   togglingSplitId = null,
+  confirmingDebt = null,
   onToggleSplit,
+  onSettleDebt,
+  onPressSettleDebt,
+  onConfirmSettleDebt,
+  onCancelSettleDebt,
   onAddExpense,
   hideAddButton = false,
   initialModalOpen = false,
@@ -53,6 +66,24 @@ export function ExpenseLedgerView({
       </View>
     );
   }
+
+  const handleConfirmSettle = (debt: DebtSummary) => {
+    if (onConfirmSettleDebt) {
+      onConfirmSettleDebt(debt);
+    } else if (onSettleDebt) {
+      onSettleDebt(debt.fromUserId, debt.toUserId);
+    } else if (onToggleSplit) {
+      const splitsToSettle = expenses.flatMap((exp) =>
+        exp.splits.filter((s) => {
+          if (s.settled) return false;
+          const isFromUser = s.user_id === debt.fromUserId && exp.paid_by === debt.toUserId;
+          const isToUser = s.user_id === debt.toUserId && exp.paid_by === debt.fromUserId;
+          return isFromUser || isToUser;
+        })
+      );
+      splitsToSettle.forEach((s) => onToggleSplit(s.id, true));
+    }
+  };
 
   return (
     <View style={{ gap: t.spacing.md }}>
@@ -76,7 +107,7 @@ export function ExpenseLedgerView({
         </View>
       ) : (
         <>
-          {/* Who owes whom summary box */}
+          {/* Net balance summary box */}
           <View
             style={{
               padding: t.spacing.sm,
@@ -87,19 +118,38 @@ export function ExpenseLedgerView({
               gap: t.spacing.xs,
             }}
           >
-            <Txt variant="label" color="heading">
-              Who owes whom
-            </Txt>
             {debts.length === 0 ? (
               <Txt variant="small" color="textMuted">
                 All balances settled
               </Txt>
             ) : (
-              debts.map((debt, i) => (
-                <Txt key={`${debt.fromUserId}-${debt.toUserId}-${i}`} variant="small">
-                  {formatDebtLine(debt, attendees, currentUserId)}
-                </Txt>
-              ))
+              debts.map((debt, i) => {
+                const isInvolved = isUserInvolvedInDebt(debt, currentUserId);
+                const debtColor = getDebtColorTone(debt, currentUserId);
+
+                return (
+                  <View
+                    key={`${debt.fromUserId}-${debt.toUserId}-${i}`}
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: t.spacing.sm,
+                    }}
+                  >
+                    <Txt variant="small" color={debtColor} style={{ flexShrink: 1 }}>
+                      {formatDebtLine(debt, attendees, currentUserId)}
+                    </Txt>
+                    {isInvolved && (onPressSettleDebt || onConfirmSettleDebt || onSettleDebt || onToggleSplit) ? (
+                      <Button
+                        label="Mark settled"
+                        variant="outline"
+                        onPress={() => (onPressSettleDebt ? onPressSettleDebt(debt) : handleConfirmSettle(debt))}
+                      />
+                    ) : null}
+                  </View>
+                );
+              })
             )}
           </View>
 
@@ -197,6 +247,57 @@ export function ExpenseLedgerView({
         </>
       )}
 
+      {/* Confirmation modal for net balance settlement */}
+      {confirmingDebt ? (
+        <Modal
+          visible={!!confirmingDebt}
+          transparent
+          animationType="fade"
+          onRequestClose={onCancelSettleDebt}
+        >
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
+              justifyContent: "center",
+              alignItems: "center",
+              padding: t.spacing.md,
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: t.colors.surface,
+                borderRadius: t.radius.sm,
+                borderColor: t.colors.border,
+                borderWidth: 1,
+                padding: t.spacing.md,
+                gap: t.spacing.md,
+                maxWidth: 400,
+                width: "100%",
+              }}
+            >
+              <Txt variant="section" color="heading">
+                Mark balance settled?
+              </Txt>
+              <Txt variant="body">
+                Are you sure you want to mark this balance as settled?
+              </Txt>
+              <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: t.spacing.sm }}>
+                <Button
+                  label="Cancel"
+                  variant="ghost"
+                  onPress={onCancelSettleDebt}
+                />
+                <Button
+                  label="Mark settled"
+                  onPress={() => handleConfirmSettle(confirmingDebt)}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
+
       {error ? <Callout tone="danger">{error}</Callout> : null}
     </View>
   );
@@ -223,6 +324,7 @@ export function ExpenseLedger({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [togglingSplitId, setTogglingSplitId] = useState<string | null>(null);
+  const [confirmingDebt, setConfirmingDebt] = useState<DebtSummary | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -265,6 +367,39 @@ export function ExpenseLedger({
     }
   };
 
+  const handleSettleDebt = async (fromUserId: string, toUserId: string) => {
+    const splitsToSettle = expenses.flatMap((exp) =>
+      exp.splits.filter((s) => {
+        if (s.settled) return false;
+        const isFromUser = s.user_id === fromUserId && exp.paid_by === toUserId;
+        const isToUser = s.user_id === toUserId && exp.paid_by === fromUserId;
+        return isFromUser || isToUser;
+      })
+    );
+
+    if (splitsToSettle.length === 0) return;
+
+    setError(null);
+    try {
+      const body: PatchExpenseSplitRequest = { settled: true };
+      await Promise.all(
+        splitsToSettle.map((split) =>
+          api(routes.expenseSplit(split.id), VoidResponse, { method: "PATCH", body })
+        )
+      );
+      const splitIds = new Set(splitsToSettle.map((s) => s.id));
+      setExpenses((prev) =>
+        prev.map((exp) => ({
+          ...exp,
+          splits: exp.splits.map((s) => (splitIds.has(s.id) ? { ...s, settled: true } : s)),
+        }))
+      );
+    } catch (err) {
+      console.warn("PATCH /expense-splits failed", err);
+      setError("Failed to update split status");
+    }
+  };
+
   return (
     <ExpenseLedgerView
       expenses={expenses}
@@ -273,9 +408,19 @@ export function ExpenseLedger({
       loading={loading}
       error={error}
       togglingSplitId={togglingSplitId}
+      confirmingDebt={confirmingDebt}
       onToggleSplit={handleToggleSplit}
+      onSettleDebt={handleSettleDebt}
+      onPressSettleDebt={(debt) => setConfirmingDebt(debt)}
+      onConfirmSettleDebt={(debt) => {
+        setConfirmingDebt(null);
+        void handleSettleDebt(debt.fromUserId, debt.toUserId);
+      }}
+      onCancelSettleDebt={() => setConfirmingDebt(null)}
       onAddExpense={onAddExpense}
       hideAddButton={hideAddButton}
     />
   );
 }
+
+

@@ -101,6 +101,23 @@ export function formatDebtLine(
   return `${fromName} owes ${toName} ${formatCents(debt.amountCents)}`;
 }
 
+/** Determines if a user is involved in a debt summary line (either as debtor or creditor). */
+export function isUserInvolvedInDebt(debt: DebtSummary, userId?: string | null): boolean {
+  if (!userId) return false;
+  return debt.fromUserId === userId || debt.toUserId === userId;
+}
+
+/** Determines text color tone for a debt summary line based on current user perspective. */
+export function getDebtColorTone(
+  debt: DebtSummary,
+  currentUserId?: string | null
+): "danger" | "success" | undefined {
+  if (!currentUserId) return undefined;
+  if (debt.fromUserId === currentUserId) return "danger";
+  if (debt.toUserId === currentUserId) return "success";
+  return undefined;
+}
+
 /** Only the payer or the debtor can toggle the settled state of a split (server returns 404 otherwise). */
 export function canToggleSplit(
   split: ExpenseSplit,
@@ -111,3 +128,4 @@ export function canToggleSplit(
   if (split.user_id === expense.paid_by) return false; // payer's own share is settled by definition
   return split.user_id === currentUserId || expense.paid_by === currentUserId;
 }
+
