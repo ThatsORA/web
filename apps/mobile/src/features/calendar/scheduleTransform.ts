@@ -12,6 +12,8 @@ export interface ScheduleItem {
   vibeTag?: EventCardPayload["vibe_tag"];
   eventId?: string;
   venueName?: string;
+  blockId?: string;
+  source?: string;
 }
 
 export interface ScheduleDayGroup {
@@ -56,7 +58,7 @@ function formatVibeName(vibe: string): string {
 export function transformScheduleItems(
   freeWindows: { starts_at: string; ends_at: string }[] = [],
   events: EventCardPayload[] = [],
-  busyBlocks: { starts_at: string; ends_at: string }[] = []
+  busyBlocks: { id?: string; starts_at: string; ends_at: string; source?: string }[] = []
 ): ScheduleDayGroup[] {
   const items: ScheduleItem[] = [];
 
@@ -75,12 +77,14 @@ export function transformScheduleItems(
   // Convert busy blocks
   busyBlocks.forEach((b, idx) => {
     items.push({
-      id: `busy-${idx}-${b.starts_at}`,
+      id: b.id ? `busy-${b.id}` : `busy-${idx}-${b.starts_at}`,
       type: "busy",
       startsAt: b.starts_at,
       endsAt: b.ends_at,
       title: "Busy",
       subtitle: formatTimeRange(b.starts_at, b.ends_at),
+      blockId: b.id,
+      source: b.source,
     });
   });
 

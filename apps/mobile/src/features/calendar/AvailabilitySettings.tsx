@@ -148,7 +148,7 @@ export function AvailabilitySettings() {
         <ManualAvailability onBlocksChanged={() => setScheduleKey((k) => k + 1)} />
 
         {/* Unified Schedule View */}
-        <UnifiedCalendarView key={scheduleKey} />
+        <UnifiedCalendarView key={scheduleKey} onScheduleChanged={() => setScheduleKey((k) => k + 1)} />
       </Card>
     </View>
   );

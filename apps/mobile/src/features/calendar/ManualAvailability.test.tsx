@@ -7,8 +7,8 @@ import {
   ManualAvailability,
   ManualAvailabilityView,
   parseDateTime,
+  TIME_PRESETS,
 } from "./ManualAvailability";
-import type { ManualBusyBlockItem } from "@web/contract";
 
 vi.mock("react-native", () => ({
   View: "View",
@@ -88,94 +88,61 @@ describe("ManualAvailability datetime helpers", () => {
 });
 
 describe("ManualAvailabilityView", () => {
-  it("exports ManualAvailability and ManualAvailabilityView functions", () => {
+  it("exports ManualAvailability, ManualAvailabilityView and TIME_PRESETS", () => {
     expect(typeof ManualAvailability).toBe("function");
     expect(typeof ManualAvailabilityView).toBe("function");
-  });
-
-  it("renders loading state", () => {
-    const rendered = elements(
-      ManualAvailabilityView({
-        blocks: [],
-        loading: true,
-        onSave: vi.fn(),
-        onDeleteBlock: vi.fn(),
-      })
-    );
-    expect(rendered.some((el) => el.type === "ActivityIndicator")).toBe(true);
-  });
-
-  it("renders empty state message when no blocks exist", () => {
-    const rendered = elements(
-      ManualAvailabilityView({
-        blocks: [],
-        onSave: vi.fn(),
-        onDeleteBlock: vi.fn(),
-      })
-    );
-    const texts = rendered
-      .filter((el) => el.type === Txt)
-      .map((el) => Children.toArray((el.props as { children: ReactNode }).children).join(""));
-    expect(texts).toContain("No manual busy times added.");
+    expect(TIME_PRESETS.length).toBe(4);
+    expect(TIME_PRESETS.map((p) => p.label)).toEqual([
+      "Morning 9am-12pm",
+      "Afternoon 12pm-5pm",
+      "Evening 5pm-9pm",
+      "Full Day 9am-5pm",
+    ]);
   });
 
   it("renders error callout when error prop is provided", () => {
     const rendered = elements(
       ManualAvailabilityView({
-        blocks: [],
         error: "Network failure",
         onSave: vi.fn(),
-        onDeleteBlock: vi.fn(),
       })
     );
     const callouts = rendered.filter((el) => el.type === Callout);
     expect(callouts.length).toBeGreaterThan(0);
   });
 
-  it("renders manual blocks and allows deleting", () => {
-    const onDelete = vi.fn();
-    const blocks: ManualBusyBlockItem[] = [
-      {
-        id: "b-1",
-        starts_at: "2026-10-01T13:00:00.000Z",
-        ends_at: "2026-10-01T15:00:00.000Z",
-        source: "manual",
-      },
-    ];
-
-    const rendered = elements(
-      ManualAvailabilityView({
-        blocks,
-        onSave: vi.fn(),
-        onDeleteBlock: onDelete,
-      })
-    );
-
-    const deleteBtn = rendered.find(
-      (el) => el.type === Button && (el.props as { label: string }).label === "Delete"
-    );
-    expect(deleteBtn).toBeDefined();
-
-    (deleteBtn?.props as { onPress?: () => void }).onPress?.();
-    expect(onDelete).toHaveBeenCalledWith("b-1");
-  });
-
-  it("renders add block form when isAdding is true", () => {
+  it("renders add block form with date and time presets when isAdding is true", () => {
     const onSave = vi.fn();
+    const onChangeStart = vi.fn();
+    const onChangeEnd = vi.fn();
+
     const rendered = elements(
       ManualAvailabilityView({
-        blocks: [],
         isAdding: true,
         onSave,
+        onChangeStartTimeStr: onChangeStart,
+        onChangeEndTimeStr: onChangeEnd,
       })
     );
     const texts = rendered
       .filter((el) => el.type === Txt)
       .map((el) => Children.toArray((el.props as { children: ReactNode }).children).join(""));
     expect(texts).toContain("Add Busy Block");
+    expect(texts).toContain("Date Presets");
+    expect(texts).toContain("Time Presets");
 
-    const saveBtn = rendered.find(
-      (el) => el.type === Button && (el.props as { label: string }).label === "Save Busy Time"
+    const buttons = rendered.filter((el) => el.type === Button);
+    const morningBtn = buttons.find(
+      (el) => (el.props as { label: string }).label === "Morning 9am-12pm"
+    );
+    expect(morningBtn).toBeDefined();
+
+    (morningBtn?.props as { onPress?: () => void }).onPress?.();
+    expect(onChangeStart).toHaveBeenCalledWith("09:00");
+    expect(onChangeEnd).toHaveBeenCalledWith("12:00");
+
+    const saveBtn = buttons.find(
+      (el) => (el.props as { label: string }).label === "Save Busy Time"
     );
     expect(saveBtn).toBeDefined();
     (saveBtn?.props as { onPress?: () => void }).onPress?.();

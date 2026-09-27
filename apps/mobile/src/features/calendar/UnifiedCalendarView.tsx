@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
 import { EventsListResponse, MyAvailabilityResponse, routes } from "@web/contract";
-import { Badge, Card, Txt, useTheme } from "../../ui";
+import { z } from "zod";
+import { Badge, Button, Card, Txt, useTheme } from "../../ui";
 import { api } from "../../lib/api";
 import { ScheduleDayGroup, transformScheduleItems } from "./scheduleTransform";
 
@@ -11,6 +12,8 @@ export type UnifiedScheduleViewProps = {
   loading?: boolean;
   error?: boolean;
   onSelectEvent?: (eventId: string) => void;
+  onDeleteBusyBlock?: (blockId: string) => void;
+  deletingBlockId?: string | null;
 };
 
 export function UnifiedScheduleView({
@@ -18,6 +21,8 @@ export function UnifiedScheduleView({
   loading = false,
   error = false,
   onSelectEvent,
+  onDeleteBusyBlock,
+  deletingBlockId,
 }: UnifiedScheduleViewProps) {
   const theme = useTheme();
 
@@ -131,20 +136,34 @@ export function UnifiedScheduleView({
                   <View
                     key={item.id}
                     style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
                       padding: theme.spacing.sm,
                       borderRadius: theme.radius.sm,
                       backgroundColor: theme.colors.surfaceMuted,
                       borderWidth: 1,
                       borderColor: theme.colors.border,
-                      opacity: 0.6,
+                      opacity: 0.9,
                     }}
                   >
-                    <Txt variant="body" color="textMuted">
-                      {item.title}
-                    </Txt>
-                    <Txt variant="small" color="textMuted" numeric>
-                      {item.subtitle}
-                    </Txt>
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="body" color="heading">
+                        {item.title}
+                      </Txt>
+                      <Txt variant="small" color="textMuted" numeric>
+                        {item.subtitle}
+                      </Txt>
+                    </View>
+                    {item.blockId && onDeleteBusyBlock ? (
+                      <Button
+                        label="Delete"
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => onDeleteBusyBlock(item.blockId!)}
+                        loading={deletingBlockId === item.blockId}
+                      />
+                    ) : null}
                   </View>
                 );
               }
@@ -208,11 +227,29 @@ export function UnifiedScheduleView({
   );
 }
 
-export function UnifiedCalendarView() {
+export function UnifiedCalendarView({ onScheduleChanged }: { onScheduleChanged?: () => void }) {
   const router = useRouter();
   const [schedule, setSchedule] = useState<ScheduleDayGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [deletingBlockId, setDeletingBlockId] = useState<string | null>(null);
+
+  const fetchSchedule = () => {
+    return Promise.all([
+      api(routes.myAvailability, MyAvailabilityResponse).catch(() => ({ windows: [], busy_blocks: [] })),
+      api(routes.events, EventsListResponse).catch(() => ({ events: [] })),
+    ])
+      .then(([availRes, eventsRes]) => {
+        const grouped = transformScheduleItems(availRes.windows, eventsRes.events, availRes.busy_blocks);
+        setSchedule(grouped);
+        setLoading(false);
+      })
+      .catch((e) => {
+        console.error("UnifiedCalendarView load error:", e);
+        setError(true);
+        setLoading(false);
+      });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -241,6 +278,21 @@ export function UnifiedCalendarView() {
     };
   }, []);
 
+  const handleDeleteBusyBlock = async (blockId: string) => {
+    setDeletingBlockId(blockId);
+    try {
+      await api(routes.manualBusyBlock(blockId), z.unknown(), {
+        method: "DELETE",
+      });
+      await fetchSchedule();
+      onScheduleChanged?.();
+    } catch (e) {
+      console.error("Failed to delete busy block", e);
+    } finally {
+      setDeletingBlockId(null);
+    }
+  };
+
   return (
     <UnifiedScheduleView
       schedule={schedule}
@@ -249,6 +301,8 @@ export function UnifiedCalendarView() {
       onSelectEvent={(eventId) => {
         router.push({ pathname: "/", params: { eventId } });
       }}
+      onDeleteBusyBlock={handleDeleteBusyBlock}
+      deletingBlockId={deletingBlockId}
     />
   );
 }

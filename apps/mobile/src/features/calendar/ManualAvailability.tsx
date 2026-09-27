@@ -1,14 +1,19 @@
 // Owner: Riley — manual availability entry for users without Apple or Google Calendars (#309).
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import React, { useState } from "react";
+import { View } from "react-native";
 import {
-  ManualBusyBlocksResponse,
   ManualBusyBlockItem,
   routes,
 } from "@web/contract";
-import { z } from "zod";
 import { Button, Callout, Card, TextField, Txt, useTheme } from "../../ui";
 import { api } from "../../lib/api";
+
+export const TIME_PRESETS = [
+  { label: "Morning 9am-12pm", start: "09:00", end: "12:00" },
+  { label: "Afternoon 12pm-5pm", start: "12:00", end: "17:00" },
+  { label: "Evening 5pm-9pm", start: "17:00", end: "21:00" },
+  { label: "Full Day 9am-5pm", start: "09:00", end: "17:00" },
+] as const;
 
 export function parseDateTime(dateStr: string, timeStr: string): Date | null {
   const trimmedDate = dateStr.trim();
@@ -69,9 +74,6 @@ export function getTomorrowDateString(): string {
 }
 
 export type ManualAvailabilityViewProps = {
-  blocks: ManualBusyBlockItem[];
-  loading?: boolean;
-  error?: string | null;
   isAdding?: boolean;
   onToggleAdding?: () => void;
   dateStr?: string;
@@ -82,15 +84,15 @@ export type ManualAvailabilityViewProps = {
   onChangeEndTimeStr?: (v: string) => void;
   validationError?: string | null;
   saving?: boolean;
-  deletingId?: string | null;
   onSave?: () => void;
+  error?: string | null;
+  blocks?: ManualBusyBlockItem[];
+  loading?: boolean;
+  deletingId?: string | null;
   onDeleteBlock?: (id: string) => void;
 };
 
 export function ManualAvailabilityView({
-  blocks,
-  loading = false,
-  error = null,
   isAdding = false,
   onToggleAdding,
   dateStr = getTodayDateString(),
@@ -101,9 +103,8 @@ export function ManualAvailabilityView({
   onChangeEndTimeStr,
   validationError = null,
   saving = false,
-  deletingId = null,
   onSave,
-  onDeleteBlock,
+  error = null,
 }: ManualAvailabilityViewProps) {
   const theme = useTheme();
 
@@ -139,17 +140,22 @@ export function ManualAvailabilityView({
           <Txt variant="section" color="heading">
             Add Busy Block
           </Txt>
-          <View style={{ flexDirection: "row", gap: theme.spacing.xs }}>
-            <Button
-              label="Today"
-              variant={dateStr === getTodayDateString() ? "primary" : "secondary"}
-              onPress={() => onChangeDateStr?.(getTodayDateString())}
-            />
-            <Button
-              label="Tomorrow"
-              variant={dateStr === getTomorrowDateString() ? "primary" : "secondary"}
-              onPress={() => onChangeDateStr?.(getTomorrowDateString())}
-            />
+          <View style={{ gap: theme.spacing.xs }}>
+            <Txt variant="label" color="textMuted">
+              Date Presets
+            </Txt>
+            <View style={{ flexDirection: "row", gap: theme.spacing.xs, flexWrap: "wrap" }}>
+              <Button
+                label="Today"
+                variant={dateStr === getTodayDateString() ? "primary" : "secondary"}
+                onPress={() => onChangeDateStr?.(getTodayDateString())}
+              />
+              <Button
+                label="Tomorrow"
+                variant={dateStr === getTomorrowDateString() ? "primary" : "secondary"}
+                onPress={() => onChangeDateStr?.(getTomorrowDateString())}
+              />
+            </View>
           </View>
           <TextField
             label="Date (YYYY-MM-DD)"
@@ -157,6 +163,27 @@ export function ManualAvailabilityView({
             onChangeText={onChangeDateStr}
             placeholder="2026-10-01"
           />
+          <View style={{ gap: theme.spacing.xs }}>
+            <Txt variant="label" color="textMuted">
+              Time Presets
+            </Txt>
+            <View style={{ flexDirection: "row", gap: theme.spacing.xs, flexWrap: "wrap" }}>
+              {TIME_PRESETS.map((preset) => {
+                const isSelected = startTimeStr === preset.start && endTimeStr === preset.end;
+                return (
+                  <Button
+                    key={preset.label}
+                    label={preset.label}
+                    variant={isSelected ? "primary" : "secondary"}
+                    onPress={() => {
+                      onChangeStartTimeStr?.(preset.start);
+                      onChangeEndTimeStr?.(preset.end);
+                    }}
+                  />
+                );
+              })}
+            </View>
+          </View>
           <TextField
             label="Start Time"
             value={startTimeStr}
@@ -177,79 +204,17 @@ export function ManualAvailabilityView({
           />
         </Card>
       ) : null}
-
-      {loading ? (
-        <ActivityIndicator size="small" />
-      ) : blocks.length === 0 ? (
-        <Txt color="textMuted">No manual busy times added.</Txt>
-      ) : (
-        blocks.map((block) => (
-          <View
-            key={block.id}
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: theme.spacing.sm,
-              padding: theme.spacing.sm,
-              backgroundColor: theme.colors.surfaceMuted,
-              borderRadius: theme.radius.sm,
-              borderColor: theme.colors.border,
-              borderWidth: 1,
-              opacity: 0.9,
-            }}
-          >
-            <View style={{ flex: 1, minWidth: 140 }}>
-              <Txt variant="body" color="heading">
-                {formatManualDate(block.starts_at)}
-              </Txt>
-              <Txt variant="small" color="textMuted" numeric>
-                {formatManualTimeRange(block.starts_at, block.ends_at)}
-              </Txt>
-            </View>
-            <Button
-              label="Delete"
-              variant="ghost"
-              size="sm"
-              onPress={() => onDeleteBlock?.(block.id)}
-              loading={deletingId === block.id}
-            />
-          </View>
-        ))
-      )}
     </View>
   );
 }
 
 export function ManualAvailability({ onBlocksChanged }: { onBlocksChanged?: () => void }) {
-  const [blocks, setBlocks] = useState<ManualBusyBlockItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const [dateStr, setDateStr] = useState(getTodayDateString());
   const [startTimeStr, setStartTimeStr] = useState("09:00");
   const [endTimeStr, setEndTimeStr] = useState("17:00");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
-
-  const fetchBlocks = () => {
-    return api(routes.manualBusyBlocks, ManualBusyBlocksResponse)
-      .then((res) => {
-        setBlocks(res.blocks);
-        setLoading(false);
-      })
-      .catch((e) => {
-        setError(e instanceof Error ? e.message : "Failed to load manual busy times.");
-        setLoading(false);
-      });
-  };
-
-  useEffect(() => {
-    void fetchBlocks();
-  }, []);
 
   const handleSave = async () => {
     setValidationError(null);
@@ -272,7 +237,6 @@ export function ManualAvailability({ onBlocksChanged }: { onBlocksChanged?: () =
         method: "POST",
         body: { starts_at: startD.toISOString(), ends_at: endD.toISOString() },
       });
-      await fetchBlocks();
       setIsAdding(false);
       onBlocksChanged?.();
     } catch (e) {
@@ -282,26 +246,8 @@ export function ManualAvailability({ onBlocksChanged }: { onBlocksChanged?: () =
     }
   };
 
-  const handleDeleteBlock = async (id: string) => {
-    setDeletingId(id);
-    try {
-      await api(routes.manualBusyBlock(id), z.unknown(), {
-        method: "DELETE",
-      });
-      setBlocks((prev) => prev.filter((b) => b.id !== id));
-      onBlocksChanged?.();
-    } catch (e) {
-      console.error("Failed to delete busy block", e);
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
   return (
     <ManualAvailabilityView
-      blocks={blocks}
-      loading={loading}
-      error={error}
       isAdding={isAdding}
       onToggleAdding={() => {
         setIsAdding(!isAdding);
@@ -315,9 +261,7 @@ export function ManualAvailability({ onBlocksChanged }: { onBlocksChanged?: () =
       onChangeEndTimeStr={setEndTimeStr}
       validationError={validationError}
       saving={saving}
-      deletingId={deletingId}
       onSave={handleSave}
-      onDeleteBlock={handleDeleteBlock}
     />
   );
 }
