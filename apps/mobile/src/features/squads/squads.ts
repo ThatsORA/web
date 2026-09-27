@@ -30,6 +30,7 @@ const MESSAGES: Record<string, string> = {
   already_member: "They're already in this squad.",
   squad_full: "Squads hold up to 6 people.",
   invalid_invitees: "Pick at least one friend.",
+  not_found: "Squad or invitation no longer exists.",
 };
 
 /** User-facing message for a failed squad action. `error` is the server's `{ error }` code, if any. */
