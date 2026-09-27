@@ -54,16 +54,13 @@ export function FriendsScreen() {
   }
 
   return (
-    <Screen
-      title="Friends"
-      subtitle="Connect with friends and star your close friends. Close friends are completely private — nobody is told, and you never see if they star you."
-    >
+    <Screen title="Friends">
       {/* Requests Inbox */}
       <RequestsInbox requests={requests} onRefresh={() => void refresh()} />
 
       {/* Search & Add Section */}
       <View style={{ gap: t.spacing.sm, marginTop: t.spacing.xs }}>
-        <Txt variant="section">Find people</Txt>
+        <Txt variant="section">Add new friends</Txt>
         <FriendSearch friends={friends} requests={requests} onRefresh={() => void refresh()} />
       </View>
 
