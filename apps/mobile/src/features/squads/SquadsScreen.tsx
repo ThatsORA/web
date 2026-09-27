@@ -8,7 +8,7 @@ import {
   SquadsResponse,
   routes,
 } from "@web/contract";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { View } from "react-native";
 import { z } from "zod";
