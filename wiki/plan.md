@@ -478,6 +478,50 @@ belongs to an open event whose slot overlaps.
 
 ### 6. Venue candidates (Riley)
 
+**Automated scheduler: nearby activities, no fixed list (#322).** For a
+squad proposal, the options are activity + place + their own time, found
+near the squad instead of drawn from the vibe's place types
+(`venues/discover.ts`, `intelligence/activities.ts`):
+
+1. **Discover (code).** One Places Nearby Search (New) around the
+   squad's home centroid, radius 5 km, `maxResultCount` 20, with
+   `LEISURE_TYPES`: 46 Table A types across food, drink, entertainment,
+   sports, outdoors and culture (the limit is 50 per request). Field
+   mask: `places.id, places.displayName, places.location,
+   places.primaryType, places.businessStatus, places.timeZone,
+   places.regularOpeningHours, places.rating, places.userRatingCount,
+   places.priceLevel`. `regularOpeningHours` makes it a Nearby Search
+   Enterprise request; rating, rating count and price are the same SKU,
+   and the rest are Pro, so none of them costs extra.
+2. **Filter (code).** Keep `OPERATIONAL` places that are open for at
+   least 45 minutes between the slot start and the end of the free
+   window. Opening-hours periods are read in the place's own
+   `timeZone` and turned into UTC instants; missing hours or a period
+   with no close count as open.
+3. **Rank (code).** The route matrix from §7, keeping the 15 best by
+   `route_score`.
+4. **Describe (Gemini, text only).** One call per squad returns, for
+   each place ID, an `activity` label (40 characters or fewer, like
+   "Bouldering") and `typical_minutes` (30–240). Zod validates each
+   entry: unknown IDs are dropped, and an invalid entry falls back to a
+   label from `primary_type` and 90 minutes. A failed call falls back
+   for every place.
+5. **Time (code).** Each option starts at the first 15-minute mark when
+   the place is open, never before the event's slot start (the voting
+   deadline is derived from it) and at least `MIN_LEAD_HOURS` out. It
+   lasts `typical_minutes` and ends inside both the free window and the
+   opening hours. Places where it doesn't fit are dropped.
+6. **Pick 3 (code).** `pickActivities(candidates)` returns the 3 best by
+   `route_score` with distinct activity labels. It's the seam where
+   preference fit (#311) will plug in. §8's Gemini text step writes the
+   blurbs; there's no venue-fit decision on this path.
+
+If that yields fewer than 3 options, or discovery fails, the scheduler
+falls back to the fixed-vibe venues below. Manual New hangout always
+uses the fixed vibes.
+
+**Fixed-vibe venues (manual New hangout, and the scheduler's fallback):**
+
 - Call Places API (New) Nearby Search centered on the centroid of the
   participants' home locations.
   - Radius is 4 km, widening to 8 km if fewer than 5 venues survive
@@ -522,6 +566,10 @@ belongs to an open event whose slot overlaps.
 ### 8. Venue Intelligence (Ojas; decision-model fit filter + Gemini text)
 
 **Called as** `curateVenues(RankedVenue[], context) → EventOption[3]`.
+Automated activity options (§6, #322) call `curateActivities(picks,
+context)` instead: code has already picked the 3, so there's no fit
+filter, and the same Gemini text step writes the blurbs, keeping each
+option's `activity`, `starts_at` and `ends_at`.
 
 **Input:**
 - The top 5 venues, each with its structured fields, max and total travel
@@ -738,8 +786,10 @@ backstop if they ever do.
 ## Where AI Is and Isn't Used
 
 **Deterministic code:** busy-to-free math, group formation, vibe and slot,
-shortlist scoring, Places filtering, route-matrix scoring, and backup
-ordering. These form the complete fallback path.
+shortlist scoring, place discovery and filtering (including opening
+hours), route-matrix scoring, each option's time, picking the 3 options,
+and backup ordering. These form the complete fallback path. The automated
+flow has no fixed activity list: code finds what's open nearby (§6).
 
 **Decision model (`askDecision`, #228):** Jev `jev-1.13.0`, then the
 deterministic fallback. A fine-tuned, self-hosted Laya in front of Jev is
@@ -747,9 +797,11 @@ deferred to #274 (set `LAYA_URL` to turn it on). It makes three
 decisions: whether to propose to a group now, which feasible vibe to use
 (§5), and which venues fit the vibe (§8). Code computes every option it chooses from.
 
-**Gemini, text only:** the vote blurbs and the card's `match_reason` (§8).
-It also writes the synthetic training scenarios (#235). It never makes a
-decision.
+**Gemini, text only:** the vote blurbs and the card's `match_reason` (§8),
+and, in the automated flow, an activity label and typical length for each
+discovered place (§6, #322). It also writes the synthetic training
+scenarios (#235). It never makes a decision: code filters, times and
+picks the options.
 
 **Pitch note: teacher and student (next step, #274).** Gemini generates
 scheduling scenarios and Jev labels them with calibrated probabilities (the
@@ -875,6 +927,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-27 | **Laya deferred; scheduler ships on Jev (#196, #274).** We hit a GPU roadblock, so decisions run on Jev with the deterministic fallback. The training data (#235) and the format alignment (#256) stay. Fine-tuning, eval and hosting move to #274 (#236 and #237 closed). |
 | 2026-09-27 | **Venue swap privacy scoping (#333).** Venue swap routes (`POST /events/:id/report-closed` and `change-spot`) scope socket `event:venue_changed` and Expo push notifications to `eventAudience(…, false)` so that ghost-passers (direct invitees who passed) do not receive swap alerts. Callers must satisfy `canSeeEvent()` / `keepsAccess()`, and the 409 stale-venue response checks `canSeeEvent()` to prevent card leakage. |
 | 2026-09-27 | **Squads only; closeness deferred (#320).** The scheduler (weekly cron, demo button, `/internal/run-matcher`) proposes only to whole squads with 3–6 active members and to Riley's Mixers (#215); friend pairs, cliques and one-drop subsets are skipped. Manual hangouts are unchanged. Ranking is `0.6 · staleness + 0.4 · soonness`; closeness is documented as deferred in §5. The demo trio forms a squad instead of starring each other. |
+| 2026-09-27 | **No fixed activity list in the automated flow (#322).** One broad Places Nearby Search finds leisure places near the squad; code keeps the ones open in the free window, ranks them by worst commute, and times each option at or after the slot start. Gemini only labels each place as an activity with a typical length. Until preference fit (#311), code picks the 3 best by commute with distinct labels (`pickActivities`). Fewer than 3 → the fixed-vibe venues. Manual New hangout keeps the fixed vibes. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)
 
