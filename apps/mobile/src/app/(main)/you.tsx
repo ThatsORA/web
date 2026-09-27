@@ -96,13 +96,13 @@ export default function You() {
         ) : null}
 
         {/* Section: Favorites */}
-        <FavoritesSettings key={settingsVersion} />
+        <FavoritesSettings key={`favorites-${settingsVersion}`} />
 
         {/* Section: Availability Settings mount point (Riley) */}
-        {AvailabilitySettings ? <AvailabilitySettings key={settingsVersion} /> : null}
+        {AvailabilitySettings ? <AvailabilitySettings key={`availability-${settingsVersion}`} /> : null}
 
         {/* Section: Close Friends Settings mount point (Ojas) */}
-        {CloseFriendsSettings ? <CloseFriendsSettings key={settingsVersion} /> : null}
+        {CloseFriendsSettings ? <CloseFriendsSettings key={`close-friends-${settingsVersion}`} /> : null}
 
         {/* Section: Account & Log out */}
         <Card>
