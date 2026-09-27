@@ -119,7 +119,7 @@ export async function addToCalendar(
   }
 }
 
-/** On venue swap ("It's closed"), if previously added to device calendar, update the location. */
+/** On venue swap ("Change spot"), if previously added to device calendar, update the location. */
 export async function syncCalendarOnSwap(
   card: EventCardPayload,
   deps: { store: CalendarStore; calendar: CalendarModule }

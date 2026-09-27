@@ -1,6 +1,6 @@
 import { EventCardPayload } from "@web/contract";
 import { describe, expect, it } from "vitest";
-import { byStart, canReportClosed, cardKind, detectSwap, freePeople, hasEnded, travelRows } from "./cardState";
+import { byStart, canChangeSpot, cardKind, detectSwap, freePeople, hasEnded, travelRows } from "./cardState";
 import { FIXTURES, ME } from "./fixtures";
 
 const get = (label: string) => FIXTURES.find((f) => f.label === label)!.card;
@@ -69,8 +69,13 @@ describe("travelRows", () => {
 });
 
 describe("helpers", () => {
-  it("offers It's closed only on a confirmed event with a venue", () => {
-    expect(FIXTURES.filter((f) => canReportClosed(f.card)).map((f) => f.label)).toEqual(["Confirmed", "Confirmed (with match reason)", "Swapped"]);
+  it("offers Change spot only on a confirmed event with a venue", () => {
+    expect(FIXTURES.filter((f) => canChangeSpot(f.card)).map((f) => f.label)).toEqual(["Confirmed", "Confirmed (with match reason)", "Swapped"]);
+  });
+
+  it("hides Change spot from people who didn't vote for the plan (the server would refuse them)", () => {
+    expect(canChangeSpot({ ...get("Confirmed"), my_status: "ghost_passed" })).toBe(false);
+    expect(canChangeSpot({ ...get("Confirmed"), my_status: "invited" })).toBe(false);
   });
 
   it("chatted lists the attendees as free, falling back to participants", () => {

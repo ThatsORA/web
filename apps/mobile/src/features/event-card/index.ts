@@ -1,4 +1,4 @@
-// Owner: Andy — event card in every state + vote/Ghost Pass/It's closed wiring
+// Owner: Andy — event card in every state + vote/Ghost Pass/Change spot wiring
 export { appleDirectionsUrl, directionsUrl, googleDirectionsUrl, type VenueDirectionsLocation } from "./directions";
 export { EmptyFeedCard, EventCard, FindingCard, type CardActions } from "./EventCard";
 export { FIXTURES } from "./fixtures";

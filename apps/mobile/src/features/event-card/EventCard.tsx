@@ -9,20 +9,21 @@ import { CHAT_PATHNAME } from "../../lib/routes";
 import { Badge, Button, Callout, Card, Txt, useTheme } from "../../ui";
 import { ExpenseForm } from "../expenses";
 import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calendarSync";
-import { canReportClosed, cardKind, freePeople, hasEnded, travelRows } from "./cardState";
+import { canChangeSpot, cardKind, freePeople, hasEnded, travelRows } from "./cardState";
+import { changeSpotPrompt } from "./changeSpot";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
 import { progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
 
 export type CardActions = {
   vote: (optionId: string) => void;
   ghostPass: () => void;
-  reportClosed: () => void;
+  changeSpot: () => void;
 };
 
 type Props = {
   card: EventCardPayload;
   actions: CardActions;
-  /** The venue changed since we first saw it confirmed ("It's closed" swap). */
+  /** The venue changed since we first saw it confirmed (someone tapped "Change spot"). */
   swapped?: boolean;
   busy?: boolean;
   notice?: string;
@@ -162,13 +163,14 @@ function OptionRow({ option, mine, disabled, onVote }: { option: EventOption; mi
   );
 }
 
-/** Violet `Card brand` header with the venue, then travel times, directions button and "It's closed". */
+/** Violet `Card brand` header with the venue, then travel times and the venue actions (directions, "Change spot"). */
 function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & { venue: EventOption }) {
   const t = useTheme();
   const [showExpense, setShowExpense] = useState(false);
   const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
   const [calendarNotice, setCalendarNotice] = useState<string | null>(null);
   const [addingCalendar, setAddingCalendar] = useState(false);
+  const [confirmingChange, setConfirmingChange] = useState(false);
   const status = card.status === "completed" ? "Done" : "Confirmed";
   const attendees = card.outcome?.attendees ?? [];
 
@@ -265,6 +267,20 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
           </View>
         ))}
         <Button label="Get directions" variant="outline" onPress={handleGetDirections} />
+        {canChangeSpot(card) ? (
+          confirmingChange ? (
+            <ChangeSpotConfirm
+              card={card}
+              onConfirm={() => {
+                setConfirmingChange(false);
+                actions.changeSpot();
+              }}
+              onCancel={() => setConfirmingChange(false)}
+            />
+          ) : (
+            <Button label="Change spot" variant="ghost" onPress={() => setConfirmingChange(true)} loading={busy} />
+          )
+        ) : null}
         <Button
           label={calendarMessage || "Add to calendar"}
           variant="outline"
@@ -273,9 +289,6 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
           disabled={busy}
         />
         {calendarNotice ? <Callout tone="warning">{calendarNotice}</Callout> : null}
-        {canReportClosed(card) ? (
-          <Button label="It's closed" variant="outline" onPress={actions.reportClosed} loading={busy} />
-        ) : null}
         {attendees.length > 0 ? (
           showExpense ? (
             <View style={{ gap: t.spacing.sm }}>
@@ -292,3 +305,16 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
   );
 }
 
+/** Names the next backup and asks before moving everyone there (#219). */
+function ChangeSpotConfirm({ card, onConfirm, onCancel }: { card: EventCardPayload; onConfirm: () => void; onCancel: () => void }) {
+  const { title, body } = changeSpotPrompt(card);
+  return (
+    <>
+      <Callout tone="info" title={title}>
+        {body}
+      </Callout>
+      <Button label="Change for everyone" variant="outline" onPress={onConfirm} />
+      <Button label="Keep this spot" variant="ghost" onPress={onCancel} />
+    </>
+  );
+}
