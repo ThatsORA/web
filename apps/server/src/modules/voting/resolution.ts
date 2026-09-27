@@ -28,7 +28,7 @@ export interface ResolveInput {
 export type Resolution =
   | { status: "expired" }
   | { status: "chatted" }
-  | { status: "confirmed"; winner: EventOption & { id: string }; backups: EventOption[] };
+  | { status: "confirmed"; winner: EventOption & { id: string }; backups: EventOption[]; wasTiebreaker?: boolean };
 
 export function resolveEvent({ participants, votes, options, unusedVenues }: ResolveInput): Resolution {
   const remaining = new Set(participants.filter((p) => p.voteStatus !== "ghost_passed").map((p) => p.userId));
@@ -45,5 +45,10 @@ export function resolveEvent({ participants, votes, options, unusedVenues }: Res
   );
   const [winner, ...losers] = ordered;
   if (!winner) return { status: "chatted" };
-  return { status: "confirmed", winner, backups: [...losers, ...unusedVenues] };
+
+  const topVotes = tally.get(winner.id) ?? 0;
+  const secondPlaceId = losers[0]?.id;
+  const wasTiebreaker = !!secondPlaceId && (tally.get(secondPlaceId) ?? 0) === topVotes && topVotes > 0;
+
+  return { status: "confirmed", winner, backups: [...losers, ...unusedVenues], wasTiebreaker };
 }
