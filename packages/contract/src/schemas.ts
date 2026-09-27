@@ -106,9 +106,35 @@ export const PutBusyBlocksRequest = z.object({
   blocks: z.array(BusyBlock).max(2000),
 });
 export const PutBusyBlocksResponse = z.object({ stored: z.number().int() });
+export const CreateManualBusyBlockRequest = z.object({
+  starts_at: Instant,
+  ends_at: Instant,
+});
+export type CreateManualBusyBlockRequest = z.infer<typeof CreateManualBusyBlockRequest>;
+
+export const ManualBusyBlockItem = z.object({
+  id: z.string(),
+  starts_at: Instant,
+  ends_at: Instant,
+  source: z.string().optional(),
+});
+export type ManualBusyBlockItem = z.infer<typeof ManualBusyBlockItem>;
+
+export const ManualBusyBlocksResponse = z.object({
+  blocks: z.array(ManualBusyBlockItem),
+});
+export type ManualBusyBlocksResponse = z.infer<typeof ManualBusyBlocksResponse>;
+
 export const MyAvailabilityResponse = z.object({
   windows: z.array(z.object({ starts_at: Instant, ends_at: Instant })),
-  busy_blocks: z.array(z.object({ starts_at: Instant, ends_at: Instant })).default([]),
+  busy_blocks: z.array(
+    z.object({
+      id: z.string().optional(),
+      starts_at: Instant,
+      ends_at: Instant,
+      source: z.string().optional(),
+    })
+  ).default([]),
 });
 
 export const GoogleCalendarStatusResponse = z.object({ connected: z.boolean(), last_synced_at: z.string().nullable(), revoked: z.boolean().optional() });

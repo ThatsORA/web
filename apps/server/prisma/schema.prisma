@@ -69,6 +69,7 @@ enum BusySource {
   device_calendar
   google_calendar
   seed
+  manual
 }
 
 enum GoogleCalendarConnectionStatus {

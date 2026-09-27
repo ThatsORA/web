@@ -1,6 +1,14 @@
 // Owner: Riley — replace the caller's busy blocks inside a half-open horizon.
 import { Router } from "express";
-import { MyAvailabilityResponse, PutBusyBlocksRequest, PutBusyBlocksResponse, routes } from "@web/contract";
+import {
+  CreateManualBusyBlockRequest,
+  ManualBusyBlockItem,
+  ManualBusyBlocksResponse,
+  MyAvailabilityResponse,
+  PutBusyBlocksRequest,
+  PutBusyBlocksResponse,
+  routes,
+} from "@web/contract";
 import { env } from "../../env";
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
@@ -24,7 +32,7 @@ calendarRouter.put(routes.busyBlocks, requireAuth, async (req, res) => {
     return [`${startsAt.toISOString()}/${endsAt.toISOString()}`, { startsAt, endsAt }];
   })).values()];
   await prisma.$transaction(async tx => {
-    const where = { userId, startsAt: { lt: end }, endsAt: { gt: start } };
+    const where = { userId, source: "device_calendar" as const, startsAt: { lt: end }, endsAt: { gt: start } };
     const existing = await tx.busyBlock.findMany({ where });
     await tx.busyBlock.deleteMany({ where });
     // Preserve portions outside the replaced horizon, including seeded blocks.
@@ -66,8 +74,69 @@ calendarRouter.get(routes.myAvailability, requireAuth, async (req, res) => {
     busy_blocks: user.busyBlocks
       .filter(b => b.endsAt >= new Date())
       .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())
-      .map(b => ({ starts_at: b.startsAt.toISOString(), ends_at: b.endsAt.toISOString() })),
+      .map(b => ({
+        id: b.id,
+        starts_at: b.startsAt.toISOString(),
+        ends_at: b.endsAt.toISOString(),
+        source: b.source,
+      })),
   }));
+});
+
+// List manually added busy blocks
+calendarRouter.get(routes.manualBusyBlocks, requireAuth, async (req, res) => {
+  const userId = (req as AuthedRequest).userId;
+  const blocks = await prisma.busyBlock.findMany({
+    where: { userId, source: "manual" },
+    orderBy: { startsAt: "asc" },
+  });
+  return res.json(ManualBusyBlocksResponse.parse({
+    blocks: blocks.map(b => ({
+      id: b.id,
+      starts_at: b.startsAt.toISOString(),
+      ends_at: b.endsAt.toISOString(),
+      source: b.source,
+    })),
+  }));
+});
+
+// Create a manually added busy block
+calendarRouter.post(routes.manualBusyBlocks, requireAuth, async (req, res) => {
+  const parsed = CreateManualBusyBlockRequest.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_request" });
+  const { starts_at, ends_at } = parsed.data;
+  const startsAt = new Date(starts_at);
+  const endsAt = new Date(ends_at);
+  if (startsAt >= endsAt) {
+    return res.status(400).json({ error: "starts_at_must_be_before_ends_at" });
+  }
+  const userId = (req as AuthedRequest).userId;
+  const block = await prisma.busyBlock.create({
+    data: {
+      userId,
+      startsAt,
+      endsAt,
+      source: "manual",
+    },
+  });
+  return res.status(201).json(ManualBusyBlockItem.parse({
+    id: block.id,
+    starts_at: block.startsAt.toISOString(),
+    ends_at: block.endsAt.toISOString(),
+    source: block.source,
+  }));
+});
+
+// Delete a manually added busy block
+calendarRouter.delete(routes.manualBusyBlock(":id"), requireAuth, async (req, res) => {
+  const userId = (req as AuthedRequest).userId;
+  const id = String(req.params.id);
+  const block = await prisma.busyBlock.findFirst({
+    where: { id, userId, source: "manual" },
+  });
+  if (!block) return res.status(404).json({ error: "not_found" });
+  await prisma.busyBlock.delete({ where: { id: block.id } });
+  return res.status(204).end();
 });
 
 calendarRouter.get(routes.googleCalendar, requireAuth, async (req, res) => {
