@@ -416,6 +416,14 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
           />
         ) : null}
         <Button label="Get directions" variant="outline" onPress={handleGetDirections} />
+        <Button
+          label={calendarMessage || "Add to calendar"}
+          variant="outline"
+          onPress={handleAddToCalendar}
+          loading={addingCalendar}
+          disabled={busy}
+        />
+        {calendarNotice ? <Callout tone="warning">{calendarNotice}</Callout> : null}
         {canChangeSpot(card) ? (
           confirmingChange ? (
             <ChangeSpotConfirm
@@ -430,14 +438,6 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
             <Button label="Change spot" variant="outline" onPress={() => setConfirmingChange(true)} loading={busy} />
           )
         ) : null}
-        <Button
-          label={calendarMessage || "Add to calendar"}
-          variant="outline"
-          onPress={handleAddToCalendar}
-          loading={addingCalendar}
-          disabled={busy}
-        />
-        {calendarNotice ? <Callout tone="warning">{calendarNotice}</Callout> : null}
         {!card.is_mixer && attendees.length > 0 ? (
           <ExpenseLedger
             eventId={card.id}
