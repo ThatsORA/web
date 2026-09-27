@@ -6,6 +6,8 @@ export { FriendsScreen } from "./FriendsScreen";
 export { FriendsStep } from "./FriendsStep";
 export { PersonLink } from "./PersonLink";
 export { RequestsInbox, type RequestsInboxProps } from "./RequestsInbox";
+export { useBusyAction } from "./useBusyAction";
+export { useFriendsData } from "./useFriendsData";
 export {
   acceptFriendRequest,
   deleteFriendRequest,
