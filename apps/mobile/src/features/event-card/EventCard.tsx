@@ -398,6 +398,16 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
         <Txt variant="small" numeric>
           {venue.facts_line}
         </Txt>
+        {attendees.length > 0 ? (
+          <View style={{ gap: t.spacing.xs, marginVertical: t.spacing.xs }}>
+            <Txt variant="small">Who’s coming ({attendees.length}):</Txt>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.xs }}>
+              {attendees.map((a) => (
+                <Chip key={a.id} label={a.display_name ?? a.username} selected />
+              ))}
+            </View>
+          </View>
+        ) : null}
         {travelRows(card).map((r) => (
           <View key={r.id} style={{ flexDirection: "row", justifyContent: "space-between" }}>
             <Txt>{r.display_name ?? r.username}</Txt>

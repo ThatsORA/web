@@ -145,6 +145,36 @@ describe("viewerScope", () => {
     expect(viewerScope(event, T).people.map((p) => p.userId)).toEqual([C, S, T]);
   });
 
+  it("confirmed hangout: reveals all non-passed members to every attendee once location is decided, keeping ghost passes hidden", () => {
+    const G = "00000000-0000-4000-8000-000000000009";
+    const confirmedEvent = {
+      createdById: C,
+      status: "confirmed" as const,
+      sourceGroupId: null,
+      sourceGroupIds: [S1, "squad-2"],
+      participants: [
+        { userId: C, voteStatus: "confirmed" as const, inviteSource: "creator" as const, sourceGroupIds: [] },
+        { userId: S, voteStatus: "confirmed" as const, inviteSource: "squad" as const, sourceGroupIds: [S1] },
+        { userId: T, voteStatus: "confirmed" as const, inviteSource: "squad" as const, sourceGroupIds: ["squad-2"] },
+        { userId: D, voteStatus: "confirmed" as const, inviteSource: "direct" as const, sourceGroupIds: [`invited_by:${S}`] },
+        { userId: G, voteStatus: "ghost_passed" as const, inviteSource: "direct" as const, sourceGroupIds: [] },
+      ],
+    };
+    // S (squad 1), T (squad 2), and D (direct) all see the full attendee roster [C, S, T, D]
+    expect(viewerScope(confirmedEvent, S).attendeeIds).toEqual([C, S, T, D]);
+    expect(viewerScope(confirmedEvent, T).attendeeIds).toEqual([C, S, T, D]);
+    expect(viewerScope(confirmedEvent, D).attendeeIds).toEqual([C, S, T, D]);
+
+    // Ghost passer G is never revealed to guests S, T, or D
+    expect(viewerScope(confirmedEvent, S).people.map((p) => p.userId)).toEqual([C, S, T, D]);
+    expect(viewerScope(confirmedEvent, T).people.map((p) => p.userId)).toEqual([C, S, T, D]);
+    expect(viewerScope(confirmedEvent, D).people.map((p) => p.userId)).toEqual([C, S, T, D]);
+
+    // Creator C sees everyone including ghost passer G
+    expect(viewerScope(confirmedEvent, C).people.map((p) => p.userId)).toEqual([C, S, T, D, G]);
+    expect(viewerScope(confirmedEvent, C).attendeeIds).toEqual([C, S, T, D]);
+  });
+
   it("refuses a viewer who isn't in the event", () => {
     expect(() => viewerScope(hangout, "stranger")).toThrow("non-participant");
   });
