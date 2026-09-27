@@ -16,6 +16,7 @@ import {
   getDeduplicatedInvitees,
   getSelectedSquadMembers,
   noMatchReason,
+  newHangoutErrorMessage,
   otherWeek,
   type Week,
 } from "../../lib/newHangout";
@@ -118,7 +119,7 @@ export default function NewHangout() {
       const reason = noMatchReason(e);
       if (reason) return setPhase(reason);
       setPhase("form");
-      setSubmitError("Couldn't start the hangout. Try again.");
+      setSubmitError(newHangoutErrorMessage(e));
     }
   }
 
@@ -170,7 +171,12 @@ export default function NewHangout() {
       title="New hangout"
       footer={<Button label="Find a time" onPress={() => void submit(week)} disabled={!canSubmit} />}
     >
-      {submitError ? <Callout tone="danger">{submitError}</Callout> : null}
+      {submitError ? (
+        <>
+          <Callout tone="danger">{submitError}</Callout>
+          <Button label="View Hangouts" variant="outline" onPress={() => router.replace("/(main)")} />
+        </>
+      ) : null}
 
       <Card>
         <Txt variant="section">Who’s coming</Txt>

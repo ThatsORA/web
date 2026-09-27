@@ -1,6 +1,7 @@
 // Owner: Andy — pure logic for the "+ New hangout" screen (#70, #363): who's invited,
 // the this/next week range, and the POST /events body. No React Native.
-import { CreateEventRequest, type VibeTag } from "@web/contract";
+import { ApiError as ApiErrorBody, CreateEventRequest, type VibeTag } from "@web/contract";
+import { ZodError } from "zod";
 import { ApiError } from "./api";
 
 export type Week = "this" | "next";
@@ -107,4 +108,22 @@ export function noMatchReason(e: unknown): "no_common_time" | "no_venues" | null
   if (!(e instanceof ApiError) || e.status !== 422) return null;
   const error = (e.body as { error?: unknown } | null)?.error;
   return error === "no_common_time" || error === "no_venues" ? error : null;
+}
+
+/** Give the person a useful next step for POST /events failures. A parsed 201 can still fail locally. */
+export function newHangoutErrorMessage(e: unknown): string {
+  if (e instanceof ZodError) {
+    return "The hangout may have started, but the app couldn't read the response. Check Hangouts before trying again.";
+  }
+  if (e instanceof ApiError) {
+    const code = ApiErrorBody.safeParse(e.body).data?.error;
+    if (e.status === 409 && code === "already_open") return "A hangout with this group is already open. View it in Hangouts.";
+    if (e.status === 400 && code === "invalid_invitees") return "Some invitees are no longer eligible. Update who’s coming and try again.";
+    if (e.status === 400 && code === "invalid_squads") return "A selected squad has changed. Update who’s coming and try again.";
+    if (e.status === 400 && code === "invalid_selection") return "Pick at least one other person to invite.";
+    if (e.status === 401) return "Your session expired. Sign in again to start a hangout.";
+    if (e.status >= 500) return "The server had a problem. Check Hangouts before trying again.";
+    return "Couldn't start the hangout. Check your selections and try again.";
+  }
+  return "Couldn't confirm whether the hangout started. Check Hangouts before trying again.";
 }
