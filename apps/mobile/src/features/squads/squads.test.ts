@@ -17,10 +17,9 @@ describe("squads view", () => {
     expect(mine.map((s) => s.id)).toEqual(["s2"]);
   });
 
-  it("knows when I've said yes and am waiting out the objection window", () => {
+  it("isWaiting returns false because acceptance is instant", () => {
     const s = squad("s", "invited");
     expect(isWaiting(s, "b")).toBe(false);
-    expect(isWaiting({ ...s, members: [member("a", "active"), member("b", "invited", "2026-09-27T01:30:00Z")] }, "b")).toBe(true);
     expect(isWaiting(s, null)).toBe(false);
   });
 
@@ -30,11 +29,9 @@ describe("squads view", () => {
     expect(invitable(friends)).toHaveLength(2);
   });
 
-  it("badges invited members, with the hours left in the objection window", () => {
+  it("badges invited members with Invited tag and active members with null", () => {
     expect(memberBadge(member("a", "active"), now)).toBeNull();
     expect(memberBadge(member("b", "invited"), now)).toBe("Invited");
-    expect(memberBadge(member("b", "invited", "2026-09-27T01:30:00Z"), now)).toBe("Joins in 14h");
-    expect(memberBadge(member("b", "invited", "2026-09-26T11:00:00Z"), now)).toBe("Joins in 1h");
   });
 
   it("maps server error codes to messages", () => {

@@ -87,19 +87,16 @@ export function SquadsScreen() {
       ) : null}
 
       {invites.map((s) => (
-          <Card key={s.id} tint>
-            <Txt variant="section">{s.name}</Txt>
-            <Txt variant="small">With {others(s)}</Txt>
-            {isWaiting(s, me) ? (
-              <Txt variant="small">You're in once everyone's had 24 hours to say no.</Txt>
-            ) : (
-              <View style={{ flexDirection: "row", gap: t.spacing.sm }}>
-                <Button label="Join" onPress={() => void run(() => post(routes.squadRespond(s.id), RespondToSquadRequest.parse({ accept: true })))} />
-                <Button label="No thanks" variant="ghost" onPress={() => void run(() => post(routes.squadRespond(s.id), RespondToSquadRequest.parse({ accept: false })))} />
-              </View>
-            )}
-          </Card>
+        <Card key={s.id} tint>
+          <Txt variant="section">{s.name}</Txt>
+          <Txt variant="small">With {others(s)}</Txt>
+          <View style={{ flexDirection: "row", gap: t.spacing.sm }}>
+            <Button label="Join" onPress={() => void run(() => post(routes.squadRespond(s.id), RespondToSquadRequest.parse({ accept: true })))} />
+            <Button label="No thanks" variant="ghost" onPress={() => void run(() => post(routes.squadRespond(s.id), RespondToSquadRequest.parse({ accept: false })))} />
+          </View>
+        </Card>
       ))}
+
 
       {mine.map((s) => (
         <Card key={s.id}>
