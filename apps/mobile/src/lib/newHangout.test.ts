@@ -64,6 +64,14 @@ describe("buildCreateEventRequest", () => {
     });
   });
 
+  it("includes squad_ids when squadIds is passed", () => {
+    const squadId = "00000000-0000-4000-8000-000000000099";
+    expect(buildCreateEventRequest({ inviteeIds: [ids[0]], squadIds: [squadId], vibe: null, week: null }, now)).toEqual({
+      invitee_ids: [ids[0]],
+      squad_ids: [squadId],
+    });
+  });
+
   it("rejects an empty selection", () => {
     expect(() => buildCreateEventRequest({ inviteeIds: [], vibe: null, week: null }, now)).toThrow();
   });
@@ -95,6 +103,24 @@ describe("getDeduplicatedInvitees", () => {
     const res = getDeduplicatedInvitees(["sq-1"], [], [squad1], creator);
     expect(res.inviteeIds).toEqual([ids[1], ids[2]]);
     expect(res.totalCount).toBe(3); // 2 invitees + creator
+    expect(res.isValidCount).toBe(true);
+  });
+
+  it("automatically pre-fills active squad members across multiple squads without duplicate invitees", () => {
+    const squad2 = {
+      id: "sq-2",
+      name: "Soccer Team",
+      members: [
+        { id: ids[2], status: "active" }, // overlapping with squad1
+        { id: ids[3], status: "active" },
+        { id: ids[4], status: "invited" }, // pending/invited member ignored
+      ],
+    };
+
+    const res = getDeduplicatedInvitees(["sq-1", "sq-2"], [], [squad1, squad2], creator);
+    expect(res.squadMemberIds).toEqual([ids[1], ids[2], ids[3]]);
+    expect(res.inviteeIds).toEqual([ids[1], ids[2], ids[3]]);
+    expect(res.totalCount).toBe(4);
     expect(res.isValidCount).toBe(true);
   });
 

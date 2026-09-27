@@ -81,7 +81,7 @@ export default function NewHangout() {
 
   async function submit(forWeek: Week | null) {
     if (!isValidCount) return;
-    const body = buildCreateEventRequest({ inviteeIds, vibe, week: forWeek }, new Date());
+    const body = buildCreateEventRequest({ inviteeIds, squadIds: selectedSquadIds, vibe, week: forWeek }, new Date());
     setSubmitError(null);
     setPhase("finding");
     try {
