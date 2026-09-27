@@ -1,5 +1,4 @@
-// Owner: Andy — You tab: who's signed in, and Log out.
-// Settings (#75) and Profile (#97) land here later.
+// Owner: Andy — You tab: user profile, settings (favorites, availability, close friends), and Log out.
 import { Me, routes } from "@web/contract";
 import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -9,6 +8,9 @@ import { displayName } from "../../lib/displayName";
 import { unregisterPushToken } from "../../lib/push";
 import { PROFILE_HREF } from "../../lib/routes";
 import { session } from "../../lib/secureSession";
+import { AvailabilitySettings } from "../../features/calendar";
+import { FavoritesSettings } from "../../features/favorites";
+import { CloseFriendsSettings } from "../../features/friends";
 import { Button, Callout, Card, Screen, Txt } from "../../ui";
 
 export default function You() {
@@ -46,23 +48,7 @@ export default function You() {
   }
 
   return (
-    <Screen
-      title="You"
-      footer={<Button label="Log out" variant="ghost" onPress={() => void logOut()} loading={loggingOut} />}
-    >
-      {logoutError ? (
-        <Callout tone="danger" title="Couldn't log out">
-          Try again.
-        </Callout>
-      ) : null}
-      {me ? (
-        <Card>
-          <Txt variant="eyebrow">Signed in as</Txt>
-          <Txt variant="section">{displayName(me)}</Txt>
-          <Txt variant="small">@{me.username}</Txt>
-          <Button label="Edit profile" variant="outline" onPress={() => router.push(PROFILE_HREF)} />
-        </Card>
-      ) : null}
+    <Screen title="You">
       {loadError ? (
         <>
           <Callout tone="danger" title="Couldn't load your account">
@@ -71,6 +57,37 @@ export default function You() {
           <Button label="Try again" variant="secondary" onPress={() => void load()} />
         </>
       ) : null}
+
+      {me ? (
+        <Card>
+          <Txt variant="eyebrow">Signed in as</Txt>
+          <Txt variant="section">{displayName(me)}</Txt>
+          <Txt variant="small">@{me.username}</Txt>
+          {me.email ? <Txt variant="small" color="textMuted">{me.email}</Txt> : null}
+          <Button label="Edit profile" variant="outline" onPress={() => router.push(PROFILE_HREF)} />
+        </Card>
+      ) : null}
+
+      {/* Section: Favorites */}
+      <FavoritesSettings />
+
+      {/* Section: Availability Settings mount point (Riley) */}
+      {AvailabilitySettings ? <AvailabilitySettings /> : null}
+
+      {/* Section: Close Friends Settings mount point (Ojas) */}
+      {CloseFriendsSettings ? <CloseFriendsSettings /> : null}
+
+      {/* Section: Account & Log out */}
+      <Card>
+        <Txt variant="section">Account</Txt>
+        {logoutError ? (
+          <Callout tone="danger" title="Couldn't log out">
+            Try again.
+          </Callout>
+        ) : null}
+        <Button label="Log out" variant="outline" onPress={() => void logOut()} loading={loggingOut} />
+      </Card>
     </Screen>
   );
 }
+

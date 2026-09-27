@@ -3,8 +3,8 @@
 /** Where the feed's "Add friends" button goes: the Friends tab. */
 export const FRIENDS_HREF = "/(main)/friends";
 
-/** Entry point to Settings from the Hangouts header. */
-export const SETTINGS_HREF = "/(main)/settings";
+/** Entry point to Settings / You tab from the Hangouts header. */
+export const SETTINGS_HREF = "/(main)/you";
 
 /** "Edit profile" on the You tab and Settings (#97). */
 export const PROFILE_HREF = "/(main)/profile";
