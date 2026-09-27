@@ -1,6 +1,6 @@
 import { EventCardPayload } from "@web/contract";
 import { describe, expect, it } from "vitest";
-import { byStart, canChangeSpot, canOpenChat, cardKind, detectSwap, freePeople, hasEnded, passButtonLabel, passedNotice, travelRows } from "./cardState";
+import { byStart, canChangeSpot, canOpenChat, cardKind, detectSwap, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, travelRows } from "./cardState";
 import { FIXTURES, ME } from "./fixtures";
 
 const get = (label: string) => FIXTURES.find((f) => f.label === label)!.card;
@@ -115,5 +115,14 @@ describe("helpers", () => {
     expect(canOpenChat({ viewer: { invite_source: "direct", pass_kind: "ghost", full_roster: false, chat: null } })).toBe(false);
     expect(canOpenChat({ viewer: null })).toBe(false);
   });
+
+  it("isSquadHangout identifies when invite_source is squad", () => {
+    expect(isSquadHangout({ viewer: { invite_source: "squad" } })).toBe(true);
+    expect(isSquadHangout({ viewer: { invite_source: "direct" } })).toBe(false);
+    expect(isSquadHangout({ viewer: { invite_source: "creator" } })).toBe(false);
+    expect(isSquadHangout({ viewer: null })).toBe(false);
+    expect(isSquadHangout({})).toBe(false);
+  });
 });
+
 
