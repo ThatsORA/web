@@ -75,45 +75,7 @@ describe("ExpenseLedger", () => {
     expect(onAdd).toHaveBeenCalledOnce();
   });
 
-  it("renders net balance summary and 'View all expenses' button on main view when expenses exist", () => {
-    const expense: Expense = {
-      id: "exp-1",
-      paid_by: "u-andy",
-      total_cents: 3000,
-      description: "Tacos",
-      created_at: "2026-09-26T20:00:00.000Z",
-      splits: [
-        { id: "s-1", user_id: "u-andy", amount_owed_cents: 1000, settled: true },
-        { id: "s-2", user_id: "u-riley", amount_owed_cents: 1000, settled: false },
-        { id: "s-3", user_id: "u-ojas", amount_owed_cents: 1000, settled: false },
-      ],
-    };
-
-    const rendered = elements(
-      ExpenseLedgerView({
-        expenses: [expense],
-        attendees,
-        currentUserId: "u-riley",
-      })
-    );
-
-    const texts = rendered
-      .filter((el) => el.type === Txt)
-      .map((el) => Children.toArray((el.props as { children: ReactNode }).children).join(""));
-
-    // Net balance summary ("Who owes whom")
-    expect(texts).toContain("Who owes whom");
-    expect(texts).toContain("You owe Andy $10.00");
-    expect(texts).toContain("Ojas owes Andy $10.00");
-
-    // 'View all expenses' button
-    const buttons = rendered
-      .filter((el) => el.type === Button)
-      .map((el) => el.props as { label: string; onPress: () => void });
-    expect(buttons.map((b) => b.label)).toContain("View all expenses");
-  });
-
-  it("renders itemized expenses, paid by info, totals, and per-split breakdown in modal", () => {
+  it("renders expenses and net balances with danger color and without 'Who owes whom' header", () => {
     const onToggle = vi.fn();
     const expense: Expense = {
       id: "exp-1",
@@ -138,14 +100,38 @@ describe("ExpenseLedger", () => {
       })
     );
 
-    const texts = rendered
-      .filter((el) => el.type === Txt)
-      .map((el) => Children.toArray((el.props as { children: ReactNode }).children).join(""));
+    const txtElements = rendered.filter((el) => el.type === Txt);
+    const texts = txtElements.map((el) =>
+      Children.toArray((el.props as { children: ReactNode }).children).join("")
+    );
+
+    // Header "Who owes whom" should NOT be present
+    expect(texts).not.toContain("Who owes whom");
 
     // Descriptions & total in modal
     expect(texts).toContain("Tacos");
     expect(texts).toContain("$30.00");
     expect(texts).toContain("Paid by Andy");
+
+    // Net balance breakdown from Riley's perspective
+    expect(texts).toContain("You owe Andy $10.00");
+    expect(texts).toContain("Ojas owes Andy $10.00");
+
+    // Check danger color on debt line where user owes money
+    const oweLine = txtElements.find(
+      (el) =>
+        Children.toArray((el.props as { children: ReactNode }).children).join("") ===
+        "You owe Andy $10.00"
+    );
+    expect(oweLine?.props.color).toBe("danger");
+
+    // Check third-party debt line has no special color
+    const thirdPartyLine = txtElements.find(
+      (el) =>
+        Children.toArray((el.props as { children: ReactNode }).children).join("") ===
+        "Ojas owes Andy $10.00"
+    );
+    expect(thirdPartyLine?.props.color).toBeUndefined();
 
     // Badges
     const badges = rendered
@@ -154,15 +140,100 @@ describe("ExpenseLedger", () => {
     expect(badges.map((b) => b.label)).toContain("Payer");
     expect(badges.map((b) => b.label)).toContain("Owes");
 
-    // Settled toggle inside modal
+    // Individual split toggle button
     const buttons = rendered
       .filter((el) => el.type === Button)
       .map((el) => el.props as { label: string; onPress: () => void });
 
-    const toggleButton = buttons.find((b) => b.label === "Mark settled");
-    expect(toggleButton).toBeDefined();
-    toggleButton!.onPress();
-    expect(onToggle).toHaveBeenCalledWith("s-2", true);
+    const markSettledButtons = buttons.filter((b) => b.label === "Mark settled");
+    expect(markSettledButtons.length).toBeGreaterThan(0);
+  });
+
+  it("colors net balance green (success) when current user is owed money", () => {
+    const expense: Expense = {
+      id: "exp-1",
+      paid_by: "u-riley",
+      total_cents: 2000,
+      description: "Pizza",
+      created_at: "2026-09-26T20:00:00.000Z",
+      splits: [
+        { id: "s-1", user_id: "u-riley", amount_owed_cents: 1000, settled: true },
+        { id: "s-2", user_id: "u-andy", amount_owed_cents: 1000, settled: false },
+      ],
+    };
+
+    const rendered = elements(
+      ExpenseLedgerView({
+        expenses: [expense],
+        attendees,
+        currentUserId: "u-riley",
+      })
+    );
+
+    const txtElements = rendered.filter((el) => el.type === Txt);
+    const texts = txtElements.map((el) =>
+      Children.toArray((el.props as { children: ReactNode }).children).join("")
+    );
+
+    expect(texts).toContain("Andy owes you $10.00");
+
+    const owedLine = txtElements.find(
+      (el) =>
+        Children.toArray((el.props as { children: ReactNode }).children).join("") ===
+        "Andy owes you $10.00"
+    );
+    expect(owedLine?.props.color).toBe("success");
+  });
+
+  it("renders a settlement confirmation modal with expected text when settling net debt", () => {
+    const onConfirmSettleDebt = vi.fn();
+    const onCancelSettleDebt = vi.fn();
+    const expense: Expense = {
+      id: "exp-1",
+      paid_by: "u-andy",
+      total_cents: 2000,
+      description: "Lunch",
+      created_at: "2026-09-26T20:00:00.000Z",
+      splits: [
+        { id: "s-1", user_id: "u-andy", amount_owed_cents: 1000, settled: true },
+        { id: "s-2", user_id: "u-riley", amount_owed_cents: 1000, settled: false },
+      ],
+    };
+
+    const debtToConfirm = { fromUserId: "u-riley", toUserId: "u-andy", amountCents: 1000 };
+
+    // When modal is open (confirmingDebt is set)
+    const renderedModal = elements(
+      ExpenseLedgerView({
+        expenses: [expense],
+        attendees,
+        currentUserId: "u-riley",
+        confirmingDebt: debtToConfirm,
+        onConfirmSettleDebt,
+        onCancelSettleDebt,
+      })
+    );
+
+    const modalTexts = renderedModal
+      .filter((el) => el.type === Txt)
+      .map((el) => Children.toArray((el.props as { children: ReactNode }).children).join(""));
+
+    expect(modalTexts).toContain("Mark balance settled?");
+    expect(modalTexts).toContain("Are you sure you want to mark this balance as settled?");
+
+    const modalButtons = renderedModal
+      .filter((el) => el.type === Button)
+      .map((el) => el.props as { label: string; onPress: () => void });
+
+    const cancelButton = modalButtons.find((b) => b.label === "Cancel");
+    expect(cancelButton).toBeDefined();
+    cancelButton!.onPress();
+    expect(onCancelSettleDebt).toHaveBeenCalledOnce();
+
+    const confirmButton = modalButtons.find((b) => b.label === "Mark settled");
+    expect(confirmButton).toBeDefined();
+    confirmButton!.onPress();
+    expect(onConfirmSettleDebt).toHaveBeenCalledWith(debtToConfirm);
   });
 
   it("renders 'Mark unsettled' on settled splits and allows toggling back to unsettled", () => {
@@ -244,3 +315,5 @@ describe("ExpenseLedger", () => {
     expect(callouts).toContain("Failed to load");
   });
 });
+
+

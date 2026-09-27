@@ -5,7 +5,10 @@ import {
   calculateWhoOwesWhom,
   canToggleSplit,
   formatDebtLine,
+  getDebtColorTone,
+  isUserInvolvedInDebt,
   type AttendeeInfo,
+  type DebtSummary,
 } from "./ledger";
 
 const attendees: AttendeeInfo[] = [
@@ -169,3 +172,22 @@ describe("canToggleSplit", () => {
     expect(canToggleSplit(expense.splits[1]!, expense, null)).toBe(false);
   });
 });
+
+describe("isUserInvolvedInDebt and getDebtColorTone", () => {
+  const debt: DebtSummary = { fromUserId: "u-riley", toUserId: "u-andy", amountCents: 1000 };
+
+  it("identifies if user is involved in debt", () => {
+    expect(isUserInvolvedInDebt(debt, "u-riley")).toBe(true);
+    expect(isUserInvolvedInDebt(debt, "u-andy")).toBe(true);
+    expect(isUserInvolvedInDebt(debt, "u-ojas")).toBe(false);
+    expect(isUserInvolvedInDebt(debt, null)).toBe(false);
+  });
+
+  it("returns danger when user owes money and success when user is owed money", () => {
+    expect(getDebtColorTone(debt, "u-riley")).toBe("danger");
+    expect(getDebtColorTone(debt, "u-andy")).toBe("success");
+    expect(getDebtColorTone(debt, "u-ojas")).toBe(undefined);
+    expect(getDebtColorTone(debt, null)).toBe(undefined);
+  });
+});
+
