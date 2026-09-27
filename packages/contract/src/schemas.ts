@@ -271,6 +271,7 @@ export type EventsListResponse = z.infer<typeof EventsListResponse>;
 
 export const VoteRequest = z.object({ option_id: Id });
 export const ReportClosedRequest = z.object({ current_place_id: z.string() });
+export const ChangeSpotRequest = ReportClosedRequest;
 
 // ---------- expenses (Ojas, stretch) ----------
 export const CreateExpenseRequest = z.object({

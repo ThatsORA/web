@@ -24,6 +24,7 @@ import { venuesRouter } from "./router";
 const alice = "6f48fb35-1518-481d-ab60-cfd2dcc28acf";
 const bob = "975bf379-268d-4b8b-91fc-300a0f96501c";
 const stranger = "83f94e85-0f85-4e96-aa82-541be9e7a878";
+const ghost = "5a1f3ce0-1d77-4d62-9269-efbb13fe8432";
 const eventId = "2b5232d3-9424-4e7c-8e2f-0299693b54eb";
 const NOW = new Date("2026-10-01T17:30:00Z");
 const backup: EventOption = {
@@ -51,7 +52,7 @@ function event(overrides: Record<string, unknown> = {}) {
     startsAt: new Date("2026-10-01T18:30:00Z"),
     endsAt: new Date("2026-10-01T20:30:00Z"),
     backupVenues: [backup],
-    participants: [{ userId: alice }, { userId: bob }],
+    participants: [{ userId: alice, voteStatus: "confirmed" }, { userId: bob, voteStatus: "confirmed" }],
     ...overrides,
   };
 }
@@ -81,8 +82,8 @@ beforeEach(() => {
   mocks.assembleEventCard.mockReturnValue({ id: eventId, status: "confirmed" });
 });
 
-function post(body: unknown, userId = alice, id = eventId) {
-  return fetch(`${base}/events/${id}/report-closed`, {
+function post(body: unknown, userId = alice, id = eventId, action = "report-closed") {
+  return fetch(`${base}/events/${id}/${action}`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${signToken(userId)}` },
     body: JSON.stringify(body),
@@ -175,5 +176,63 @@ describe("POST report-closed", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true, status: "swapped" });
     expect(mocks.pushVenueChanged).toHaveBeenCalledWith([alice, bob], eventId);
+  });
+});
+
+describe("POST change-spot", () => {
+  const change = (body: unknown, userId = alice) => post(body, userId, eventId, "change-spot");
+
+  it("promotes the next backup and notifies confirmed attendees", async () => {
+    const response = await change({ current_place_id: "current" });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, status: "swapped" });
+    expect(mocks.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: eventId, status: "confirmed", venuePlaceId: "current" },
+      data: expect.objectContaining({ venuePlaceId: backup.place_id, backupVenues: [] }),
+    }));
+    expect(mocks.emitToUsers).toHaveBeenCalledWith([alice, bob], "event:venue_changed", { event_id: eventId });
+    expect(mocks.pushVenueChanged).toHaveBeenCalledWith([alice, bob], eventId);
+  });
+
+  it("returns the current event when the current spot is stale", async () => {
+    const current = { ...event(), venuePlaceId: "already-swapped" };
+    mocks.findUnique.mockResolvedValue(current);
+    mocks.findFirst.mockResolvedValue({ ...current, participants: [], options: [], votes: [] });
+
+    const response = await change({ current_place_id: "current" });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: "venue_already_changed",
+      event: { id: eventId, status: "confirmed" },
+    });
+  });
+
+  it("keeps the confirmed event unchanged when no backup remains", async () => {
+    mocks.findUnique.mockResolvedValue(event({ backupVenues: [] }));
+
+    const response = await change({ current_place_id: "current" });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "no_backup_venue" });
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+    expect(mocks.emitToUsers).not.toHaveBeenCalled();
+  });
+
+  it("denies ghost passers and nonparticipants", async () => {
+    mocks.findUnique.mockResolvedValue(event({
+      participants: [
+        { userId: alice, voteStatus: "confirmed" },
+        { userId: ghost, voteStatus: "ghost_passed" },
+      ],
+    }));
+
+    for (const userId of [ghost, stranger]) {
+      const response = await change({ current_place_id: "current" }, userId);
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ error: "not_a_participant" });
+    }
+    expect(mocks.updateMany).not.toHaveBeenCalled();
   });
 });
