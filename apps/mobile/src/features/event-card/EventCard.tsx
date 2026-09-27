@@ -15,7 +15,7 @@ import { canChangeSpot, canDeclineInvite, canInvite, canOpenChat, cardKind, free
 import { changeSpotPrompt } from "./changeSpot";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
 import { optionLabel, placeTitle, progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
-import { InviteFriendsButton, InviteFriendsModal } from "./InviteFriends";
+import { eventInvite, InviteFriendsButton, InviteFriendsModal } from "./InviteFriends";
 import { VotingCountdown } from "./VotingCountdown";
 
 
@@ -410,7 +410,7 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
         ) : null}
         {inviting ? (
           <InviteFriendsModal
-            card={card}
+            {...eventInvite(card)}
             onClose={() => setInviting(false)}
             onSent={(label) => { setInviteSent(label); setInviting(false); }}
           />

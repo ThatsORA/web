@@ -180,9 +180,12 @@ describe("late invites (#345)", () => {
     const inGroup = card.participants.find((p) => p.id !== ME.id)!;
     const newbie = { id: "00000000-0000-4000-8000-0000000000ff", username: "newbie", display_name: "Nadia Q" };
     const friends = [inGroup, newbie];
-    expect(inviteSearch(friends, card, "")).toEqual([]);
-    expect(inviteSearch(friends, card, "   ")).toEqual([]);
-    expect(inviteSearch(friends, card, "  NADIA ")).toEqual([{ friend: newbie, inGroup: false }]);
-    expect(inviteSearch(friends, card, inGroup.username.slice(0, 3))).toEqual([{ friend: inGroup, inGroup: true }]);
+    const memberIds = card.participants.map((p) => p.id);
+    expect(inviteSearch(friends, memberIds, "")).toEqual([]);
+    expect(inviteSearch(friends, memberIds, "   ")).toEqual([]);
+    expect(inviteSearch(friends, memberIds, "  NADIA ")).toEqual([{ friend: newbie, inGroup: false }]);
+    expect(inviteSearch(friends, memberIds, inGroup.username.slice(0, 3))).toEqual([{ friend: inGroup, inGroup: true }]);
+    // Squads pass their member ids the same way (#359).
+    expect(inviteSearch(friends, [newbie.id], "nadia")).toEqual([{ friend: newbie, inGroup: true }]);
   });
 });

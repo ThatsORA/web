@@ -1,5 +1,6 @@
 // Owner: Andy (#345) — "Invite friends" on an existing hangout: search accepted friends, pick, send.
 // Invitees join as direct invites, so the inviter won't see them on the card unless they created the hangout (§9).
+// The modal is generic so squads reuse it (#359): callers pass the group's member ids, the send call and its error text.
 import { FriendsResponse, InviteToEventRequest, routes, type EventCardPayload, type Friend } from "@web/contract";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
@@ -16,6 +17,14 @@ const inviteError = (e: unknown) =>
   e instanceof ApiError && e.status === 400 ? "You can only invite people you’re friends with." :
   "Couldn’t send the invite. Try again.";
 
+/** The modal props that invite friends to this hangout (shared by the voting button and the confirmed card). */
+export const eventInvite = (card: EventCardPayload) => ({
+  memberIds: card.participants.map((p) => p.id),
+  send: (ids: string[]) =>
+    api(routes.eventInvite(card.id), z.unknown(), { method: "POST", body: InviteToEventRequest.parse({ invitee_ids: ids }) }),
+  errorFor: inviteError,
+});
+
 /** Full-width "Invite friends" button, for the open (voting) card. */
 export function InviteFriendsButton({ card }: { card: EventCardPayload }) {
   const [open, setOpen] = useState(false);
@@ -23,12 +32,18 @@ export function InviteFriendsButton({ card }: { card: EventCardPayload }) {
   return (
     <>
       <Button label={sent ?? "Invite friends"} variant="outline" onPress={() => { setSent(null); setOpen(true); }} />
-      {open ? <InviteFriendsModal card={card} onClose={() => setOpen(false)} onSent={(label) => { setSent(label); setOpen(false); }} /> : null}
+      {open ? <InviteFriendsModal {...eventInvite(card)} onClose={() => setOpen(false)} onSent={(label) => { setSent(label); setOpen(false); }} /> : null}
     </>
   );
 }
 
-export function InviteFriendsModal({ card, onClose, onSent }: { card: EventCardPayload; onClose: () => void; onSent: (label: string) => void }) {
+export function InviteFriendsModal({ memberIds, send: sendInvites, errorFor, onClose, onSent }: {
+  memberIds: readonly string[];
+  send: (ids: string[]) => Promise<unknown>;
+  errorFor: (e: unknown) => string;
+  onClose: () => void;
+  onSent: (label: string) => void;
+}) {
   const t = useTheme();
   const [friends, setFriends] = useState<Friend[] | null>(null);
   const [query, setQuery] = useState("");
@@ -44,7 +59,7 @@ export function InviteFriendsModal({ card, onClose, onSent }: { card: EventCardP
     return () => { live = false; };
   }, []);
 
-  const rows = friends ? inviteSearch(friends, card, query) : [];
+  const rows = friends ? inviteSearch(friends, memberIds, query) : [];
   const picked = (friends ?? []).filter((friend) => selected.includes(friend.id));
   const toggle = (id: string) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length < MAX_INVITES ? [...s, id] : s));
@@ -53,13 +68,10 @@ export function InviteFriendsModal({ card, onClose, onSent }: { card: EventCardP
     setSending(true);
     setError(null);
     try {
-      await api(routes.eventInvite(card.id), z.unknown(), {
-        method: "POST",
-        body: InviteToEventRequest.parse({ invitee_ids: selected }),
-      });
+      await sendInvites(selected);
       onSent(selected.length === 1 ? "Invite sent" : `${selected.length} invites sent`);
     } catch (e) {
-      setError(inviteError(e));
+      setError(errorFor(e));
     } finally {
       setSending(false);
     }
