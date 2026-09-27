@@ -10,6 +10,7 @@ import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
 import { openVoting } from "../voting/lifecycle";
 import { candidateGroups, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
 import type { ResolvedManualSelection } from "./manualSelection";
+import { mixerCandidates } from "./mixerCandidates";
 import { classifySlot, earliestTimezone, feasibleSlots, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot } from "./timeMath";
 
 export { freeWindows, classifySlot } from "./timeMath";
@@ -128,7 +129,14 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
     where: { id: { in: referencedUserIds } },
     select: { id: true, timezone: true },
   });
-  const groups = candidateGroups(identities, friendships, explicitGroups);
+  const ordinaryGroups = candidateGroups(identities, friendships, explicitGroups);
+  const possibleMixers = mixerCandidates(identities, friendships, [], now);
+  const groupsByKey = new Map(ordinaryGroups.map((group) => [group.groupKey, group]));
+  for (const { group } of possibleMixers) {
+    // A selected Squad keeps its provenance; otherwise a 4–6 person eligible group is a Mixer.
+    if (!groupsByKey.get(group.groupKey)?.sourceGroupId) groupsByKey.set(group.groupKey, group);
+  }
+  const groups = [...groupsByKey.values()];
   if (!groups.length) return;
 
   const candidateUserIds = [...new Set(groups.flatMap((group) => group.memberIds))].sort();
@@ -159,12 +167,15 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
   ]);
 
   const usersById = new Map(users.map((user) => [user.id, user]));
+  const eligibleMixerKeys = new Set(mixerCandidates(identities, friendships, [...openEvents, ...cooldownEvents], now)
+    .map(({ group }) => group.groupKey));
   const favoritesByUser = new Map(users.map((user) => [user.id, user.favorites]));
   const eventsByParticipant = openEventsByParticipant(openEvents);
   const groupSlots: GroupSlot[] = [];
   const feasibleBySlot = new Map<ClassifiedSlot, ClassifiedSlot[]>();
 
   for (const group of groups) {
+    if (group.isMixer && !eligibleMixerKeys.has(group.groupKey)) continue;
     const members = group.memberIds.map((id) => usersById.get(id)).filter((user) => user !== undefined);
     if (members.length !== group.memberIds.length) continue;
     const availability = members.map((user) => ({
@@ -186,8 +197,12 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
     }
   }
 
+  const ranked = rankCandidates(groupSlots, friendships, now);
+  // Preserve squad precedence, then offer anonymous Mixers before ordinary direct proposals.
+  const priority = (group: typeof ranked[number]["group"]) => group.sourceGroupId ? 2 : group.isMixer ? 1 : 0;
+  ranked.sort((a, b) => priority(b.group) - priority(a.group));
   const shortlist = selectRankedCandidates(
-    rankCandidates(groupSlots, friendships, now),
+    ranked,
     [...openEvents, ...cooldownEvents],
     now,
     env.COOLDOWN_HOURS,
@@ -231,6 +246,7 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
         data: {
           groupKey: candidate.group.groupKey,
           sourceGroupId: candidate.group.sourceGroupId,
+          isMixer: candidate.group.isMixer ?? false,
           status: "voting",
           startsAt: candidate.slot.start,
           endsAt: candidate.slot.end,
@@ -240,7 +256,9 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
           backupVenues: unusedVenueSnapshots(rankedVenues, options),
           voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
           participants: {
-            create: candidate.group.memberIds.map((userId) => ({ userId, voteStatus: "invited" })),
+            create: candidate.group.memberIds.map((userId) => ({
+              userId, voteStatus: "invited", ...(candidate.group.isMixer ? { inviteSource: "direct" as const } : {}),
+            })),
           },
           options: { create: options.map(optionData) },
         },
