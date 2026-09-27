@@ -144,7 +144,7 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
     prisma.explicitGroup.findMany({ include: { members: true } }),
   ]);
 
-  // ponytail: discovery reads lightweight identities for squad members and Mixer friends, then loads
+  // ponytail: discovery reads lightweight identities for relationship endpoints, then loads
   // busy blocks and favorites only for users who can form a candidate group.
   const referencedUserIds = [...new Set([
     ...friendships.flatMap((friendship) => [friendship.userLowId, friendship.userHighId]),
@@ -155,16 +155,16 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
     where: { id: { in: referencedUserIds } },
     select: { id: true, timezone: true },
   });
-  // Squads only (#320): propose to whole squads (3–6 active members). Friend pairs, cliques and
-  // one-drop subsets are skipped. Manual hangouts never come through here.
+  // Squads + Mixers (#320): whole squads (3–6 active members) and Riley's Mixers (#215). Friend pairs,
+  // cliques and one-drop subsets are skipped. Manual hangouts never come through here.
   const squadKeys = new Set(explicitGroups.map((group) =>
     groupKey(group.members.filter((member) => member.status === "active").map((member) => member.userId))));
-  const groupsByKey = new Map(candidateGroups(identities, [], explicitGroups)
-    .filter((group) => squadKeys.has(group.groupKey))
-    .map((group) => [group.groupKey, group]));
-  for (const { group } of mixerCandidates(identities, friendships, [], now)) {
-    // A selected Squad keeps its provenance; otherwise a 4–6 person eligible group is a Mixer (#215).
-    if (!groupsByKey.has(group.groupKey)) groupsByKey.set(group.groupKey, group);
+  const squads = candidateGroups(identities, [], explicitGroups).filter((group) => squadKeys.has(group.groupKey));
+  const possibleMixers = mixerCandidates(identities, friendships, [], now);
+  const groupsByKey = new Map(squads.map((group) => [group.groupKey, group]));
+  for (const { group } of possibleMixers) {
+    // A selected Squad keeps its provenance; otherwise a 4–6 person eligible group is a Mixer.
+    if (!groupsByKey.get(group.groupKey)?.sourceGroupId) groupsByKey.set(group.groupKey, group);
   }
   const groups = [...groupsByKey.values()];
   if (!groups.length) return;

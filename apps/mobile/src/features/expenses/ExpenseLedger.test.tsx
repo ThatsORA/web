@@ -68,10 +68,13 @@ describe("ExpenseLedger", () => {
 
     const buttons = rendered
       .filter((el) => el.type === Button)
-      .map((el) => el.props as { label: string; onPress: () => void });
+      .map((el) => el.props as { label: string; onPress: () => void; size?: string });
     expect(buttons.map((b) => b.label)).toContain("Add expense");
 
-    buttons[0]!.onPress();
+    const addBtn = buttons.find((b) => b.label === "Add expense");
+    expect(addBtn?.size).toBe("sm");
+
+    addBtn!.onPress();
     expect(onAdd).toHaveBeenCalledOnce();
   });
 

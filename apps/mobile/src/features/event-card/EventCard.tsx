@@ -8,7 +8,7 @@ import { ActionSheetIOS, ActivityIndicator, Linking, Platform, View } from "reac
 import { getToken } from "../../lib/api";
 import { CHAT_PATHNAME } from "../../lib/routes";
 import { userIdFromToken } from "../../lib/session";
-import { Badge, Button, Callout, Card, Chip, Txt, useTheme } from "../../ui";
+import { Badge, Button, Callout, Card, Chip, Modal, Txt, useTheme } from "../../ui";
 import { ExpenseForm, ExpenseLedger } from "../expenses";
 import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calendarSync";
 import { canChangeSpot, canOpenChat, cardKind, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows } from "./cardState";
@@ -405,11 +405,10 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
             currentUserId={currentUserId}
             refreshTrigger={expenseRefresh}
             onAddExpense={() => setShowExpense(true)}
-            hideAddButton={showExpense}
           />
         ) : null}
         {!card.is_mixer && attendees.length > 0 && showExpense ? (
-          <View style={{ gap: t.spacing.sm }}>
+          <Modal visible={showExpense} onClose={() => setShowExpense(false)} title="Add expense">
             <ExpenseForm
               eventId={card.id}
               attendees={attendees}
@@ -418,8 +417,7 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
                 setExpenseRefresh((c) => c + 1);
               }}
             />
-            <Button label="Cancel" variant="ghost" onPress={() => setShowExpense(false)} />
-          </View>
+          </Modal>
         ) : null}
         {notice ? <Callout tone="danger">{notice}</Callout> : null}
       </Card>
