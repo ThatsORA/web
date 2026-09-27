@@ -13,6 +13,7 @@ import { useCallback, useState } from "react";
 import { View } from "react-native";
 import { z } from "zod";
 import { api, ApiError, getToken } from "../../lib/api";
+import { displayName } from "../../lib/displayName";
 import { userIdFromToken } from "../../lib/session";
 import { Badge, Button, Callout, Card, Chip, Screen, TextField, Txt, useTheme } from "../../ui";
 import { PersonLink } from "../friends";
@@ -66,7 +67,7 @@ export function SquadsScreen() {
   const chips = (options: FriendT[]) => (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm }}>
       {options.map((f) => (
-        <Chip key={f.id} label={`@${f.username}`} selected={picked.includes(f.id)} onPress={() => toggle(f.id)} />
+        <Chip key={f.id} label={displayName(f)} selected={picked.includes(f.id)} onPress={() => toggle(f.id)} />
       ))}
     </View>
   );
@@ -74,7 +75,7 @@ export function SquadsScreen() {
   const { invites, mine } = splitSquads(squads);
   const me = userIdFromToken(getToken());
   const now = new Date();
-  const others = (s: SquadT) => s.members.filter((m) => m.status === "active").map((m) => `@${m.username}`).join(", ");
+  const others = (s: SquadT) => s.members.filter((m) => m.status === "active").map(displayName).join(", ");
 
   return (
     <Screen title="Squads" subtitle="Named groups, like your roommates. Joining always needs a yes.">
@@ -106,7 +107,7 @@ export function SquadsScreen() {
             const badge = memberBadge(m, now);
             return (
               <View key={m.id} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: t.spacing.sm }}>
-                <PersonLink id={m.id} username={m.username} />
+                <PersonLink user={m} />
                 {badge ? (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: t.spacing.sm }}>
                     <Badge label={badge} />

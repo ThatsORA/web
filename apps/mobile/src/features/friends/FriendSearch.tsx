@@ -115,7 +115,7 @@ export function FriendSearch({ friends = [], requests = { incoming: [], outgoing
                   paddingVertical: t.spacing.xs,
                 }}
               >
-                <PersonLink id={u.id} username={u.username} />
+                <PersonLink user={u} />
                 {isFriend ? (
                   <Badge tone="neutral" label="Friends" />
                 ) : incoming ? (

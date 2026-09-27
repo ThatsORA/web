@@ -2,6 +2,7 @@
 // Copy explains that close friends are completely private.
 import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
+import { displayName } from "../../lib/displayName";
 import { stepEyebrow, type OnboardingStepProps } from "../../lib/onboarding";
 import { Button, Chip, Screen, Txt, useTheme } from "../../ui";
 import { FriendSearch } from "./FriendSearch";
@@ -87,7 +88,10 @@ export function FriendsStep({ onDone }: OnboardingStepProps) {
                   paddingVertical: t.spacing.xs,
                 }}
               >
-                <Txt variant="body">@{f.username}</Txt>
+                <View style={{ flexShrink: 1 }}>
+                  <Txt variant="body">{displayName(f)}</Txt>
+                  <Txt variant="small">@{f.username}</Txt>
+                </View>
                 <Chip
                   label={f.close ? "★ Close" : "☆ Close"}
                   selected={f.close}

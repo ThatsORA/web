@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { ChatMessage } from "@web/contract";
 import { useToken } from "../../lib/api";
+import { displayName } from "../../lib/displayName";
 import { userIdFromToken } from "../../lib/session";
 import { Button, Callout, Txt, useTheme } from "../../ui";
 import { useEventSocket } from "../event-card/useEventSocket";
@@ -226,7 +227,7 @@ export function ChatScreen({ eventId, isEnded = false, onBack }: Props) {
                   }}
                 >
                   <Txt variant="label" color={isMe ? "primary" : "heading"}>
-                    {isMe ? "You" : m.username}
+                    {isMe ? "You" : displayName(m)}
                   </Txt>
                   <Txt variant="small" color="textMuted">
                     {formatMessageTime(m.created_at)}

@@ -106,7 +106,7 @@ export function RequestsInbox({ requests, onRefresh, defaultExpanded = false }: 
                       paddingVertical: t.spacing.xs,
                     }}
                   >
-                    <PersonLink id={req.user.id} username={req.user.username} />
+                    <PersonLink user={req.user} />
                     <View style={{ flexDirection: "row", gap: t.spacing.xs }}>
                       <Button
                         label="Accept"
@@ -147,7 +147,7 @@ export function RequestsInbox({ requests, onRefresh, defaultExpanded = false }: 
                       paddingVertical: t.spacing.xs,
                     }}
                   >
-                    <PersonLink id={req.user.id} username={req.user.username} />
+                    <PersonLink user={req.user} />
                     <Button
                       label="Cancel"
                       variant="ghost"
