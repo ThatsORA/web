@@ -295,7 +295,7 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
               onCancel={() => setConfirmingChange(false)}
             />
           ) : (
-            <Button label="Change spot" variant="ghost" onPress={() => setConfirmingChange(true)} loading={busy} />
+            <Button label="Change spot" variant="outline" onPress={() => setConfirmingChange(true)} loading={busy} />
           )
         ) : null}
         <Button
@@ -325,14 +325,15 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
 
 /** Names the next backup and asks before moving everyone there (#219). */
 function ChangeSpotConfirm({ card, onConfirm, onCancel }: { card: EventCardPayload; onConfirm: () => void; onCancel: () => void }) {
+  const t = useTheme();
   const { title, body } = changeSpotPrompt(card);
   return (
-    <>
+    <View style={{ gap: t.spacing.sm }}>
       <Callout tone="info" title={title}>
         {body}
       </Callout>
       <Button label="Change for everyone" variant="outline" onPress={onConfirm} />
       <Button label="Keep this spot" variant="ghost" onPress={onCancel} />
-    </>
+    </View>
   );
 }
