@@ -100,3 +100,17 @@ export function votingTimeRemaining(voteClosesAtStr: string, now = Date.now()): 
 }
 
 
+
+/** Whether "Can't make it" shows for a late invite (#345): a direct invitee who hasn't responded to a confirmed, unstarted hangout. */
+export const canDeclineInvite = (card: EventCardPayload, now = Date.now()) =>
+  card.status === "confirmed" && card.my_status === "invited" && card.viewer.invite_source === "direct" &&
+  Date.parse(card.starts_at) > now;
+
+/** Whether "Invite friends" shows (#345): voting or confirmed, not a Mixer, not passed, and not started. The server re-checks. */
+export const canInvite = (card: EventCardPayload, now = Date.now()) =>
+  (card.status === "voting" || card.status === "confirmed") && !card.is_mixer &&
+  card.my_status !== "ghost_passed" && Date.parse(card.starts_at) > now;
+
+/** Friends the invite picker offers: everyone not already visible on the card. Hidden participants are skipped by the server. */
+export const invitableFriends = <F extends { id: string }>(friends: readonly F[], card: Pick<EventCardPayload, "participants">) =>
+  friends.filter((friend) => !card.participants.some((p) => p.id === friend.id));

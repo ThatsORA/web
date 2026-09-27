@@ -11,10 +11,11 @@ import { userIdFromToken } from "../../lib/session";
 import { Badge, Button, Callout, Card, Chip, Modal, Txt, useTheme } from "../../ui";
 import { ExpenseForm, ExpenseLedger } from "../expenses";
 import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calendarSync";
-import { canChangeSpot, canOpenChat, cardKind, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows } from "./cardState";
+import { canChangeSpot, canDeclineInvite, canInvite, canOpenChat, cardKind, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows } from "./cardState";
 import { changeSpotPrompt } from "./changeSpot";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
 import { optionLabel, placeTitle, progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
+import { InviteFriendsButton } from "./InviteFriends";
 import { VotingCountdown } from "./VotingCountdown";
 
 
@@ -22,6 +23,8 @@ export type CardActions = {
   vote: (optionId: string) => void;
   ghostPass: () => void;
   changeSpot: () => void;
+  /** A late direct invitee's "Can't make it" on a confirmed hangout (#345). */
+  declineInvite: () => void;
 };
 
 type Props = {
@@ -142,6 +145,7 @@ function OpenCard({ card, actions, busy, notice }: Props) {
           {kind === "voting" ? (
             <Button label={passButtonLabel(card.viewer)} variant="ghost" onPress={actions.ghostPass} disabled={busy} />
           ) : null}
+          {canInvite(card) ? <InviteFriendsButton card={card} /> : null}
         </>
       ) : null}
 
@@ -363,6 +367,15 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
         ) : null}
       </Card>
       <Card>
+        {canDeclineInvite(card) ? (
+          <Callout tone="info" title="You’re invited">
+            {card.created_by ? `${card.created_by.display_name ?? card.created_by.username} added you to this hangout.` : "You were added to this hangout."}
+            {" "}You’re in unless you say otherwise.
+          </Callout>
+        ) : null}
+        {canDeclineInvite(card) ? (
+          <Button label="Can’t make it" variant="ghost" onPress={actions.declineInvite} disabled={busy} />
+        ) : null}
         <Txt variant="small" numeric>
           {venue.facts_line}
         </Txt>
@@ -398,6 +411,7 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
         />
         {calendarNotice ? <Callout tone="warning">{calendarNotice}</Callout> : null}
         {canOpenChat(card) ? <Button label="Open chat" variant="outline" onPress={handleOpenChat} /> : null}
+        {canInvite(card) ? <InviteFriendsButton card={card} /> : null}
         {!card.is_mixer && attendees.length > 0 ? (
           <ExpenseLedger
             eventId={card.id}
