@@ -7,5 +7,7 @@ export { useEventSocket, useFriendEvents, useSessionSocket } from "./useEventSoc
 export { filterHangoutsByTab, getRecentlyCancelledCards, hasPendingNotification, pendingNotificationCount, type HangoutTab } from "./feedTabs";
 export { HangoutSubTabs } from "./HangoutSubTabs";
 export { CancelledHangoutCard, getCancelledExplanation, type CancelledHangoutCardProps } from "./CancelledHangoutCard";
+export { VotingCountdown } from "./VotingCountdown";
+
 
 
