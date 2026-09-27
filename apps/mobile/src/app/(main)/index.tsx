@@ -4,6 +4,7 @@ import { SymbolView } from "expo-symbols";
 import { useEffect, useRef } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { EmptyFeedCard, EventCard, FindingCard, useEvents } from "../../features/event-card";
+import { useFindNow } from "../../lib/findNow";
 import { useFeedEmptyState } from "../../lib/matcherTrigger";
 import { FRIENDS_HREF, NEW_HANGOUT_HREF, SETTINGS_HREF } from "../../lib/routes";
 import { Button, Callout, Screen, Txt, useTheme } from "../../ui";
@@ -19,6 +20,8 @@ export default function Home() {
   const t = useTheme();
   const { cards, swapped, busy, notice, loaded, error, refreshing, reload, actionsFor } = useEvents();
   const feedState = useFeedEmptyState(cards.length);
+  const findNow = useFindNow(cards.map((c) => c.id));
+  const finding = feedState === "finding" || findNow.state === "finding";
   const { event } = useLocalSearchParams<{ event?: string }>();
   const scrollRef = useRef<ScrollView>(null);
   const cardY = useRef<Record<string, number>>({});
@@ -60,6 +63,16 @@ export default function Home() {
       }
     >
       <Button label="+ New hangout" onPress={() => router.push(NEW_HANGOUT_HREF)} />
+      {/* Demo step 5 (#233): runs the scheduler now; the card arrives over the socket. */}
+      <Button label="Find a hangout now" variant="outline" loading={findNow.state === "finding"} onPress={() => void findNow.find()} />
+      {findNow.error ? (
+        <Callout tone="danger" title="Couldn't start the search">
+          {findNow.error}
+        </Callout>
+      ) : null}
+      {findNow.state === "timedOut" ? (
+        <Callout title="No new hangout yet">The scheduler didn’t find a new plan. Try again in a bit.</Callout>
+      ) : null}
       {error ? (
         <>
           <Callout tone="danger" title="Couldn't load hangouts">
@@ -68,8 +81,8 @@ export default function Home() {
           <Button label="Try again" variant="secondary" onPress={() => void reload()} />
         </>
       ) : null}
-      {loaded && feedState === "finding" ? <FindingCard /> : null}
-      {loaded && feedState === "empty" ? <EmptyFeedCard onAddFriends={() => router.push(FRIENDS_HREF)} /> : null}
+      {loaded && finding ? <FindingCard /> : null}
+      {loaded && !finding && feedState === "empty" ? <EmptyFeedCard onAddFriends={() => router.push(FRIENDS_HREF)} /> : null}
       {cards.map((card) => (
         <View
           key={card.id}
