@@ -1,9 +1,9 @@
-// Owner: Ojas (handed to Andy for #212) — event group chat.
-// Squad hangouts get chat from creation (voting, confirmed, chatted); every other event only as the `chatted`
-// fallback. Who is in it comes from chatAudience() in events/invitations.ts, the same rule as the card's
-// `viewer.chat`: a Ghost Pass never enters, a visible Pass (creator, squad) keeps it, and direct invitees stay
-// out of squad chats. Anyone outside it gets the same 403, whether or not the event has a chat. Members can
-// read until the messages are cleaned up; posting stops at endsAt (read-only).
+// Owner: Ojas (handed to Andy for #212, updated for #347) — event group chat.
+// Squad hangouts get chat from creation (voting, confirmed, chatted); all confirmed events get chat for
+// attending members (confirmed, completed, chatted). Who is in it comes from chatAudience() in events/invitations.ts,
+// the same rule as the card's `viewer.chat`: a Ghost Pass never enters, a visible Pass (creator, squad) keeps it,
+// and direct invitees stay out of pre-close squad chats. Anyone outside it gets the same 403.
+// Members can read until the messages are cleaned up; posting stops at endsAt (read-only).
 import { Router } from "express";
 import {
   ChatMessage,

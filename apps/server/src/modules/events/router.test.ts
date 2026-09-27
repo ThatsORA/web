@@ -197,8 +197,12 @@ describe("events router", () => {
       const body = EventCardPayload.parse(await (await get(`/events/${eventId}`, bob)).json());
       expect(body.is_mixer).toBe(true);
       expect(body.status).toBe(status);
-      expect(body.created_by).toBeNull();
-      expect(body.viewer).toMatchObject({ invite_source: "direct", pass_kind: "ghost", full_roster: false, chat: null });
+      expect(body.viewer).toMatchObject({
+        invite_source: "direct",
+        pass_kind: "ghost",
+        full_roster: false,
+        chat: status === "confirmed" ? "open" : null,
+      });
       expect(body.participants.map((p) => p.id)).toEqual([bob]);
       expect(body.progress).toBeNull();
       expect(body.options.every((o) => Object.keys(o.travel_minutes).every((id) => id === bob))).toBe(true);
@@ -298,7 +302,7 @@ describe("events router", () => {
   it("shows the creator every direct invitee and every attendee, so only they can infer a ghost pass", async () => {
     mocks.findFirst.mockResolvedValueOnce({ ...event(), status: "confirmed", venuePlaceId: "place-1" });
     const body = EventCardPayload.parse(await (await get(`/events/${eventId}`, alice)).json());
-    expect(body.viewer).toEqual({ invite_source: "creator", pass_kind: "visible", full_roster: true, chat: null });
+    expect(body.viewer).toEqual({ invite_source: "creator", pass_kind: "visible", full_roster: true, chat: "open" });
     expect(body.participants.map((p) => [p.id, p.invite_source, p.passed])).toEqual([
       [alice, "creator", false], [bob, "direct", null], [ghost, "direct", null],
     ]);
@@ -309,7 +313,12 @@ describe("events router", () => {
     for (const status of ["voting", "confirmed"] as const) {
       mocks.findFirst.mockResolvedValueOnce({ ...event(), status, venuePlaceId: status === "confirmed" ? "place-1" : null });
       const body = EventCardPayload.parse(await (await get(`/events/${eventId}`, bob)).json());
-      expect(body.viewer).toEqual({ invite_source: "direct", pass_kind: "ghost", full_roster: false, chat: null });
+      expect(body.viewer).toEqual({
+        invite_source: "direct",
+        pass_kind: "ghost",
+        full_roster: false,
+        chat: status === "confirmed" ? "open" : null,
+      });
       expect(body.created_by?.id).toBe(alice);
       expect(body.participants.map((p) => [p.id, p.passed])).toEqual([[alice, false], [bob, false]]);
       expect(body.options[0]?.travel_minutes).toEqual({ [alice]: 10, [bob]: 12 });

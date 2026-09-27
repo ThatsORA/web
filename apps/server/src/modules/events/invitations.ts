@@ -79,29 +79,48 @@ export function keepsAccess(row: InvitedParticipant, votingOpen: boolean): boole
 export const eventAudience = (rows: readonly InvitedParticipant[], votingOpen: boolean): string[] =>
   rows.filter((row) => keepsAccess(row, votingOpen)).map((row) => row.userId);
 
-/** A squad hangout's chat opens at creation and stays readable once the event is over; an expired one has none. */
 const SQUAD_CHAT_STATUSES: readonly EventStatus[] = ["voting", "confirmed", "chatted", "completed"];
+const POST_CLOSE_CHAT_STATUSES: readonly EventStatus[] = ["confirmed", "completed", "chatted"];
 
 /**
- * Who is in the event's chat (#212): everyone here may read it, post until `ends_at`, and gets `event:message`.
- * A chat shows every poster to every member, so its members must all be allowed to see each other (viewerScope()):
- * - a squad hangout has chat from creation for the creator and squad members only when all squad members
- *   share a selected squad. One room cannot safely hold people from separate squads who cannot see each other.
- *   Direct invitees are never in that room;
- * - every other event has chat only as the `chatted` fallback, for everyone who keeps access after close.
- * Chat always uses the after-close rule, so a Ghost Pass never enters it, even while voting is open.
+ * Who is in the event's chat (#212, #347): everyone here may read it, post until `ends_at`, and gets `event:message`.
+ * - Pre-close ("voting"): only squad hangouts where all squad members share a squad ID have chat, and direct invitees are kept out.
+ * - Post-close ("confirmed", "completed", "chatted"): all attending members across all event types (direct, squad, user-created, mixer) have chat.
+ *   - Direct invitees and mixer participants who confirmed attendance (voted or confirmed) are included.
+ *   - Squad members in a shared squad hangout keep access (including squad passers who keep access).
+ *   - Ghost-passers remain excluded from chat (they opted out and are not attending).
+ * - Expired events have no chat.
  */
 export function chatAudience(status: EventStatus, rows: readonly InvitedParticipant[]): string[] {
-  if (rows.some((row) => row.isMixer)) return [];
   const squadRows = rows.filter((row) => row.inviteSource === "squad");
-  if (squadRows.length) {
-    if (!SQUAD_CHAT_STATUSES.includes(status)) return [];
-    const sharedSquad = squadRows[0]?.sourceGroupIds?.some((id) =>
-      squadRows.every((row) => row.sourceGroupIds?.includes(id)));
-    if (!sharedSquad) return [];
+  const hasSquad = squadRows.length > 0;
+  const sharedSquad =
+    hasSquad &&
+    squadRows[0]?.sourceGroupIds?.some((id) => squadRows.every((row) => row.sourceGroupIds?.includes(id)));
+
+  // If there are squad members from separate squads who cannot see each other, no chat room can be opened.
+  if (hasSquad && !sharedSquad) return [];
+
+  // Before close ("voting"), only shared squad hangouts have chat, and direct invitees are kept out.
+  if (status === "voting") {
+    if (rows.some((row) => row.isMixer) || !sharedSquad) return [];
     return eventAudience(rows.filter((row) => row.inviteSource !== "direct"), false);
   }
-  return status === "chatted" ? eventAudience(rows, false) : [];
+
+  // Post-close ("confirmed", "completed", "chatted"): attending members of all event types.
+  if (POST_CLOSE_CHAT_STATUSES.includes(status)) {
+    return rows
+      .filter((row) => {
+        if (!keepsAccess(row, false)) return false;
+        // Squad members and creator in a shared squad hangout keep access even if they visibly passed
+        if (sharedSquad && (row.inviteSource === "squad" || row.inviteSource === "creator")) return true;
+        // All other participants (direct invitees, mixer participants, or members of non-squad events) must have confirmed attendance
+        return row.voteStatus === "confirmed" || row.voteStatus === "voted";
+      })
+      .map((row) => row.userId);
+  }
+
+  return [];
 }
 
 /** The viewer's chat: open until the event ends, then read-only; null if they aren't in chatAudience(). */

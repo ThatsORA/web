@@ -190,14 +190,22 @@ describe("chatRouter", () => {
       expect(res.status).toBe(200);
     });
 
-    it("gives a direct-only hangout no chat while voting or after confirmation, with the same 403 as a stranger", async () => {
-      for (const status of ["voting", "confirmed", "expired"]) {
+    it("gives a direct-only hangout no chat while voting or expired, with the same 403 as a stranger", async () => {
+      for (const status of ["voting", "expired"]) {
         mocks.eventFindUnique.mockResolvedValueOnce(makeEvent({ status }));
         const res = await get();
         expect(res.status).toBe(403);
         expect(await res.json()).toEqual({ error: "forbidden", message: "Chat isn't available to you for this event" });
       }
       expect(mocks.chatMessageFindMany).not.toHaveBeenCalled();
+    });
+
+    it("allows confirmed attendees to read messages in a confirmed direct hangout", async () => {
+      mocks.eventFindUnique.mockResolvedValueOnce(makeEvent({ status: "confirmed" }));
+      mocks.chatMessageFindMany.mockResolvedValueOnce([]);
+      const res = await get();
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ messages: [], next_cursor: null });
     });
 
     it("allows reading after endsAt (read-only mode)", async () => {
@@ -298,11 +306,53 @@ describe("chatRouter", () => {
       expect(mocks.chatMessageCreate).not.toHaveBeenCalled();
     });
 
-    it("rejects posting in a direct-only hangout before it's chatted (403)", async () => {
+    it("rejects posting in a direct-only hangout while voting (403)", async () => {
       mocks.eventFindUnique.mockResolvedValueOnce(makeEvent({ status: "voting" }));
       const res = await post({ body: "Hello" });
       expect(res.status).toBe(403);
       expect(mocks.chatMessageCreate).not.toHaveBeenCalled();
+    });
+
+    it("allows confirmed attendees to post in a confirmed direct hangout", async () => {
+      mocks.eventFindUnique.mockResolvedValueOnce(makeEvent({ status: "confirmed" }));
+      mocks.chatMessageCreate.mockResolvedValueOnce({
+        id: messageId2,
+        eventId,
+        userId,
+        body: "See you all there!",
+        createdAt: new Date(),
+      });
+      const res = await post({ body: "See you all there!" });
+      expect(res.status).toBe(201);
+      expect(mocks.emitToUsers).toHaveBeenCalledWith([friendId], "event:message", { event_id: eventId });
+    });
+
+    it("allows confirmed attendees to read and post in a confirmed mixer event", async () => {
+      const mixerId1 = "aa48fb35-1518-481d-ab60-cfd2dcc28aa1";
+      const mixerId2 = "bb48fb35-1518-481d-ab60-cfd2dcc28bb2";
+      const mixerParticipants = inEvent({ createdById: null, sourceGroupId: null }, [
+        { userId: mixerId1, voteStatus: "confirmed" },
+        { userId: mixerId2, voteStatus: "confirmed" },
+      ]).map((p) => ({ ...p, isMixer: true }));
+      mocks.eventFindUnique.mockResolvedValue(makeEvent({ status: "confirmed", isMixer: true }));
+      mocks.participantFindMany.mockResolvedValue(mixerParticipants);
+      mocks.chatMessageFindMany.mockResolvedValueOnce([]);
+
+      const getRes = await get("", signToken(mixerId1));
+      expect(getRes.status).toBe(200);
+
+      mocks.userFindUnique.mockResolvedValueOnce({ id: mixerId1, username: "mixerUser" });
+      mocks.chatMessageCreate.mockResolvedValueOnce({
+        id: messageId1,
+        eventId,
+        userId: mixerId1,
+        body: "Excited for the mixer!",
+        createdAt: new Date(),
+      });
+
+      const postRes = await post({ body: "Excited for the mixer!" }, signToken(mixerId1));
+      expect(postRes.status).toBe(201);
+      expect(mocks.emitToUsers).toHaveBeenCalledWith([mixerId2], "event:message", { event_id: eventId });
     });
 
     it("rejects posting after endsAt (read-only)", async () => {

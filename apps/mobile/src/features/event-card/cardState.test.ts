@@ -131,6 +131,12 @@ describe("helpers", () => {
     expect(canOpenChat(get("Confirmed"))).toBe(true);
   });
 
+  it("allows confirmed attendees to open chat on confirmed events across all event types", () => {
+    expect(canOpenChat({ viewer: { invite_source: "direct", pass_kind: "ghost", full_roster: false, chat: "open" } })).toBe(true);
+    expect(canOpenChat({ viewer: { invite_source: "creator", pass_kind: "visible", full_roster: true, chat: "open" } })).toBe(true);
+    expect(canOpenChat({ viewer: { invite_source: "direct", pass_kind: "ghost", full_roster: false, chat: "read_only" } })).toBe(true);
+  });
+
   it("votingTimeRemaining formats remaining time correctly", () => {
     const now = 1000000;
     expect(votingTimeRemaining(new Date(now + 120000).toISOString(), now)).toBe("2m remaining");
