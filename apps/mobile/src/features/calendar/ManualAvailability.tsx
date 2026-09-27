@@ -92,7 +92,7 @@ export function ManualAvailabilityView({
 }: ManualAvailabilityViewProps) {
   return (
     <View style={{ flexDirection: "row" }}>
-      <Button label="+ Manually add busy time" variant="outline" size="sm" onPress={onOpen} />
+      <Button label="+ Add busy time" variant="outline" size="sm" onPress={onOpen} />
       <Modal visible={open} onClose={onClose} title="Add busy time">
         <PickerField label="Date" mode="date" value={day} onChange={onChangeDay} />
         <PickerField label="Start" mode="time" value={start} onChange={onChangeStart} />

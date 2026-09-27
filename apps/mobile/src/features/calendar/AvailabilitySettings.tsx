@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, ActivityIndicator, Alert } from "react-native";
 import * as Location from "expo-location";
-import { Txt, Button, Card, useTheme } from "../../ui";
+import { Txt, Button, Card, Modal, useTheme } from "../../ui";
 import { Me, routes } from "@web/contract";
 import type { z } from "zod";
 import { api } from "../../lib/api";
@@ -19,6 +19,8 @@ export function AvailabilitySettings() {
   const [syncing, setSyncing] = useState(false);
   const [updatingLocation, setUpdatingLocation] = useState(false);
   const [scheduleKey, setScheduleKey] = useState(0);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const refreshSchedule = () => setScheduleKey((k) => k + 1);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,7 +66,8 @@ export function AvailabilitySettings() {
     try {
       await createDeviceCalendarSync().sync(true);
       Alert.alert("Success", "Device calendar synced successfully.");
-      setScheduleKey((k) => k + 1);
+      setSyncOpen(false);
+      refreshSchedule();
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to sync device calendar.");
     } finally {
@@ -94,25 +97,27 @@ export function AvailabilitySettings() {
       </Card>
 
       <Card>
-        <Txt variant="section">Availability</Txt>
-
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.sm }}>
-          <Button
-            label={syncing ? "Syncing..." : "Sync with device calendar"}
-            variant="outline"
-            size="sm"
-            onPress={handleSyncDeviceCalendar}
-            disabled={syncing}
-          />
-          <GoogleCalendarSyncButton onSynced={() => setScheduleKey((k) => k + 1)} />
-        </View>
-
-        {/* Manual Availability */}
-        <ManualAvailability onBlocksChanged={() => setScheduleKey((k) => k + 1)} />
-
-        {/* Unified Schedule View */}
-        <UnifiedCalendarView key={scheduleKey} onScheduleChanged={() => setScheduleKey((k) => k + 1)} />
+        <UnifiedCalendarView
+          key={scheduleKey}
+          onScheduleChanged={refreshSchedule}
+          actions={
+            <>
+              <Button label="Sync" variant="outline" size="sm" onPress={() => setSyncOpen(true)} />
+              <ManualAvailability onBlocksChanged={refreshSchedule} />
+            </>
+          }
+        />
       </Card>
+
+      <Modal visible={syncOpen} onClose={() => setSyncOpen(false)} title="Sync calendars">
+        <Button
+          label={syncing ? "Syncing..." : "Sync with device calendar"}
+          variant="outline"
+          onPress={handleSyncDeviceCalendar}
+          disabled={syncing}
+        />
+        <GoogleCalendarSyncButton onSynced={() => { setSyncOpen(false); refreshSchedule(); }} />
+      </Modal>
     </View>
   );
 }

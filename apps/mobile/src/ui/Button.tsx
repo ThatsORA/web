@@ -44,7 +44,9 @@ export function Button({ label, onPress, variant = "primary", size = "md", disab
               ? c.primaryStrong
               : c.primary
             : variant === "secondary"
-              ? c.surfaceMuted
+              ? pressed
+                ? c.primarySoft
+                : c.surfaceMuted
               : variant === "outline"
                 ? pressed
                   ? c.primarySofter
