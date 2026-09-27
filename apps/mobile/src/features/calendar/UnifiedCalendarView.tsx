@@ -39,8 +39,9 @@ export function UnifiedScheduleView({
 
   if (error) {
     return (
-      <View style={{ padding: theme.spacing.md }}>
+      <View style={{ padding: theme.spacing.md, gap: theme.spacing.sm }}>
         <Txt color="danger">Failed to load schedule.</Txt>
+        {actions ? <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: theme.spacing.sm }}>{actions}</View> : null}
       </View>
     );
   }
