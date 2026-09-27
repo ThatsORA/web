@@ -1,6 +1,6 @@
 import { EventCardPayload } from "@web/contract";
 import { describe, expect, it } from "vitest";
-import { byStart, canChangeSpot, canOpenChat, cardKind, detectSwap, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, travelRows } from "./cardState";
+import { byStart, canChangeSpot, canOpenChat, cardKind, detectSwap, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows, votingTimeRemaining } from "./cardState";
 import { FIXTURES, ME } from "./fixtures";
 
 const get = (label: string) => FIXTURES.find((f) => f.label === label)!.card;
@@ -127,5 +127,19 @@ describe("helpers", () => {
   it("allows squad members to open chat during voting and confirmation on squad hangouts", () => {
     expect(canOpenChat(get("Voting"))).toBe(true);
     expect(canOpenChat(get("Confirmed"))).toBe(true);
+  });
+
+  it("votingTimeRemaining formats remaining time correctly", () => {
+    const now = 1000000;
+    expect(votingTimeRemaining(new Date(now + 120000).toISOString(), now)).toBe("2m remaining");
+    expect(votingTimeRemaining(new Date(now + 7200000).toISOString(), now)).toBe("2h remaining");
+    expect(votingTimeRemaining(new Date(now - 1000).toISOString(), now)).toBe("Voting ending…");
+  });
+
+  it("participantBreakdown categorizes participants accurately", () => {
+    const card = get("Chatted");
+    const breakdown = participantBreakdown(card);
+    expect(breakdown.responded.map((p) => p.username)).toEqual(["presenter", "riley", "ojas"]);
+    expect(breakdown.passed).toEqual([]);
   });
 });
