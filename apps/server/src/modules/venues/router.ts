@@ -6,21 +6,25 @@ import { env } from "../../env";
 import { requireAuth, type AuthedRequest } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
 import { emitToUsers, pushVenueChanged } from "../../realtime";
-import { assembleEventCard } from "../events/assembleEventCard";
+import { publicUserSelect } from "../auth/helpers";
+import { assembleEventCard, canSeeEvent } from "../events/assembleEventCard";
+import { eventAudience, invitedParticipant, keepsAccess } from "../events/invitations";
+import { votingOpen } from "../voting/resolution";
 import { changeSpot, swapToBackup } from "./swapToBackup";
 
 export const venuesRouter = Router();
 
-async function currentEventCard(eventId: string, userId: string) {
+async function currentEventCard(eventId: string, userId: string, now = new Date()) {
   const event = await prisma.event.findFirst({
     where: { id: eventId, participants: { some: { userId } } },
     include: {
-      participants: { include: { user: { select: { id: true, username: true } } } },
+      participants: { include: { user: { select: publicUserSelect } } },
       options: true,
       votes: { select: { userId: true, optionId: true } },
     },
   });
-  return event ? assembleEventCard(event, userId) : null;
+  if (!event || !canSeeEvent(event, userId, now)) return null;
+  return assembleEventCard(event, userId, now);
 }
 
 async function handleVenueSwap(req: Request, res: Response, intent: "report_closed" | "change_spot") {
@@ -36,11 +40,26 @@ async function handleVenueSwap(req: Request, res: Response, intent: "report_clos
   const result = await prisma.$transaction(async (tx) => {
     const event = await tx.event.findUnique({
       where: { id: id.data },
-      include: { participants: { select: { userId: true, voteStatus: true } } },
+      include: {
+        participants: {
+          select: {
+            userId: true,
+            voteStatus: true,
+            inviteSource: true,
+            sourceGroupIds: true,
+          },
+        },
+      },
     });
     if (!event) return { kind: "not_found" as const };
     const caller = event.participants.find((participant) => participant.userId === userId);
-    if (!caller || ((intent === "change_spot" || event.isMixer) && caller.voteStatus !== "confirmed")) {
+    if (!caller) return { kind: "forbidden" as const };
+
+    const callerInvited = invitedParticipant(event, caller);
+    if (!keepsAccess(callerInvited, votingOpen(event, now))) {
+      return { kind: "forbidden" as const };
+    }
+    if ((intent === "change_spot" || event.isMixer) && caller.voteStatus !== "confirmed") {
       return { kind: "forbidden" as const };
     }
 
@@ -58,12 +77,12 @@ async function handleVenueSwap(req: Request, res: Response, intent: "report_clos
       data: decision.data,
     });
     if (!count) return { kind: "race" as const };
+
+    const participants = event.participants.map((participant) => invitedParticipant(event, participant));
     return {
       kind: "updated" as const,
       transition: decision.kind,
-      participantIds: event.participants
-        .filter((participant) => (intent === "report_closed" && !event.isMixer) || participant.voteStatus === "confirmed")
-        .map((participant) => participant.userId),
+      participantIds: eventAudience(participants, false),
     };
   });
 
@@ -73,7 +92,7 @@ async function handleVenueSwap(req: Request, res: Response, intent: "report_clos
     (result.kind === "rejected" && result.decision.error === "venue_already_changed")) {
     return res.status(409).json({
       error: "venue_already_changed",
-      event: await currentEventCard(id.data, userId),
+      event: await currentEventCard(id.data, userId, now),
     });
   }
   if (result.kind === "rejected") {
