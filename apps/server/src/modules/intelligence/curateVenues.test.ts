@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CurateContext, RankedVenue } from "@web/contract";
 import { env } from "../../env";
 vi.mock("node:fs", () => ({ existsSync: vi.fn(), readFileSync: vi.fn(), readdirSync: vi.fn() }));
+import { buildCase, type Scenario } from "../../../scripts/decision-data";
 import { curateVenues, factsLine, fallbackOptions, pickVenues } from "./curateVenues";
 
 const venue = (id: string, route_score: number, max: number): RankedVenue => ({
@@ -63,10 +64,8 @@ describe("curateVenues", () => {
     if (String(url).includes("generativelanguage")) return geminiReply(_init?.signal);
     if (String(url).includes("systemone")) {
       if (!fitProbs) return new Response("down", { status: 503 });
-      const answers = Object.fromEntries(fitProbs.map((a, i) => [
-        `fit_${i}`,
-        { type: "choice", choice: a >= 0.5 ? "A" : "B", confidence: 0.5, probabilities: { A: a, B: 1 - a } },
-      ]));
+      const a = fitProbs[Number(JSON.parse(_init!.body as string).state.name.at(-1)) - 1]!; // venue names end in 1..5
+      const answers = { venue_fit: { type: "choice", choice: a >= 0.5 ? "A" : "B", confidence: 0.5, probabilities: { A: a, B: 1 - a } } };
       return new Response(JSON.stringify({ model: "jev-1.13.0", answers }));
     }
     return new Response(JSON.stringify({ reviews: [{ text: { text: "x".repeat(300) } }] }));
@@ -93,7 +92,7 @@ describe("curateVenues", () => {
     vi.unstubAllGlobals();
   });
 
-  it("filters with one decision call, then Gemini writes blurbs + match reason; caches the result", async () => {
+  it("filters with one decision call per venue, then Gemini writes blurbs + match reason; caches the result", async () => {
     geminiReply = blurbs(["v2", "v4", "v5"]);
     const out = await curateVenues(five("v"), ctx);
     expect(out.options.map((o) => [o.place_id, o.rank, o.ai_blurb])).toEqual([
@@ -102,11 +101,13 @@ describe("curateVenues", () => {
       ["v5", 3, "Blurb v5"],
     ]);
     expect(out.matchReason).toBe("Easy weeknight catch-up");
-    expect(fetchMock).toHaveBeenCalledTimes(7); // 5 Place Details + 1 decision + 1 Gemini
+    expect(fetchMock).toHaveBeenCalledTimes(11); // 5 Place Details + 5 decisions + 1 Gemini
 
+    // Byte-identical to the training request for the same scenario (#235).
     const decision = bodyOf("systemone");
-    expect(Object.keys(decision.questions)).toEqual(["fit_0", "fit_1", "fit_2", "fit_3", "fit_4"]);
-    expect(decision.state.venues[0]).toEqual({ name: "v1", primary_type: "restaurant", reviews: ["x".repeat(200)] });
+    const scenario: Scenario = { id: "v00000", kind: "venue", name: "v1", primary_type: "restaurant", price_level: 2, rating: 4.6, reviews: ["x".repeat(200)], vibe: "casual_hangout" };
+    const { state, questions } = buildCase(scenario);
+    expect(JSON.stringify({ state: decision.state, questions: decision.questions })).toBe(JSON.stringify({ state, questions }));
     expect(JSON.stringify(decision)).not.toContain("place_id");
     const prompt = bodyOf("generativelanguage").contents[0].parts[0].text as string;
     expect(prompt).toContain(`"${"x".repeat(200)}"`); // snippets capped at 200 chars
@@ -203,13 +204,13 @@ describe("curateVenues", () => {
     await curate(0); // Refresh the oldest entry before inserting one more.
     expect(fetchMock).not.toHaveBeenCalled();
     await curate(200);
-    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(fetchMock).toHaveBeenCalledTimes(11);
 
     fetchMock.mockClear();
     await curate(0);
     await curate(2);
     expect(fetchMock).not.toHaveBeenCalled();
     await curate(1); // The least recently used entry was evicted.
-    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(fetchMock).toHaveBeenCalledTimes(11);
   });
 });

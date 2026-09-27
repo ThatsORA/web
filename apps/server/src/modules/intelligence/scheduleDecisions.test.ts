@@ -9,7 +9,8 @@ vi.mock("./decision", async (importOriginal) => ({
 }));
 
 import { feasibleSlots, classifySlot } from "../matching/timeMath";
-import { applyDecisions, candidateFacts, decisionQuestions, scheduleDecisions, type DecisionCandidate } from "./scheduleDecisions";
+import { buildCase, type Scenario } from "../../../scripts/decision-data";
+import { applyDecisions, decisionRequest, scheduleDecisions, type DecisionCandidate } from "./scheduleDecisions";
 
 const IDS = ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333"];
 const TZ = "America/New_York";
@@ -44,43 +45,41 @@ beforeEach(() => {
   askDecision.mockReset();
 });
 
-describe("candidateFacts", () => {
-  it("is plain words: size, local day/time, bucketed last hangout, shared favorites", () => {
+describe("decisionRequest", () => {
+  const facts = (c: DecisionCandidate, favorites: Parameters<typeof decisionRequest>[1] = new Map()) =>
+    (decisionRequest(c, favorites).questions.propose!.instructions as { facts: string[] }).facts;
+
+  it("is byte-identical to the training request for the same scenario (#235)", () => {
     const favorites = new Map([
       [IDS[0]!, [{ category: "coffee_shop" }, { category: "coffee_shop" }]],
       [IDS[1]!, [{ category: "coffee_shop" }, { category: "bar" }]],
       [IDS[2]!, [{ category: "restaurant" }]],
     ]);
-    const facts = candidateFacts(candidate("g", WIDE, 20), favorites);
-    expect(facts).toEqual([
-      "group of 3 friends",
-      "free time: Fri 7:00pm",
-      "last hangout: over 2 weeks ago",
-      "shared favorites: coffee shop",
-    ]);
-    const text = facts.join(" ");
+    const scenario: Scenario = {
+      id: "g00000",
+      kind: "group",
+      size: 3,
+      when: "Fri 7:00pm",
+      last_hangout: "2 weeks ago",
+      shared_favorites: ["coffee_shop"],
+      feasible_vibes: ["casual_hangout", "dinner", "night_out"],
+    };
+    expect(JSON.stringify(decisionRequest(candidate("g", WIDE, 20), favorites))).toBe(JSON.stringify(buildCase(scenario)));
+    const narrow = { ...scenario, when: "Thu 5:00pm", last_hangout: "never", shared_favorites: [], feasible_vibes: ["casual_hangout" as const] };
+    expect(JSON.stringify(decisionRequest(candidate("n", NARROW), new Map()))).toBe(JSON.stringify(buildCase(narrow)));
+  });
+
+  it("phrases the last hangout like the training scenarios", () => {
+    const last = (days: number | null) => facts(candidate("g", WIDE, days))[2];
+    expect([null, 0.5, 1.2, 6, 13.9, 14, 59, 60, 95].map(last)).toEqual([
+      "never", "today", "yesterday", "6 days ago", "13 days ago", "2 weeks ago", "8 weeks ago", "2 months ago", "3 months ago",
+    ].map((t) => `Last hangout: ${t}`));
+  });
+
+  it("leaks no ids or raw timestamps", () => {
+    const text = JSON.stringify(decisionRequest(candidate("g", WIDE, 20), new Map()));
     expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}|T\d{2}:\d{2}/);
     for (const id of IDS) expect(text).not.toContain(id);
-  });
-
-  it("buckets the last hangout", () => {
-    const last = (days: number | null) => candidateFacts(candidate("g", WIDE, days), new Map())[2];
-    expect([last(null), last(3), last(7), last(14), last(15)]).toEqual([
-      "last hangout: never",
-      "last hangout: this week",
-      "last hangout: 1–2 weeks ago",
-      "last hangout: 1–2 weeks ago",
-      "last hangout: over 2 weeks ago",
-    ]);
-  });
-});
-
-describe("decisionQuestions", () => {
-  it("asks propose_i for every candidate and vibe_i over only that window's feasible vibes", () => {
-    const questions = decisionQuestions([candidate("wide", WIDE), candidate("narrow", NARROW)], new Map());
-    expect(Object.keys(questions).sort()).toEqual(["propose_0", "propose_1", "vibe_0"]);
-    expect(Object.keys(questions.propose_0!.criteria)).toEqual(["A", "B"]);
-    expect(Object.keys(questions.vibe_0!.criteria)).toEqual(["casual_hangout", "dinner", "night_out"]);
   });
 });
 
@@ -89,37 +88,43 @@ describe("applyDecisions", () => {
   const narrow = candidate("narrow", NARROW);
 
   it("keeps candidates at P(A) ≥ 0.6 and drops those below", () => {
-    const kept = applyDecisions([wide, narrow], reply({ propose_0: propose(0.6), propose_1: propose(0.59) }), false);
+    const kept = applyDecisions([wide, narrow], [reply({ propose: propose(0.6) }), reply({ propose: propose(0.59) })], false);
     expect(kept.map((c) => c.group.groupKey)).toEqual(["wide"]);
   });
 
   it("uses the chosen vibe's slot", () => {
-    const [kept] = applyDecisions([wide], reply({ propose_0: propose(0.9), vibe_0: vibe("dinner") }), false);
+    const [kept] = applyDecisions([wide], [reply({ propose: propose(0.9), vibe: vibe("dinner") })], false);
     expect(kept!.slot).toEqual(wide.feasible.find((s) => s.vibe_tag === "dinner"));
     expect(kept!.slot.vibe_tag).not.toBe(wide.slot.vibe_tag);
   });
 
   it("keeps the priority slot when no vibe question was asked", () => {
-    const [kept] = applyDecisions([narrow], reply({ propose_0: propose(0.9) }), false);
+    const [kept] = applyDecisions([narrow], [reply({ propose: propose(0.9) })], false);
     expect(kept!.slot).toEqual(narrow.slot);
   });
 
   it("skips the gate when forced but still applies the chosen vibe", () => {
-    const kept = applyDecisions([wide, narrow], reply({ propose_0: propose(0.1), vibe_0: vibe("casual_hangout"), propose_1: propose(0) }), true);
+    const kept = applyDecisions([wide, narrow], [reply({ propose: propose(0.1), vibe: vibe("casual_hangout") }), reply({ propose: propose(0) })], true);
     expect(kept.map((c) => [c.group.groupKey, c.slot.vibe_tag])).toEqual([["wide", "casual_hangout"], ["narrow", "casual_hangout"]]);
   });
 });
 
 describe("scheduleDecisions", () => {
-  it("sends one request for all candidates and applies it", async () => {
-    askDecision.mockResolvedValue(reply({ propose_0: propose(0.2), vibe_0: vibe("dinner"), propose_1: propose(0.8) }));
-    const kept = await scheduleDecisions([candidate("wide", WIDE), candidate("narrow", NARROW)], new Map(), false);
-    expect(askDecision).toHaveBeenCalledOnce();
+  it("sends one request per candidate and applies each reply to its candidate", async () => {
+    askDecision
+      .mockResolvedValueOnce(reply({ propose: propose(0.2), vibe: vibe("dinner") }))
+      .mockResolvedValueOnce(reply({ propose: propose(0.8) }));
+    const wide = candidate("wide", WIDE);
+    const narrow = candidate("narrow", NARROW);
+    const kept = await scheduleDecisions([wide, narrow], new Map(), false);
+    expect(askDecision.mock.calls).toEqual([[decisionRequest(wide, new Map())], [decisionRequest(narrow, new Map())]]);
     expect(kept.map((c) => c.group.groupKey)).toEqual(["narrow"]);
   });
 
-  it("falls back to the top-ranked candidate with its priority vibe when the call fails", async () => {
-    askDecision.mockImplementation(async () => { throw new Error("Decision: no provider configured"); });
+  it("falls back to the top-ranked candidate with its priority vibe when any call fails", async () => {
+    askDecision
+      .mockResolvedValueOnce(reply({ propose: propose(0.9) }))
+      .mockRejectedValueOnce(new Error("Decision: no provider configured"));
     const wide = candidate("wide", WIDE);
     const kept = await scheduleDecisions([wide, candidate("narrow", NARROW)], new Map(), true);
     expect(kept).toEqual([wide]);

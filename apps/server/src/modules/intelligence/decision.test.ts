@@ -11,6 +11,7 @@ const originalEnv = {
 };
 
 const questions = { gate: proposeQuestion(["4 friends", "last hangout was 3 weeks ago"]) };
+const req = { state: { task: "s" }, questions };
 const answer = (model: string, a = 0.8) => ({
   model,
   answers: { gate: { type: "choice", choice: a >= 0.5 ? "A" : "B", confidence: 0.6, probabilities: { A: a, B: 1 - a } } },
@@ -52,19 +53,19 @@ describe("askDecision", () => {
 
   it("uses Laya when it answers", async () => {
     fetchMock.mockResolvedValueOnce(json(answer("laya")));
-    expect((await askDecision("hangout scheduler", questions)).model).toBe("laya");
+    expect((await askDecision({ state: { task: "hangout scheduler" }, questions })).model).toBe("laya");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("http://laya.test/v1/systemone");
     expect((init!.headers as Record<string, string>).Authorization).toBe("Bearer laya-key");
-    expect(JSON.parse(init!.body as string)).toEqual({ state: "hangout scheduler", model: "laya", questions });
+    expect(JSON.parse(init!.body as string)).toEqual({ state: { task: "hangout scheduler" }, model: "laya", questions });
   });
 
   it("falls back to Jev when Laya errors or replies malformed", async () => {
     fetchMock.mockResolvedValueOnce(json({ error: "down" }, 503)).mockResolvedValueOnce(json(answer("jev-1.13.0")));
-    expect((await askDecision("s", questions)).model).toBe("jev-1.13.0");
+    expect((await askDecision(req)).model).toBe("jev-1.13.0");
     fetchMock.mockResolvedValueOnce(json({ nope: true })).mockResolvedValueOnce(json(answer("jev-1.13.0")));
-    expect((await askDecision("s", questions)).model).toBe("jev-1.13.0");
+    expect((await askDecision(req)).model).toBe("jev-1.13.0");
     const [url, init] = fetchMock.mock.calls[3]!;
     expect(url).toBe("https://api.typesafe.ai/v1/systemone");
     expect((init!.headers as Record<string, string>).Authorization).toBe("Bearer jev-key");
@@ -75,27 +76,27 @@ describe("askDecision", () => {
     fetchMock
       .mockImplementationOnce((_url, init) => new Promise((_, reject) => init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason))))
       .mockResolvedValueOnce(json(answer("jev-1.13.0")));
-    expect((await askDecision("s", questions)).model).toBe("jev-1.13.0");
+    expect((await askDecision(req)).model).toBe("jev-1.13.0");
   });
 
   it("goes straight to Jev when LAYA_URL is unset", async () => {
     env.LAYA_URL = "";
     fetchMock.mockResolvedValueOnce(json(answer("jev-1.13.0")));
-    await askDecision("s", questions);
+    await askDecision(req);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]![0]).toBe("https://api.typesafe.ai/v1/systemone");
   });
 
   it("throws when both providers fail", async () => {
     fetchMock.mockResolvedValue(json({}, 500));
-    await expect(askDecision("s", questions)).rejects.toThrow();
+    await expect(askDecision(req)).rejects.toThrow();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("throws without calling out when no provider is configured", async () => {
     env.LAYA_URL = "";
     env.JEV_API_KEY = "";
-    await expect(askDecision("s", questions)).rejects.toThrow("no provider configured");
+    await expect(askDecision(req)).rejects.toThrow("no provider configured");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
