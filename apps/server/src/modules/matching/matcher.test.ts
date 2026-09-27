@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   curateVenues: vi.fn(),
   fetchCandidates: vi.fn(),
   openVoting: vi.fn(),
+  askDecision: vi.fn(),
 }));
 
 vi.mock("../../lib/prisma", () => ({
@@ -26,6 +27,10 @@ vi.mock("../../lib/prisma", () => ({
 vi.mock("../intelligence/curateVenues", async (importOriginal) => ({
   ...await importOriginal<typeof import("../intelligence/curateVenues")>(),
   curateVenues: mocks.curateVenues,
+}));
+vi.mock("../intelligence/decision", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../intelligence/decision")>(),
+  askDecision: mocks.askDecision,
 }));
 vi.mock("../venues/liveVenues", () => ({ fetchCandidates: mocks.fetchCandidates }));
 vi.mock("../voting/lifecycle", () => ({ openVoting: mocks.openVoting }));
@@ -99,14 +104,26 @@ function resetData() {
     event: { findFirst: mocks.eventFindFirst, create: mocks.eventCreate },
   }));
   mocks.fetchCandidates.mockResolvedValue(rankedVenues);
-  mocks.curateVenues.mockImplementation(async (venues: RankedVenue[]) => venues.slice(0, 3).map((venue, index: number) => ({
-    ...venue,
-    rank: index + 1,
-    facts_line: `max ${venue.max_travel_min} min travel`,
-    ai_blurb: null,
-  })));
+  mocks.curateVenues.mockImplementation(async (venues: RankedVenue[]) => ({
+    options: venues.slice(0, 3).map((venue, index: number) => ({
+      ...venue,
+      rank: index + 1,
+      facts_line: `max ${venue.max_travel_min} min travel`,
+      ai_blurb: null,
+    })),
+    matchReason: null,
+  }));
   mocks.openVoting.mockResolvedValue(undefined);
+  mocks.askDecision.mockRejectedValue(new Error("Decision: no provider configured"));
 }
+// Thu 18:30–20:45 EDT fits casual_hangout and dinner (the priority pick), so the model is asked both.
+const declineWithVibe = {
+  model: "jev-1.13.0",
+  answers: {
+    propose_0: { type: "choice", choice: "B", confidence: 0.9, probabilities: { A: 0.1, B: 0.9 } },
+    vibe_0: { type: "choice", choice: "casual_hangout", confidence: 0.9, probabilities: { casual_hangout: 0.8, dinner: 0.2 } },
+  },
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -249,6 +266,30 @@ describe("matcher pipeline", () => {
     expect(mocks.eventCreate.mock.invocationCallOrder[0]).toBeLessThan(mocks.openVoting.mock.invocationCallOrder[0]!);
   });
 
+  it("stores the curated match reason on the event", async () => {
+    const curate = mocks.curateVenues.getMockImplementation()!;
+    mocks.curateVenues.mockImplementationOnce(async (venues: RankedVenue[]) => ({
+      ...await curate(venues),
+      matchReason: "Shared restaurant favorite on a free Thursday",
+    }));
+    await runPipeline(NOW);
+    expect(mocks.eventCreate.mock.calls[0]![0].data.matchReason).toBe("Shared restaurant favorite on a free Thursday");
+  });
+
+  it("drops a group the decision model declines; force keeps it with the chosen vibe", async () => {
+    mocks.askDecision.mockResolvedValue(declineWithVibe);
+    await runPipeline(NOW);
+    expect(mocks.askDecision).toHaveBeenCalledOnce();
+    expect(mocks.eventCreate).not.toHaveBeenCalled();
+
+    await runPipeline(NOW, { force: true });
+    expect(mocks.eventCreate.mock.calls[0]![0].data).toMatchObject({
+      vibeTag: "casual_hangout",
+      startsAt: new Date("2026-10-01T22:30:00Z"),
+      endsAt: new Date("2026-10-02T00:30:00Z"),
+    });
+  });
+
   it("creates no duplicate when the pipeline runs twice", async () => {
     mocks.eventFindFirst.mockResolvedValueOnce(null).mockResolvedValue({ id: "event-1" });
     await runPipeline(NOW);
@@ -273,7 +314,7 @@ describe("matcher pipeline", () => {
   });
 
   it("refuses to persist an incomplete curation result", async () => {
-    mocks.curateVenues.mockResolvedValue([]);
+    mocks.curateVenues.mockResolvedValue({ options: [], matchReason: null });
     await expect(runPipeline(NOW)).rejects.toThrow("expected 3");
     expect(mocks.transaction).not.toHaveBeenCalled();
     expect(mocks.openVoting).not.toHaveBeenCalled();
@@ -307,6 +348,32 @@ describe("matcher mutex", () => {
   });
 });
 
+describe("matcher mutex force", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("a coalesced forced call forces the rerun", async () => {
+    mocks.askDecision.mockResolvedValue(declineWithVibe);
+    let release: ((value: typeof users) => void) | undefined;
+    mocks.userFindMany
+      .mockImplementationOnce(() => new Promise<typeof users>((resolve) => { release = resolve; }))
+      .mockResolvedValue(users);
+
+    const first = triggerMatcher();
+    expect(triggerMatcher({ force: true })).toBe(first);
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    release!(users);
+    await first;
+
+    expect(mocks.askDecision).toHaveBeenCalledTimes(2);
+    expect(mocks.eventCreate).toHaveBeenCalledOnce();
+    expect(mocks.eventCreate.mock.calls[0]![0].data.vibeTag).toBe("casual_hangout");
+  });
+});
+
 describe("createUserHangout", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -328,6 +395,13 @@ describe("createUserHangout", () => {
       status: "voting",
     });
     expect(mocks.openVoting).toHaveBeenCalledWith("event-1");
+  });
+
+  it("stores the curated match reason on the event", async () => {
+    const curate = mocks.curateVenues.getMockImplementation()!;
+    mocks.curateVenues.mockImplementationOnce(async (venues: RankedVenue[]) => ({ ...await curate(venues), matchReason: "Cozy pick" }));
+    await createUserHangout(IDS[0]!, [IDS[1]!, IDS[2]!]);
+    expect(mocks.eventCreate.mock.calls[0]![0].data.matchReason).toBe("Cozy pick");
   });
 
   // The mocked user lookup returns all three users, so invite the other two.
