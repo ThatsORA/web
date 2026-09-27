@@ -260,12 +260,20 @@ export const EventParticipantView = PublicUser.extend({
 });
 export type EventParticipantView = z.infer<typeof EventParticipantView>;
 
+/**
+ * The caller's event chat (#212): "open" = read and post, "read_only" = read only (from `ends_at`),
+ * null = no chat for this caller. Squad hangouts get chat from creation; other events only the `chatted` fallback.
+ */
+export const EventChatAccess = z.enum(["open", "read_only"]);
+export type EventChatAccess = z.infer<typeof EventChatAccess>;
+
 /** What the caller is and may see on this card. Computed on the server; clients never infer it. */
 export const EventViewer = z.object({
   invite_source: InviteSource,
   pass_kind: PassKind,
   /** The human creator only: every participant, and after close every attendee. Always false on automated events. */
   full_roster: z.boolean(),
+  chat: EventChatAccess.nullable(),
 });
 export type EventViewer = z.infer<typeof EventViewer>;
 

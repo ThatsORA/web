@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { VoteStatus } from "@web/contract";
-import { eventAudience, inviteSource, keepsAccess, passKind, viewerScope, type ParticipantRow } from "./invitations";
+import { chatAccess, chatAudience, eventAudience, inviteSource, keepsAccess, passKind, viewerScope, type InvitedParticipant, type ParticipantRow } from "./invitations";
 
 const [C, D, E, O, S, T] = ["c", "d", "e", "o", "s", "t"];
 const S1 = "squad-1";
@@ -109,5 +109,71 @@ describe("keepsAccess / eventAudience (#210)", () => {
     expect(scope.people.find((p) => p.userId === S)?.passed).toBe(true);
     expect(scope.attendeeIds).not.toContain(S);
     expect(scope.attendeeIds).not.toContain(O);
+  });
+});
+
+describe("chatAudience / chatAccess (#212)", () => {
+  const invited = (event: { createdById: string | null; sourceGroupId: string | null }, list: ParticipantRow[]) =>
+    list.map((r) => ({ ...r, inviteSource: inviteSource(event, r.userId) }));
+  // Squad S1's hangout made by C with O, S, T; S passed (a visible Pass).
+  const squadRows = invited({ createdById: C, sourceGroupId: S1 }, rows([C, O, S, T], { [S]: "ghost_passed" }));
+  // C's direct hangout with D and E; D ghost passed.
+  const directRows = invited({ createdById: C, sourceGroupId: null }, rows([C, D, E], { [D]: "ghost_passed" }));
+  // A mixed hangout (#207; needs stored provenance, so built by hand): C made it for squad S, T plus D, E directly; E ghost passed.
+  const mixedRows: InvitedParticipant[] = [
+    { userId: C, voteStatus: "voted", inviteSource: "creator" },
+    { userId: S, voteStatus: "voted", inviteSource: "squad" },
+    { userId: T, voteStatus: "ghost_passed", inviteSource: "squad" },
+    { userId: D, voteStatus: "voted", inviteSource: "direct" },
+    { userId: E, voteStatus: "ghost_passed", inviteSource: "direct" },
+  ];
+
+  it("a squad hangout has chat from creation, through confirmation, and after it ends; squad passers keep it", () => {
+    for (const status of ["voting", "confirmed", "chatted", "completed"] as const) {
+      expect(chatAudience(status, squadRows)).toEqual([C, O, S, T]);
+    }
+    const automated = invited({ createdById: null, sourceGroupId: S1 }, rows([O, S, T], { [S]: "ghost_passed" }));
+    expect(chatAudience("voting", automated)).toEqual([O, S, T]);
+  });
+
+  it("an expired squad hangout has no chat", () => {
+    expect(chatAudience("expired", squadRows)).toEqual([]);
+  });
+
+  it("any other event only has the chatted fallback, where a Ghost Pass stays out", () => {
+    for (const status of ["voting", "confirmed", "expired", "completed"] as const) {
+      expect(chatAudience(status, directRows)).toEqual([]);
+    }
+    expect(chatAudience("chatted", directRows)).toEqual([C, E]);
+    const automated = invited({ createdById: null, sourceGroupId: null }, rows([D, E, O], { [D]: "ghost_passed" }));
+    expect(chatAudience("chatted", automated)).toEqual([E, O]);
+  });
+
+  it("keeps every direct invitee out of a mixed hangout's chat, whether they voted or ghost passed", () => {
+    for (const status of ["voting", "confirmed", "chatted", "completed"] as const) {
+      expect(chatAudience(status, mixedRows)).toEqual([C, S, T]);
+    }
+  });
+
+  it("only ever holds people who may all see each other (viewerScope), so no poster is someone a member may not see", () => {
+    const members = chatAudience("voting", mixedRows);
+    const withCreator = { createdById: C, sourceGroupId: S1 }; // derived sources match the hand-built ones for C, S, T
+    for (const viewer of members) {
+      const seen = viewerScope({ ...withCreator, participants: mixedRows.filter((r) => members.includes(r.userId)) }, viewer);
+      expect(seen.people.map((p) => p.userId)).toEqual(members);
+    }
+  });
+
+  it("is open until ends_at, then read-only, and null for anyone outside the chat", () => {
+    const endsAt = new Date("2026-10-01T20:30:00Z");
+    const before = new Date("2026-10-01T20:29:59Z");
+    expect(chatAccess({ status: "voting", endsAt }, squadRows, S, before)).toBe("open");
+    expect(chatAccess({ status: "confirmed", endsAt }, squadRows, O, before)).toBe("open");
+    expect(chatAccess({ status: "completed", endsAt }, squadRows, O, endsAt)).toBe("read_only");
+    expect(chatAccess({ status: "chatted", endsAt }, directRows, E, endsAt)).toBe("read_only");
+    expect(chatAccess({ status: "chatted", endsAt }, directRows, D, before)).toBeNull(); // Ghost Pass
+    expect(chatAccess({ status: "voting", endsAt }, mixedRows, D, before)).toBeNull(); // direct invitee in a squad chat
+    expect(chatAccess({ status: "voting", endsAt }, directRows, E, before)).toBeNull(); // no chat yet
+    expect(chatAccess({ status: "voting", endsAt }, squadRows, "stranger", before)).toBeNull();
   });
 });

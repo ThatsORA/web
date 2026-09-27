@@ -208,7 +208,7 @@ describe("events router", () => {
   it("shows the creator every direct invitee and every attendee, so only they can infer a ghost pass", async () => {
     mocks.findFirst.mockResolvedValueOnce({ ...event(), status: "confirmed", venuePlaceId: "place-1" });
     const body = EventCardPayload.parse(await (await get(`/events/${eventId}`, alice)).json());
-    expect(body.viewer).toEqual({ invite_source: "creator", pass_kind: "visible", full_roster: true });
+    expect(body.viewer).toEqual({ invite_source: "creator", pass_kind: "visible", full_roster: true, chat: null });
     expect(body.participants.map((p) => [p.id, p.invite_source, p.passed])).toEqual([
       [alice, "creator", false], [bob, "direct", null], [ghost, "direct", null],
     ]);
@@ -219,7 +219,7 @@ describe("events router", () => {
     for (const status of ["voting", "confirmed"] as const) {
       mocks.findFirst.mockResolvedValueOnce({ ...event(), status, venuePlaceId: status === "confirmed" ? "place-1" : null });
       const body = EventCardPayload.parse(await (await get(`/events/${eventId}`, bob)).json());
-      expect(body.viewer).toEqual({ invite_source: "direct", pass_kind: "ghost", full_roster: false });
+      expect(body.viewer).toEqual({ invite_source: "direct", pass_kind: "ghost", full_roster: false, chat: null });
       expect(body.created_by?.id).toBe(alice);
       expect(body.participants.map((p) => [p.id, p.passed])).toEqual([[alice, false], [bob, false]]);
       expect(body.options[0]?.travel_minutes).toEqual({ [alice]: 10, [bob]: 12 });
@@ -244,9 +244,9 @@ describe("events router", () => {
   });
 
   it("shows a squad's automated hangout to every member, with their visible passes", async () => {
-    mocks.findFirst.mockResolvedValueOnce({ ...event(), createdById: null, sourceGroupId: "squad-1" });
+    mocks.findFirst.mockResolvedValueOnce({ ...event(), createdById: null, sourceGroupId: "squad-1", endsAt: new Date(Date.now() + 3600_000) });
     const body = EventCardPayload.parse(await (await get(`/events/${eventId}`, bob)).json());
-    expect(body.viewer).toEqual({ invite_source: "squad", pass_kind: "visible", full_roster: false });
+    expect(body.viewer).toEqual({ invite_source: "squad", pass_kind: "visible", full_roster: false, chat: "open" });
     expect(body.participants.map((p) => [p.id, p.invite_source, p.passed])).toEqual([
       [alice, "squad", false], [bob, "squad", false], [ghost, "squad", true],
     ]);
@@ -293,6 +293,26 @@ describe("events router", () => {
     expect(body.viewer.pass_kind).toBe("visible");
     expect(body.participants.find((p) => p.id === ghost)?.passed).toBe(true);
     expect(body.outcome?.attendees.map((person) => person.id)).not.toContain(ghost);
+  });
+
+  it("tells each viewer their chat with the same rule as the chat routes (#212)", async () => {
+    const soon = new Date(Date.now() + 3600_000);
+    const chatOf = async (e: object, userId: string) => {
+      mocks.findFirst.mockResolvedValueOnce(e);
+      return EventCardPayload.parse(await (await get(`/events/${eventId}`, userId)).json()).viewer.chat;
+    };
+    // A squad's hangout made by alice: bob and ghost came in with the squad; ghost passed (visible Pass).
+    const squad = { ...event(), sourceGroupId: "s1", endsAt: soon };
+    for (const viewer of [alice, bob, ghost]) expect(await chatOf(squad, viewer)).toBe("open"); // voting
+    expect(await chatOf({ ...squad, status: "confirmed", venuePlaceId: "place-1" }, ghost)).toBe("open");
+    expect(await chatOf({ ...squad, status: "completed", venuePlaceId: "place-1", endsAt: new Date(Date.now() - 60_000) }, bob)).toBe("read_only");
+    expect(await chatOf({ ...squad, status: "expired" }, bob)).toBeNull();
+    // alice's direct hangout: no chat until it's chatted, and never for the direct ghost passer.
+    const direct = { ...event(), endsAt: soon, voteClosesAt: soon };
+    expect(await chatOf(direct, bob)).toBeNull();
+    expect(await chatOf(direct, ghost)).toBeNull(); // voting still open: keeps the card, not chat
+    expect(await chatOf({ ...direct, status: "chatted" }, bob)).toBe("open");
+    expect(await chatOf({ ...direct, status: "chatted" }, alice)).toBe("open");
   });
 
   it("requires authentication and hides events from nonparticipants", async () => {

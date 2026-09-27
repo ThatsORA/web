@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EventCardPayload, ExpoPushToken, LoginRequest, SignupRequest, optionFromRow, type OptionRowLike } from "./schemas";
+import { EventCardPayload, EventViewer, ExpoPushToken, LoginRequest, SignupRequest, optionFromRow, type OptionRowLike } from "./schemas";
 import { EventCreatedPayload, EventMessagePayload, EventProgressPayload, EventResolvedPayload, EventVenueChangedPayload } from "./socket";
 
 describe("EventCardPayload match reason", () => {
@@ -7,6 +7,22 @@ describe("EventCardPayload match reason", () => {
     expect(EventCardPayload.shape.match_reason.safeParse(null).success).toBe(true);
     expect(EventCardPayload.shape.match_reason.safeParse("A shared restaurant favorite fits Thursday dinner.").success).toBe(true);
     expect(EventCardPayload.shape.match_reason.safeParse("x".repeat(91)).success).toBe(false);
+  });
+});
+
+describe("EventViewer chat (#212)", () => {
+  const viewer = { invite_source: "squad", pass_kind: "visible", full_roster: false } as const;
+
+  it("carries open (voting, confirmed, chatted), read_only (after ends_at) or null (no chat, e.g. a Ghost Pass)", () => {
+    for (const chat of ["open", "read_only", null]) {
+      expect(EventViewer.safeParse({ ...viewer, chat }).success).toBe(true);
+    }
+  });
+
+  it("is always present and names no people or membership", () => {
+    expect(EventViewer.safeParse(viewer).success).toBe(false);
+    expect(EventViewer.safeParse({ ...viewer, chat: "member" }).success).toBe(false);
+    expect(EventViewer.safeParse({ ...viewer, chat: ["someone"] }).success).toBe(false);
   });
 });
 
