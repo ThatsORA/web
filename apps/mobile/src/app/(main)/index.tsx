@@ -4,11 +4,13 @@ import { SymbolView } from "expo-symbols";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import {
+  CancelledHangoutCard,
   EmptyFeedCard,
   EventCard,
   FindingCard,
   HangoutSubTabs,
   filterHangoutsByTab,
+  getRecentlyCancelledCards,
   hasPendingNotification,
   useEvents,
   type HangoutTab,
@@ -29,6 +31,7 @@ export default function Home() {
   const t = useTheme();
   const { cards, swapped, busy, notice, loaded, error, refreshing, reload, actionsFor } = useEvents();
   const [activeTab, setActiveTab] = useState<HangoutTab>("pending");
+  const [dismissedCancelledIds, setDismissedCancelledIds] = useState<string[]>([]);
   const feedState = useFeedEmptyState(cards.length);
   const findNow = useFindNow(cards.map((c) => c.id));
   const finding = feedState === "finding" || findNow.state === "finding";
@@ -38,6 +41,7 @@ export default function Home() {
 
   const hasNotification = hasPendingNotification(cards);
   const filteredCards = filterHangoutsByTab(cards, activeTab);
+  const recentlyCancelledCards = getRecentlyCancelledCards(cards, dismissedCancelledIds);
 
   // The card may already be on screen (warm app); otherwise its onLayout below scrolls.
   useEffect(() => {
@@ -84,6 +88,18 @@ export default function Home() {
         onSelectTab={setActiveTab}
         hasNotification={hasNotification}
       />
+
+      {activeTab === "pending"
+        ? recentlyCancelledCards.map((card) => (
+            <CancelledHangoutCard
+              key={`cancelled-${card.id}`}
+              card={card}
+              onDismiss={() => {
+                setDismissedCancelledIds((prev) => [...prev, card.id]);
+              }}
+            />
+          ))
+        : null}
 
       {findNow.error ? (
         <Callout tone="danger" title="Couldn't start the search">

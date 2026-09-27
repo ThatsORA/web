@@ -123,7 +123,7 @@ describe("ExpenseLedger", () => {
         Children.toArray((el.props as { children: ReactNode }).children).join("") ===
         "You owe Andy $10.00"
     );
-    expect(oweLine?.props.color).toBe("danger");
+    expect((oweLine?.props as any)?.color).toBe("danger");
 
     // Check third-party debt line has no special color
     const thirdPartyLine = txtElements.find(
@@ -131,7 +131,7 @@ describe("ExpenseLedger", () => {
         Children.toArray((el.props as { children: ReactNode }).children).join("") ===
         "Ojas owes Andy $10.00"
     );
-    expect(thirdPartyLine?.props.color).toBeUndefined();
+    expect((thirdPartyLine?.props as any)?.color).toBeUndefined();
 
     // Badges
     const badges = rendered
@@ -182,7 +182,7 @@ describe("ExpenseLedger", () => {
         Children.toArray((el.props as { children: ReactNode }).children).join("") ===
         "Andy owes you $10.00"
     );
-    expect(owedLine?.props.color).toBe("success");
+    expect((owedLine?.props as any)?.color).toBe("success");
   });
 
   it("renders a settlement confirmation modal with expected text when settling net debt", () => {
