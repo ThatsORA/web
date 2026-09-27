@@ -8,14 +8,14 @@ import { ActionSheetIOS, ActivityIndicator, Linking, Platform, View } from "reac
 import { getToken } from "../../lib/api";
 import { CHAT_PATHNAME } from "../../lib/routes";
 import { userIdFromToken } from "../../lib/session";
-import { Badge, Button, Callout, Card, Chip, Modal, Txt, useTheme } from "../../ui";
+import { Badge, Button, Callout, Card, Chip, IconButton, Modal, Txt, useTheme } from "../../ui";
 import { ExpenseForm, ExpenseLedger } from "../expenses";
 import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calendarSync";
 import { canChangeSpot, canDeclineInvite, canInvite, canOpenChat, cardKind, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows } from "./cardState";
 import { changeSpotPrompt } from "./changeSpot";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
 import { optionLabel, placeTitle, progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
-import { InviteFriendsButton } from "./InviteFriends";
+import { InviteFriendsButton, InviteFriendsModal } from "./InviteFriends";
 import { VotingCountdown } from "./VotingCountdown";
 
 
@@ -271,6 +271,8 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
   const [calendarNotice, setCalendarNotice] = useState<string | null>(null);
   const [addingCalendar, setAddingCalendar] = useState(false);
   const [confirmingChange, setConfirmingChange] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [inviteSent, setInviteSent] = useState<string | null>(null);
   const status = card.status === "completed" ? "Done" : "Confirmed";
   const attendees = card.outcome?.attendees ?? [];
   const currentUserId = userIdFromToken(getToken());
@@ -387,6 +389,32 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
             </Txt>
           </View>
         ))}
+        {canInvite(card) || canOpenChat(card) ? (
+          <View style={{ width: "100%", flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: t.spacing.sm }}>
+            {inviteSent ? <Txt variant="small" style={{ flexShrink: 1 }}>{inviteSent}</Txt> : null}
+            {canInvite(card) ? (
+              <IconButton
+                icon={{ ios: "person.badge.plus", android: "person_add", web: "person_add" }}
+                label="Invite friends"
+                onPress={() => { setInviteSent(null); setInviting(true); }}
+              />
+            ) : null}
+            {canOpenChat(card) ? (
+              <IconButton
+                icon={{ ios: "bubble.left.and.bubble.right", android: "chat", web: "chat" }}
+                label="Open chat"
+                onPress={handleOpenChat}
+              />
+            ) : null}
+          </View>
+        ) : null}
+        {inviting ? (
+          <InviteFriendsModal
+            card={card}
+            onClose={() => setInviting(false)}
+            onSent={(label) => { setInviteSent(label); setInviting(false); }}
+          />
+        ) : null}
         <Button label="Get directions" variant="outline" onPress={handleGetDirections} />
         {canChangeSpot(card) ? (
           confirmingChange ? (
@@ -410,8 +438,6 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
           disabled={busy}
         />
         {calendarNotice ? <Callout tone="warning">{calendarNotice}</Callout> : null}
-        {canOpenChat(card) ? <Button label="Open chat" variant="outline" onPress={handleOpenChat} /> : null}
-        {canInvite(card) ? <InviteFriendsButton card={card} /> : null}
         {!card.is_mixer && attendees.length > 0 ? (
           <ExpenseLedger
             eventId={card.id}
