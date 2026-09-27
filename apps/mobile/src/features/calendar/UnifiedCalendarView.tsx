@@ -6,39 +6,20 @@ import { Badge, Card, Txt, useTheme } from "../../ui";
 import { api } from "../../lib/api";
 import { ScheduleDayGroup, transformScheduleItems } from "./scheduleTransform";
 
-export function UnifiedCalendarView() {
+export type UnifiedScheduleViewProps = {
+  schedule: ScheduleDayGroup[] | null;
+  loading?: boolean;
+  error?: boolean;
+  onSelectEvent?: (eventId: string) => void;
+};
+
+export function UnifiedScheduleView({
+  schedule,
+  loading = false,
+  error = false,
+  onSelectEvent,
+}: UnifiedScheduleViewProps) {
   const theme = useTheme();
-  const router = useRouter();
-  const [schedule, setSchedule] = useState<ScheduleDayGroup[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    Promise.all([
-      api(routes.myAvailability, MyAvailabilityResponse).catch(() => ({ windows: [] })),
-      api(routes.events, EventsListResponse).catch(() => ({ events: [] })),
-    ])
-      .then(([availRes, eventsRes]) => {
-        if (!cancelled) {
-          const grouped = transformScheduleItems(availRes.windows, eventsRes.events);
-          setSchedule(grouped);
-          setLoading(false);
-        }
-      })
-      .catch((e) => {
-        console.error("UnifiedCalendarView load error:", e);
-        if (!cancelled) {
-          setError(true);
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   if (loading) {
     return (
@@ -70,20 +51,49 @@ export function UnifiedCalendarView() {
         }}
       >
         <Txt variant="title">Upcoming Schedule</Txt>
-        <View style={{ flexDirection: "row", gap: theme.spacing.xs, alignItems: "center" }}>
+        <View style={{ flexDirection: "row", gap: theme.spacing.sm, alignItems: "center" }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-            <View style={{ width: 8, height: 8, borderRadius: theme.radius.pill, backgroundColor: theme.colors.textMuted }} />
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: theme.radius.pill,
+                backgroundColor: theme.colors.primarySoft,
+                borderWidth: 1,
+                borderColor: theme.colors.primary,
+              }}
+            />
+            <Txt variant="small" color="primary">Free</Txt>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: theme.radius.pill,
+                backgroundColor: theme.colors.surfaceMuted,
+                borderWidth: 1,
+                borderColor: theme.colors.borderStrong,
+              }}
+            />
             <Txt variant="small" color="textMuted">Busy</Txt>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 8 }}>
-            <View style={{ width: 8, height: 8, borderRadius: theme.radius.pill, backgroundColor: theme.colors.primary }} />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: theme.radius.pill,
+                backgroundColor: theme.colors.primary,
+              }}
+            />
             <Txt variant="small" color="link">Hangout</Txt>
           </View>
         </View>
       </View>
 
       {!schedule || schedule.length === 0 ? (
-        <Txt color="textMuted">No upcoming busy blocks or hangouts scheduled.</Txt>
+        <Txt color="textMuted">No upcoming free windows, busy blocks or hangouts scheduled.</Txt>
       ) : (
         schedule.map((group) => (
           <View key={group.dateKey} style={{ gap: theme.spacing.xs }}>
@@ -91,6 +101,28 @@ export function UnifiedCalendarView() {
               {group.dateLabel}
             </Txt>
             {group.items.map((item) => {
+              if (item.type === "free") {
+                return (
+                  <View
+                    key={item.id}
+                    style={{
+                      padding: theme.spacing.sm,
+                      borderRadius: theme.radius.sm,
+                      backgroundColor: theme.colors.primarySofter,
+                      borderWidth: 1,
+                      borderColor: theme.colors.primarySoft,
+                    }}
+                  >
+                    <Txt variant="body" color="primary">
+                      {item.title}
+                    </Txt>
+                    <Txt variant="small" color="primary" numeric>
+                      {item.subtitle}
+                    </Txt>
+                  </View>
+                );
+              }
+
               if (item.type === "busy") {
                 return (
                   <View
@@ -121,8 +153,8 @@ export function UnifiedCalendarView() {
                 <Pressable
                   key={item.id}
                   onPress={() => {
-                    if (item.eventId) {
-                      router.push({ pathname: "/", params: { eventId: item.eventId } });
+                    if (item.eventId && onSelectEvent) {
+                      onSelectEvent(item.eventId);
                     }
                   }}
                   style={({ pressed }) => ({
@@ -154,5 +186,50 @@ export function UnifiedCalendarView() {
         ))
       )}
     </View>
+  );
+}
+
+export function UnifiedCalendarView() {
+  const router = useRouter();
+  const [schedule, setSchedule] = useState<ScheduleDayGroup[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([
+      api(routes.myAvailability, MyAvailabilityResponse).catch(() => ({ windows: [], busy_blocks: [] })),
+      api(routes.events, EventsListResponse).catch(() => ({ events: [] })),
+    ])
+      .then(([availRes, eventsRes]) => {
+        if (!cancelled) {
+          const grouped = transformScheduleItems(availRes.windows, eventsRes.events, availRes.busy_blocks);
+          setSchedule(grouped);
+          setLoading(false);
+        }
+      })
+      .catch((e) => {
+        console.error("UnifiedCalendarView load error:", e);
+        if (!cancelled) {
+          setError(true);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <UnifiedScheduleView
+      schedule={schedule}
+      loading={loading}
+      error={error}
+      onSelectEvent={(eventId) => {
+        router.push({ pathname: "/", params: { eventId } });
+      }}
+    />
   );
 }

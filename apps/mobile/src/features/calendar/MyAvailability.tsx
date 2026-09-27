@@ -23,7 +23,7 @@ export function MyAvailability() {
     <View style={{ gap: theme.spacing.sm }}>
       <Txt variant="title">Your free time this week</Txt>
       {error ? (
-        <Txt color="danger">Couldn't load your free time.</Txt>
+        <Txt color="danger">Could not load your free time.</Txt>
       ) : !days ? (
         <ActivityIndicator />
       ) : days.length === 0 ? (

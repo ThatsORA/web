@@ -8,7 +8,6 @@ import { api } from "../../lib/api";
 import { roundedHome } from "../../lib/geo";
 import { createDeviceCalendarSync } from "./device";
 import { GoogleCalendarConnect } from "./GoogleCalendarConnect";
-import { MyAvailability } from "./MyAvailability";
 import { UnifiedCalendarView } from "./UnifiedCalendarView";
 
 
@@ -132,8 +131,6 @@ export function AvailabilitySettings() {
       </View>
 
       <UnifiedCalendarView />
-
-      <MyAvailability />
     </View>
   );
 }

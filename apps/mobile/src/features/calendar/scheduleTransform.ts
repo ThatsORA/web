@@ -1,9 +1,9 @@
-// Pure data transformation for combining calendar busy blocks and Web Hangouts into a unified schedule.
+// Pure data transformation for combining calendar busy blocks, free windows, and Web Hangouts into a unified schedule.
 import type { EventCardPayload } from "@web/contract";
 
 export interface ScheduleItem {
   id: string;
-  type: "busy" | "hangout";
+  type: "busy" | "free" | "hangout";
   startsAt: string;
   endsAt: string;
   title: string;
@@ -54,13 +54,26 @@ function formatVibeName(vibe: string): string {
 }
 
 export function transformScheduleItems(
-  busyWindows: Array<{ starts_at: string; ends_at: string }>,
-  events: EventCardPayload[]
+  freeWindows: { starts_at: string; ends_at: string }[] = [],
+  events: EventCardPayload[] = [],
+  busyBlocks: { starts_at: string; ends_at: string }[] = []
 ): ScheduleDayGroup[] {
   const items: ScheduleItem[] = [];
 
+  // Convert free windows
+  freeWindows.forEach((f, idx) => {
+    items.push({
+      id: `free-${idx}-${f.starts_at}`,
+      type: "free",
+      startsAt: f.starts_at,
+      endsAt: f.ends_at,
+      title: "Free",
+      subtitle: formatTimeRange(f.starts_at, f.ends_at),
+    });
+  });
+
   // Convert busy blocks
-  busyWindows.forEach((b, idx) => {
+  busyBlocks.forEach((b, idx) => {
     items.push({
       id: `busy-${idx}-${b.starts_at}`,
       type: "busy",

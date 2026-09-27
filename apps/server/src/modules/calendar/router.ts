@@ -63,6 +63,10 @@ calendarRouter.get(routes.myAvailability, requireAuth, async (req, res) => {
   });
   return res.json(MyAvailabilityResponse.parse({
     windows: windows.map(w => ({ starts_at: w.start.toISOString(), ends_at: w.end.toISOString() })),
+    busy_blocks: user.busyBlocks
+      .filter(b => b.endsAt >= new Date())
+      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())
+      .map(b => ({ starts_at: b.startsAt.toISOString(), ends_at: b.endsAt.toISOString() })),
   }));
 });
 
