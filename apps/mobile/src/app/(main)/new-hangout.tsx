@@ -1,17 +1,17 @@
-// Owner: Andy — "+ New hangout" (#70, #208): pick squads and individual friends, an optional vibe and week, then
-// POST /events. The new card reaches the feed over the socket (`event:created`).
+// Owner: Andy — "+ New hangout" (#70, #208, #363): search friends to pick who's coming, an optional vibe and week,
+// then POST /events. The Squads screen's shortcut (`?squadId=`) pre-fills that squad and sends it as `squad_ids`. The new card reaches the feed over the socket (`event:created`).
 // Invariant: privacy — the picker lists only people I added, never whether they added me back.
 import { EventCardPayload, Friend, FriendsResponse, Squad, SquadsResponse, routes, VibeTag } from "@web/contract";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 import type { z } from "zod";
 import { FindingCard } from "../../features/event-card";
+import { inviteSearch } from "../../features/event-card/cardState";
 import { vibeLabel } from "../../features/event-card/format";
 import { api, getToken } from "../../lib/api";
 import { displayName } from "../../lib/displayName";
 import {
-  MAX_INVITEES,
   buildCreateEventRequest,
   getDeduplicatedInvitees,
   getSelectedSquadMembers,
@@ -21,7 +21,7 @@ import {
 } from "../../lib/newHangout";
 import { FRIENDS_HREF } from "../../lib/routes";
 import { userIdFromToken } from "../../lib/session";
-import { Button, Callout, Card, Chip, Screen, Txt, useTheme } from "../../ui";
+import { Button, Callout, Card, Chip, Screen, TextField, Txt, useTheme } from "../../ui";
 
 type SquadT = z.infer<typeof Squad>;
 type FriendT = z.infer<typeof Friend>;
@@ -47,8 +47,7 @@ export default function NewHangout() {
       setSelectedSquadIds((prev) => [...prev, params.squadId!]);
     }
   }, [params.squadId]);
-  const [squadsOpen, setSquadsOpen] = useState(true);
-  const [peopleOpen, setPeopleOpen] = useState(true);
+  const [query, setQuery] = useState("");
   const [vibe, setVibe] = useState<VibeTag | null>(null);
   const [week, setWeek] = useState<Week | null>(null);
   const [phase, setPhase] = useState<Phase>("form");
@@ -73,16 +72,36 @@ export default function NewHangout() {
   const activeSquads = squads ?? [];
   const eligibleFriends = friends ?? [];
 
-  const { inviteeIds, squadMemberIds, totalCount, isValidCount } = getDeduplicatedInvitees(
+  const { inviteeIds, squadMemberIds, canSubmit } = getDeduplicatedInvitees(
     selectedSquadIds,
     selectedFriendIds,
     activeSquads,
     currentUserId,
   );
-  const selectedSquadDetails = getSelectedSquadMembers(selectedSquadIds, activeSquads, currentUserId);
+  // Who's coming: the shortcut squad's members first, then friends picked from search.
+  const squadMembers = getSelectedSquadMembers(selectedSquadIds, activeSquads, currentUserId)
+    .flatMap((d) => d.activeMembers)
+    .filter((m, i, all) => all.findIndex((x) => x.id === m.id) === i);
+  const pickedFriends = eligibleFriends.filter((f) => selectedFriendIds.includes(f.id) && !squadMemberIds.includes(f.id));
+  const results = inviteSearch(eligibleFriends, { participants: [] }, query)
+    .map(({ friend }) => friend)
+    .filter((f) => !inviteeIds.includes(f.id));
+
+  function addFriend(id: string) {
+    setSelectedFriendIds((s) => [...s, id]);
+    setQuery("");
+  }
+
+  // The server invites a whole squad from `squad_ids`, so removing one member drops the squad and keeps the
+  // rest as direct picks. Direct invites must be friends, so squadmates I haven't added drop out too.
+  function removeSquadMember(id: string) {
+    const keep = squadMemberIds.filter((x) => x !== id && eligibleFriends.some((f) => f.id === x));
+    setSelectedFriendIds((s) => Array.from(new Set([...s.filter((x) => x !== id), ...keep])));
+    setSelectedSquadIds([]);
+  }
 
   async function submit(forWeek: Week | null) {
-    if (!isValidCount) return;
+    if (!canSubmit) return;
     const body = buildCreateEventRequest({ inviteeIds, squadIds: selectedSquadIds, vibe, week: forWeek }, new Date());
     setSubmitError(null);
     setPhase("finding");
@@ -90,6 +109,7 @@ export default function NewHangout() {
       await api(routes.events, EventCardPayload, { method: "POST", body });
       setSelectedSquadIds([]);
       setSelectedFriendIds([]);
+      setQuery("");
       setVibe(null);
       setWeek(null);
       setPhase("form");
@@ -148,49 +168,12 @@ export default function NewHangout() {
   return (
     <Screen
       title="New hangout"
-      subtitle="Pick who’s coming. Web finds a time you’re all free and three places to vote on."
-      footer={
-        <Button
-          label="Find a time"
-          onPress={() => void submit(week)}
-          disabled={!isValidCount}
-        />
-      }
+      footer={<Button label="Find a time" onPress={() => void submit(week)} disabled={!canSubmit} />}
     >
       {submitError ? <Callout tone="danger">{submitError}</Callout> : null}
 
       <Card>
-        {selectedSquadIds.length === 1 && selectedSquadDetails.length === 1 ? (
-          <View style={{ gap: t.spacing.xs }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Txt variant="section">Squad Hangout: {selectedSquadDetails[0].squad.name}</Txt>
-              <Txt variant="small" numeric>
-                {totalCount} of 6 people
-              </Txt>
-            </View>
-            <Txt variant="small">
-              Inviting all active members of {selectedSquadDetails[0].squad.name}:
-            </Txt>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm, marginTop: t.spacing.xs }}>
-              {selectedSquadDetails[0].activeMembers.map((m) => (
-                <Chip key={m.id} label={displayName({ username: m.username ?? "member", display_name: m.display_name })} selected />
-              ))}
-            </View>
-          </View>
-        ) : (
-          <>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Txt variant="section">Who’s coming</Txt>
-              <Txt variant="small" numeric>
-                {totalCount} of 6 people total ({inviteeIds.length} of {MAX_INVITEES} picked)
-              </Txt>
-            </View>
-
-            <Txt variant="small">
-              Squad invitees use visible Pass and directly invited people use Ghost Pass; overlap uses squad rules.
-            </Txt>
-          </>
-        )}
+        <Txt variant="section">Who’s coming</Txt>
 
         {loadError ? (
           <>
@@ -201,97 +184,50 @@ export default function NewHangout() {
           </>
         ) : null}
 
-        {/* Section 1: Squads */}
-        <View style={{ gap: t.spacing.xs, marginTop: t.spacing.xs }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Toggle Squads Section"
-            onPress={() => setSquadsOpen((o) => !o)}
-            style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: t.spacing.xs }}
-          >
-            <Txt variant="title">Squads ({activeSquads.length})</Txt>
-            <Txt variant="small">{squadsOpen ? "Collapse" : "Expand"}</Txt>
-          </Pressable>
-
-          {squadsOpen ? (
-            activeSquads.length === 0 ? (
-              <Txt variant="small">No active squads yet.</Txt>
-            ) : (
-              <View style={{ gap: t.spacing.xs }}>
-                {activeSquads.map((sq) => {
-                  const selected = selectedSquadIds.includes(sq.id);
-                  const activeMembers = sq.members.filter((m) => m.status === "active" && m.id !== currentUserId);
-                  const memberNames = activeMembers.map(displayName).join(", ");
-                  return (
-                    <View key={sq.id} style={{ gap: t.spacing.xs }}>
-                      <Chip
-                        label={sq.name}
-                        selected={selected}
-                        onPress={() =>
-                          setSelectedSquadIds((s) =>
-                            s.includes(sq.id) ? s.filter((x) => x !== sq.id) : [...s, sq.id],
-                          )
-                        }
-                      />
-                      {selected ? (
-                        <Txt variant="small" style={{ paddingLeft: t.spacing.xs }}>
-                          Active members: {memberNames || "Only you"}
-                        </Txt>
-                      ) : null}
-                    </View>
-                  );
-                })}
-              </View>
-            )
-          ) : null}
-        </View>
-
-        {/* Section 2: People */}
-        <View style={{ gap: t.spacing.xs, marginTop: t.spacing.xs }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Toggle People Section"
-            onPress={() => setPeopleOpen((o) => !o)}
-            style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: t.spacing.xs }}
-          >
-            <Txt variant="title">Extra People ({eligibleFriends.length})</Txt>
-            <Txt variant="small">{peopleOpen ? "Collapse" : "Expand"}</Txt>
-          </Pressable>
-
-          {peopleOpen ? (
-            eligibleFriends.length === 0 ? (
-              <View style={{ gap: t.spacing.xs }}>
-                <Txt variant="small">Add friends first, then invite them here.</Txt>
-                <Button label="Add friends" variant="outline" onPress={() => router.push(FRIENDS_HREF)} />
-              </View>
-            ) : (
+        {friends && eligibleFriends.length === 0 && squadMembers.length === 0 ? (
+          <View style={{ gap: t.spacing.xs }}>
+            <Txt variant="small">Add friends first, then invite them here.</Txt>
+            <Button label="Add friends" variant="outline" onPress={() => router.push(FRIENDS_HREF)} />
+          </View>
+        ) : (
+          <>
+            <TextField
+              placeholder="Search friends"
+              value={query}
+              onChangeText={setQuery}
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {query.trim() && results.length === 0 ? <Txt variant="small">No friends match that search.</Txt> : null}
+            {results.length > 0 ? (
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm }}>
-                {eligibleFriends.map((f) => {
-                  const selected = selectedFriendIds.includes(f.id);
-                  const inSelectedSquad = squadMemberIds.includes(f.id);
-                  return (
-                    <Chip
-                      key={f.id}
-                      label={displayName(f)}
-                      selected={selected || inSelectedSquad}
-                      onPress={() =>
-                        setSelectedFriendIds((s) =>
-                          s.includes(f.id) ? s.filter((x) => x !== f.id) : [...s, f.id],
-                        )
-                      }
-                    />
-                  );
-                })}
+                {results.map((f) => (
+                  <Chip key={f.id} label={displayName(f)} onPress={() => addFriend(f.id)} />
+                ))}
               </View>
-            )
-          ) : null}
-        </View>
-
-        {!isValidCount && inviteeIds.length > MAX_INVITEES ? (
-          <Callout tone="danger">
-            Hangouts are limited to 6 people max (including you). Pick fewer squads or people.
-          </Callout>
-        ) : null}
+            ) : null}
+            {inviteeIds.length > 0 ? (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm }}>
+                {squadMembers.map((m) => (
+                  <Chip
+                    key={m.id}
+                    label={displayName({ username: m.username ?? "member", display_name: m.display_name })}
+                    selected
+                    onPress={() => removeSquadMember(m.id)}
+                  />
+                ))}
+                {pickedFriends.map((f) => (
+                  <Chip
+                    key={f.id}
+                    label={displayName(f)}
+                    selected
+                    onPress={() => setSelectedFriendIds((s) => s.filter((x) => x !== f.id))}
+                  />
+                ))}
+              </View>
+            ) : null}
+          </>
+        )}
       </Card>
 
       <Card>
