@@ -24,6 +24,9 @@ export type SwapDecision =
       error: "event_not_confirmed" | "outside_report_window" | "venue_already_changed" | "invalid_backup_venues";
     };
 
+export type ChangeSpotDecision = Exclude<SwapDecision, { ok: true; kind: "chatted" }>
+  | { ok: false; status: 409; error: "no_backup_venue" };
+
 /** Pure eligibility and transition logic for a report-closed request. */
 export function swapToBackup(
   event: SwappableEvent,
@@ -65,4 +68,17 @@ export function swapToBackup(
       venueStatus: "open",
     },
   };
+}
+
+/** Intentional venue changes leave the confirmed event untouched when no backup remains. */
+export function changeSpot(
+  event: SwappableEvent,
+  currentPlaceId: string,
+  now: Date,
+  reportWindowHours: number,
+): ChangeSpotDecision {
+  const decision = swapToBackup(event, currentPlaceId, now, reportWindowHours);
+  return decision.ok && decision.kind === "chatted"
+    ? { ok: false, status: 409, error: "no_backup_venue" }
+    : decision;
 }

@@ -35,6 +35,7 @@ export const routes = {
   vote: (id: string) => `/events/${id}/vote`,
   ghostPass: (id: string) => `/events/${id}/ghost-pass`,
   reportClosed: (id: string) => `/events/${id}/report-closed`,
+  changeSpot: (id: string) => `/events/${id}/change-spot`,
   runMatcher: "/internal/run-matcher", // header X-Internal-Secret
   expenses: (id: string) => `/events/${id}/expenses`,
   expenseSplit: (id: string) => `/expense-splits/${id}`,

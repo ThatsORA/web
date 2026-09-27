@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EventOption } from "@web/contract";
-import { swapToBackup } from "./swapToBackup";
+import { changeSpot, swapToBackup } from "./swapToBackup";
 
 const startsAt = new Date("2026-10-01T18:30:00Z");
 const endsAt = new Date("2026-10-01T20:30:00Z");
@@ -94,6 +94,24 @@ describe("swapToBackup", () => {
       ok: false,
       status: 409,
       error: "invalid_backup_venues",
+    });
+  });
+});
+
+describe("changeSpot", () => {
+  it("uses the existing next-backup transition", () => {
+    expect(changeSpot(event(), "current", now, 24)).toMatchObject({
+      ok: true,
+      kind: "swapped",
+      data: { venuePlaceId: "backup-a", backupVenues: [backupB] },
+    });
+  });
+
+  it("rejects an exhausted backup list without moving the event to chatted", () => {
+    expect(changeSpot(event([]), "current", now, 24)).toEqual({
+      ok: false,
+      status: 409,
+      error: "no_backup_venue",
     });
   });
 });
