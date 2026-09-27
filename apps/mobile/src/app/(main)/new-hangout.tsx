@@ -9,6 +9,7 @@ import { FindingCard } from "../../features/event-card";
 import { vibeLabel } from "../../features/event-card/format";
 import { getCloseFriends } from "../../features/friends/friendsApi";
 import { api } from "../../lib/api";
+import { displayName } from "../../lib/displayName";
 import {
   MAX_INVITEES,
   buildCreateEventRequest,
@@ -144,7 +145,7 @@ export default function NewHangout() {
             {(friends ?? []).map((f) => (
               <Chip
                 key={f.id}
-                label={`@${f.username}`}
+                label={displayName(f)}
                 selected={selected.includes(f.id)}
                 onPress={() => setSelected((s) => toggleInvitee(s, f.id))}
               />
