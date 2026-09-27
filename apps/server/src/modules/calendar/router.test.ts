@@ -174,9 +174,10 @@ describe("GET /availability/me", () => {
     expect(mocks.userFindUnique).toHaveBeenLastCalledWith({ where: { id: userId }, include: { busyBlocks: true } });
     expect(mocks.eventFindMany).toHaveBeenCalledWith({ where: { status: { in: ["voting", "confirmed"] }, participants: { some: { userId } } } });
     const expected = freeWindows([{ id: userId, timezone: "America/New_York", busyBlocks: [{ start: busy.startsAt, end: busy.endsAt }], openEvents: [{ start: event.startsAt, end: event.endsAt }] }], new Date(), { busyPaddingMin: 15, minLeadHours: 2, horizonDays: 7 });
-    const { windows } = await res.json() as { windows: { starts_at: string; ends_at: string }[] };
+    const { windows, busy_blocks } = await res.json() as { windows: { starts_at: string; ends_at: string }[]; busy_blocks: { starts_at: string; ends_at: string }[] };
     expect(windows.length).toBeGreaterThan(0);
     expect(windows).toEqual(expected.map(w => ({ starts_at: w.start.toISOString(), ends_at: w.end.toISOString() })));
+    expect(busy_blocks).toEqual([{ starts_at: busy.startsAt.toISOString(), ends_at: busy.endsAt.toISOString() }]);
     for (const block of [busy, event]) {
       expect(windows.some(w => new Date(w.starts_at) < block.endsAt && new Date(w.ends_at) > block.startsAt)).toBe(false);
     }

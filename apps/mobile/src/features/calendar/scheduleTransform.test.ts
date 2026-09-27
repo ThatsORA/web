@@ -3,9 +3,13 @@ import { transformScheduleItems } from "./scheduleTransform";
 import type { EventCardPayload } from "@web/contract";
 
 describe("scheduleTransform", () => {
-  it("transforms and groups busy blocks and web hangouts chronologically", () => {
-    const busyWindows = [
-      { starts_at: "2026-10-01T10:00:00.000Z", ends_at: "2026-10-01T11:00:00.000Z" },
+  it("transforms and groups free windows, busy blocks and web hangouts chronologically", () => {
+    const freeWindows = [
+      { starts_at: "2026-10-01T09:00:00.000Z", ends_at: "2026-10-01T12:00:00.000Z" },
+    ];
+
+    const busyBlocks = [
+      { starts_at: "2026-10-01T13:00:00.000Z", ends_at: "2026-10-01T14:00:00.000Z" },
     ];
 
     const events: Partial<EventCardPayload>[] = [
@@ -32,19 +36,23 @@ describe("scheduleTransform", () => {
       },
     ];
 
-    const result = transformScheduleItems(busyWindows, events as EventCardPayload[]);
+    const result = transformScheduleItems(freeWindows, events as EventCardPayload[], busyBlocks);
     expect(result.length).toBe(1);
     expect(result[0].dateKey).toBe("2026-10-01");
-    expect(result[0].items.length).toBe(2);
+    expect(result[0].items.length).toBe(3);
 
-    // Busy item first
-    expect(result[0].items[0].type).toBe("busy");
-    expect(result[0].items[0].title).toBe("Busy");
+    // Free item first (09:00 - 12:00)
+    expect(result[0].items[0].type).toBe("free");
+    expect(result[0].items[0].title).toBe("Free");
 
-    // Hangout item second (prominent)
-    expect(result[0].items[1].type).toBe("hangout");
-    expect(result[0].items[1].title).toBe("Dinner Hangout");
-    expect(result[0].items[1].venueName).toBe("Sergio's Pizza");
-    expect(result[0].items[1].status).toBe("confirmed");
+    // Busy item second (13:00 - 14:00)
+    expect(result[0].items[1].type).toBe("busy");
+    expect(result[0].items[1].title).toBe("Busy");
+
+    // Hangout item third (18:00 - 20:00)
+    expect(result[0].items[2].type).toBe("hangout");
+    expect(result[0].items[2].title).toBe("Dinner Hangout");
+    expect(result[0].items[2].venueName).toBe("Sergio's Pizza");
+    expect(result[0].items[2].status).toBe("confirmed");
   });
 });
