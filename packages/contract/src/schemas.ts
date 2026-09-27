@@ -314,6 +314,7 @@ export const EventCardPayload = z.object({
   my_status: VoteStatus,
   my_option_id: Id.nullable(), // only the caller's own vote, never anyone else's
   vote_closes_at: Instant,
+  updated_at: Instant.optional(),
   /** Present once resolved. Tallies are only revealed after close. */
   outcome: z
     .object({

@@ -252,9 +252,8 @@ export function ExpenseLedgerView({
       {confirmingDebt ? (
         <Modal
           visible={!!confirmingDebt}
-          transparent
-          animationType="fade"
-          onRequestClose={onCancelSettleDebt}
+          onClose={onCancelSettleDebt ?? (() => {})}
+          title="Mark balance settled?"
         >
           <View
             style={{
@@ -287,7 +286,7 @@ export function ExpenseLedgerView({
                 <Button
                   label="Cancel"
                   variant="ghost"
-                  onPress={onCancelSettleDebt}
+                  onPress={onCancelSettleDebt ?? (() => {})}
                 />
                 <Button
                   label="Mark settled"

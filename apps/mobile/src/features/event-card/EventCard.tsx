@@ -15,6 +15,8 @@ import { canChangeSpot, canOpenChat, cardKind, freePeople, hasEnded, isSquadHang
 import { changeSpotPrompt } from "./changeSpot";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
 import { progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
+import { VotingCountdown } from "./VotingCountdown";
+
 
 export type CardActions = {
   vote: (optionId: string) => void;
@@ -117,8 +119,9 @@ function OpenCard({ card, actions, busy, notice }: Props) {
         <>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Badge label={progressLabel(card.progress)} />
-            <Txt variant="small" numeric>{votingTimeRemaining(card.vote_closes_at)}</Txt>
+            <VotingCountdown voteClosesAt={card.vote_closes_at} />
           </View>
+
           {card.my_status === "ghost_passed" ? (
             <Txt variant="small">{passedNotice(card.viewer)}</Txt>
           ) : null}

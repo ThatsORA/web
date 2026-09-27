@@ -69,6 +69,7 @@ export function assembleEventCard(event: EventWithCardData, userId: string, now 
     my_status: myStatus,
     my_option_id: mine.voteStatus === "ghost_passed" ? null : myVote?.optionId ?? null,
     vote_closes_at: event.voteClosesAt.toISOString(),
+    updated_at: (event.resolvedAt ?? event.voteClosesAt).toISOString(),
     created_by: creator ? toPublicUser(creator) : null,
     outcome: resolved ? {
       venue: venue && scopedTravel(venue, visible),

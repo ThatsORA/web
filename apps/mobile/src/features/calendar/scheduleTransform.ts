@@ -46,7 +46,7 @@ function formatTimeRange(startsAt: string, endsAt: string): string {
 function formatVibeName(vibe: string): string {
   switch (vibe) {
     case "quick_coffee": return "Coffee";
-    case "casual_hangout": return "Casual Hangout";
+    case "casual_hangout": return "Casual";
     case "dinner": return "Dinner";
     case "night_out": return "Night Out";
     default: return vibe;
