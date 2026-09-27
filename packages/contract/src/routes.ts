@@ -11,6 +11,8 @@ export const routes = {
   verifyEmail: "/auth/verify-email", // { code } → Me
   pushToken: `${API_PREFIX}/me/push-token`,
   busyBlocks: "/busy-blocks",
+  manualBusyBlocks: "/availability/manual-busy-blocks",
+  manualBusyBlock: (id: string) => `/availability/manual-busy-blocks/${id}`,
   myAvailability: "/availability/me", // GET → the caller's own free windows, as the matcher sees them
   userSearch: "/users/search", // ?q=
   user: (id: string) => `/users/${id}`, // public profile

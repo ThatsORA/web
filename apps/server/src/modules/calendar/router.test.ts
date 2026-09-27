@@ -2,8 +2,8 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BusyBlock } from "@prisma/client";
-const mocks = vi.hoisted(() => ({ findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn(), transaction: vi.fn(), trigger: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), googleCalendarDelete: vi.fn(), fetch: vi.fn(), signState: vi.fn(), verifyState: vi.fn(), encryptToken: vi.fn(), decryptToken: vi.fn(), userFindUnique: vi.fn(), eventFindMany: vi.fn() }));
-vi.mock("../../lib/prisma", () => ({ prisma: { user: { findUnique: mocks.userFindUnique }, event: { findMany: mocks.eventFindMany }, $transaction: mocks.transaction, googleCalendarConnection: { findUnique: mocks.findUnique, upsert: mocks.upsert, delete: mocks.googleCalendarDelete } } }));
+const mocks = vi.hoisted(() => ({ findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn(), transaction: vi.fn(), trigger: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), googleCalendarDelete: vi.fn(), fetch: vi.fn(), signState: vi.fn(), verifyState: vi.fn(), encryptToken: vi.fn(), decryptToken: vi.fn(), userFindUnique: vi.fn(), eventFindMany: vi.fn(), busyBlockFindFirst: vi.fn(), busyBlockCreate: vi.fn(), busyBlockDelete: vi.fn() }));
+vi.mock("../../lib/prisma", () => ({ prisma: { user: { findUnique: mocks.userFindUnique }, event: { findMany: mocks.eventFindMany }, $transaction: mocks.transaction, googleCalendarConnection: { findUnique: mocks.findUnique, upsert: mocks.upsert, delete: mocks.googleCalendarDelete }, busyBlock: { findMany: mocks.findMany, findFirst: mocks.busyBlockFindFirst, create: mocks.busyBlockCreate, delete: mocks.busyBlockDelete } } }));
 vi.mock("../matching/matcher", () => ({ triggerMatcher: mocks.trigger }));
 vi.mock("./crypto", () => ({
   signState: mocks.signState,
@@ -56,7 +56,7 @@ describe("PUT busy-blocks", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ stored: 1 });
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
-    expect(mocks.deleteMany).toHaveBeenCalledWith({ where: { userId, startsAt: { lt: new Date(body.horizon_end) }, endsAt: { gt: new Date(body.horizon_start) } } });
+    expect(mocks.deleteMany).toHaveBeenCalledWith({ where: { userId, source: "device_calendar", startsAt: { lt: new Date(body.horizon_end) }, endsAt: { gt: new Date(body.horizon_start) } } });
     expect(mocks.createMany).toHaveBeenCalledWith({ data: [{ userId, source: "device_calendar", startsAt: new Date(body.blocks[0]!.starts_at), endsAt: new Date(body.blocks[0]!.ends_at) }] });
     expect(mocks.trigger).not.toHaveBeenCalled(); // auto-proposals off (#196)
   });
@@ -183,3 +183,110 @@ describe("GET /availability/me", () => {
     }
   });
 });
+
+describe("Manual Busy Blocks (/availability/manual-busy-blocks)", () => {
+  const manualUrl = () => base.replace("/busy-blocks", "/availability/manual-busy-blocks");
+  const blockItem = {
+    id: "mb-1",
+    userId,
+    startsAt: new Date("2026-10-01T10:00:00.000Z"),
+    endsAt: new Date("2026-10-01T12:00:00.000Z"),
+    source: "manual",
+  };
+
+  it("requires authentication for all manual busy block endpoints", async () => {
+    expect((await fetch(manualUrl())).status).toBe(401);
+    expect((await fetch(manualUrl(), { method: "POST" })).status).toBe(401);
+    expect((await fetch(`${manualUrl()}/mb-1`, { method: "DELETE" })).status).toBe(401);
+  });
+
+  it("lists the caller's manual busy blocks", async () => {
+    mocks.findMany.mockResolvedValue([blockItem]);
+    const res = await fetch(manualUrl(), {
+      headers: { authorization: `Bearer ${signToken(userId)}` },
+    });
+    expect(res.status).toBe(200);
+    expect(mocks.findMany).toHaveBeenCalledWith({
+      where: { userId, source: "manual" },
+      orderBy: { startsAt: "asc" },
+    });
+    const data = await res.json();
+    expect(data.blocks).toEqual([
+      {
+        id: "mb-1",
+        starts_at: blockItem.startsAt.toISOString(),
+        ends_at: blockItem.endsAt.toISOString(),
+        source: "manual",
+      },
+    ]);
+  });
+
+  it("creates a manual busy block with valid times", async () => {
+    mocks.busyBlockCreate.mockResolvedValue(blockItem);
+    const res = await fetch(manualUrl(), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${signToken(userId)}`,
+      },
+      body: JSON.stringify({
+        starts_at: blockItem.startsAt.toISOString(),
+        ends_at: blockItem.endsAt.toISOString(),
+      }),
+    });
+    expect(res.status).toBe(201);
+    expect(mocks.busyBlockCreate).toHaveBeenCalledWith({
+      data: {
+        userId,
+        startsAt: blockItem.startsAt,
+        endsAt: blockItem.endsAt,
+        source: "manual",
+      },
+    });
+    const data = await res.json();
+    expect(data.id).toBe("mb-1");
+  });
+
+  it("rejects invalid time ranges where starts_at >= ends_at", async () => {
+    const res = await fetch(manualUrl(), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${signToken(userId)}`,
+      },
+      body: JSON.stringify({
+        starts_at: "2026-10-01T14:00:00.000Z",
+        ends_at: "2026-10-01T12:00:00.000Z",
+      }),
+    });
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("starts_at_must_be_before_ends_at");
+  });
+
+  it("deletes a manual busy block", async () => {
+    mocks.busyBlockFindFirst.mockResolvedValue(blockItem);
+    mocks.busyBlockDelete.mockResolvedValue(blockItem);
+    const res = await fetch(`${manualUrl()}/mb-1`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${signToken(userId)}` },
+    });
+    expect(res.status).toBe(204);
+    expect(mocks.busyBlockFindFirst).toHaveBeenCalledWith({
+      where: { id: "mb-1", userId, source: "manual" },
+    });
+    expect(mocks.busyBlockDelete).toHaveBeenCalledWith({
+      where: { id: "mb-1" },
+    });
+  });
+
+  it("returns 404 when deleting a non-existent or other user's block", async () => {
+    mocks.busyBlockFindFirst.mockResolvedValue(null);
+    const res = await fetch(`${manualUrl()}/unknown`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${signToken(userId)}` },
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
