@@ -116,12 +116,12 @@ const option = (id: string, rank: number) => ({
 const event = () => ({
   id: eventId, status: "voting", startsAt: instant, endsAt: new Date("2026-10-01T20:30:00Z"),
   timezone: "America/New_York", vibeTag: "dinner", voteClosesAt: new Date("2026-10-01T17:00:00Z"),
-  venuePlaceId: null, venueStatus: "open", createdById: alice,
-  // alice made it and invited bob and ghost directly (#206).
+  venuePlaceId: null, venueStatus: "open", createdById: alice, sourceGroupId: null,
+  // alice made it and invited bob and ghost directly; invite source comes from createdById/sourceGroupId (#206).
   participants: [
-    { userId: alice, voteStatus: "voted", inviteSource: "creator", squadIds: [], user: { id: alice, username: "alice" } },
-    { userId: bob, voteStatus: "voted", inviteSource: "direct", squadIds: [], user: { id: bob, username: "bob" } },
-    { userId: ghost, voteStatus: "ghost_passed", inviteSource: "direct", squadIds: [], user: { id: ghost, username: "ghost" } },
+    { userId: alice, voteStatus: "voted", user: { id: alice, username: "alice" } },
+    { userId: bob, voteStatus: "voted", user: { id: bob, username: "bob" } },
+    { userId: ghost, voteStatus: "ghost_passed", user: { id: ghost, username: "ghost" } },
   ],
   options: [option(firstOption, 1), option(secondOption, 2)],
   votes: [{ userId: alice, optionId: firstOption }, { userId: bob, optionId: secondOption }],
@@ -235,12 +235,21 @@ describe("events router", () => {
   });
 
   it("gives nobody a creator view of an automated hangout", async () => {
-    mocks.findFirst.mockResolvedValueOnce({ ...event(), createdById: null, participants: event().participants.map((p) => ({ ...p, inviteSource: "direct" })) });
+    mocks.findFirst.mockResolvedValueOnce({ ...event(), createdById: null });
     const body = EventCardPayload.parse(await (await get(`/events/${eventId}`, alice)).json());
     expect(body.created_by).toBeNull();
     expect(body.viewer.full_roster).toBe(false);
     expect(body.participants.map((p) => p.id)).toEqual([alice]);
     expect(body.progress).toEqual({ responded: 3, total: 3 });
+  });
+
+  it("shows a squad's automated hangout to every member, with their visible passes", async () => {
+    mocks.findFirst.mockResolvedValueOnce({ ...event(), createdById: null, sourceGroupId: "squad-1" });
+    const body = EventCardPayload.parse(await (await get(`/events/${eventId}`, bob)).json());
+    expect(body.viewer).toEqual({ invite_source: "squad", pass_kind: "visible", full_roster: false });
+    expect(body.participants.map((p) => [p.id, p.invite_source, p.passed])).toEqual([
+      [alice, "squad", false], [bob, "squad", false], [ghost, "squad", true],
+    ]);
   });
 
   it("requires authentication and hides events from nonparticipants", async () => {
