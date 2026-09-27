@@ -174,11 +174,7 @@ async function sendToUserTokens(
 }
 
 export async function pushVenueChanged(userIds: string[], eventId: string): Promise<void> {
-  try {
-    await sendToUserTokens(userIds, buildVenueChangedMessage(eventId));
-  } catch (err) {
-    console.error("pushVenueChanged failed:", err);
-  }
+  return sendToUserTokens(userIds, buildVenueChangedMessage(eventId));
 }
 
 export async function pushEventCreated(
@@ -186,17 +182,9 @@ export async function pushEventCreated(
   eventId: string,
   details?: { startsAt?: Date; vibeTag?: string; timezone?: string },
 ): Promise<void> {
-  try {
-    await sendToUserTokens(userIds, buildEventCreatedMessage(eventId, details));
-  } catch (err) {
-    console.error("pushEventCreated failed:", err);
-  }
+  return sendToUserTokens(userIds, buildEventCreatedMessage(eventId, details));
 }
 
 export async function pushEventResolved(userIds: string[], eventId: string, status: string): Promise<void> {
-  try {
-    await sendToUserTokens(userIds, buildEventResolvedMessage(eventId, status));
-  } catch (err) {
-    console.error("pushEventResolved failed:", err);
-  }
+  return sendToUserTokens(userIds, buildEventResolvedMessage(eventId, status));
 }
