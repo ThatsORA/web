@@ -294,7 +294,7 @@ export const CurateContext = z.object({
 export type CurateContext = z.infer<typeof CurateContext>;
 
 export const CreateEventRequest = z.object({
-  invitee_ids: z.array(Id).max(5).default([]),
+  invitee_ids: z.array(Id).default([]),
   squad_ids: z.array(Id).optional(),
   vibe_tag: VibeTag.optional(),
   earliest: Instant.optional(),

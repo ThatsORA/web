@@ -51,7 +51,7 @@ export function resolveManualSelection(
     if (!sources.has(directId)) sources.set(directId, new Set());
   }
 
-  if (sources.size < 2 || sources.size > 6) return { error: "invalid_selection" };
+  if (sources.size < 2) return { error: "invalid_selection" };
   const memberIds = [...sources.keys()].sort();
   const participants = memberIds.map((userId): ManualParticipant => ({
     userId,
