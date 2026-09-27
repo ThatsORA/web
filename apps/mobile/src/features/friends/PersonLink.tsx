@@ -1,5 +1,5 @@
-// Owner: Ojas — a person in a list row: their name, with @username under it for telling people
-// apart and for search (#211); tapping it opens their profile (#185).
+// Owner: Ojas, with Andy for the label (#211) — a person in a list row: their name, with
+// @username under it for telling people apart and for search; tapping it opens their profile (#185).
 // A sibling of the row's buttons (not a wrapper), so Add/Accept/star never also open the profile.
 import type { PublicUser } from "@web/contract";
 import { router } from "expo-router";
