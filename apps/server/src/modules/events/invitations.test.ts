@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { VoteStatus } from "@web/contract";
-import { chatAccess, chatAudience, eventAudience, inviteSource, keepsAccess, passKind, viewerScope, type InvitedParticipant, type ParticipantRow } from "./invitations";
+import { prisma } from "../../lib/prisma";
+import { chatAccess, chatAudience, eventAudience, eventParticipants, invitedParticipant, inviteSource, keepsAccess, passKind, viewerScope, type InvitedParticipant, type ParticipantRow } from "./invitations";
+
+vi.mock("../../lib/prisma", () => ({ prisma: { eventParticipant: { findMany: vi.fn() } } }));
 
 const [C, D, E, O, S, T] = ["c", "d", "e", "o", "s", "t"];
 const S1 = "squad-1";
@@ -15,6 +18,27 @@ describe("inviteSource", () => {
     expect(inviteSource({ createdById: null, sourceGroupId: null }, D)).toBe("direct");
     expect(inviteSource({ createdById: null, sourceGroupId: S1 }, S)).toBe("squad");
   });
+
+  it("uses stored provenance for mixed events and falls back safely when a row is missing it", () => {
+    const mixed = { createdById: C, sourceGroupId: null, sourceGroupIds: [S1, "squad-2"] };
+    expect(inviteSource(mixed, C, { inviteSource: "squad" })).toBe("creator");
+    expect(inviteSource(mixed, D, { inviteSource: "direct" })).toBe("direct");
+    expect(inviteSource(mixed, S, { inviteSource: "squad" })).toBe("squad");
+    expect(inviteSource(mixed, O)).toBe("direct");
+  });
+});
+
+it("reads stored sources for mixed events and derives sources for legacy events", async () => {
+  vi.mocked(prisma.eventParticipant.findMany).mockResolvedValueOnce([
+    { userId: S, voteStatus: "invited", inviteSource: "squad", sourceGroupIds: [S1],
+      event: { createdById: C, sourceGroupId: null, sourceGroupIds: [S1] } },
+    { userId: T, voteStatus: "invited", inviteSource: null, sourceGroupIds: [],
+      event: { createdById: null, sourceGroupId: S1, sourceGroupIds: [] } },
+  ] as never);
+  expect(await eventParticipants("event-1")).toEqual([
+    { userId: S, voteStatus: "invited", inviteSource: "squad", sourceGroupIds: [S1] },
+    { userId: T, voteStatus: "invited", inviteSource: "squad", sourceGroupIds: [S1] },
+  ]);
 });
 
 describe("passKind", () => {
@@ -70,6 +94,26 @@ describe("viewerScope", () => {
     expect(scope.seesEveryone).toBe(true);
   });
 
+  it("keeps different selected squads and direct guests private, including an overlapping squad member", () => {
+    const mixed = {
+      createdById: C, sourceGroupId: null, sourceGroupIds: [S1, "squad-2"],
+      participants: [
+        { userId: C, voteStatus: "voted" as const, inviteSource: "creator" as const, sourceGroupIds: [] },
+        { userId: S, voteStatus: "voted" as const, inviteSource: "squad" as const, sourceGroupIds: [S1] },
+        { userId: O, voteStatus: "ghost_passed" as const, inviteSource: "squad" as const, sourceGroupIds: [S1, "squad-2"] },
+        { userId: T, voteStatus: "voted" as const, inviteSource: "squad" as const, sourceGroupIds: ["squad-2"] },
+        { userId: D, voteStatus: "ghost_passed" as const, inviteSource: "direct" as const, sourceGroupIds: [] },
+      ],
+    };
+    expect(viewerScope(mixed, S).people.map((p) => p.userId)).toEqual([C, S, O]);
+    expect(viewerScope(mixed, T).people.map((p) => p.userId)).toEqual([C, O, T]);
+    expect(viewerScope(mixed, D).people.map((p) => p.userId)).toEqual([C, D]);
+    expect(viewerScope(mixed, C).people.map((p) => p.userId)).toEqual([C, S, O, T, D]);
+    expect(viewerScope(mixed, S).people.find((p) => p.userId === O)?.passed).toBe(true);
+    expect(viewerScope(mixed, S).people.every((p) => p.userId !== D)).toBe(true);
+    expect(viewerScope(mixed, S).attendeeIds).toEqual([C, S]);
+  });
+
   it("refuses a viewer who isn't in the event", () => {
     expect(() => viewerScope(hangout, "stranger")).toThrow("non-participant");
   });
@@ -114,7 +158,7 @@ describe("keepsAccess / eventAudience (#210)", () => {
 
 describe("chatAudience / chatAccess (#212)", () => {
   const invited = (event: { createdById: string | null; sourceGroupId: string | null }, list: ParticipantRow[]) =>
-    list.map((r) => ({ ...r, inviteSource: inviteSource(event, r.userId) }));
+    list.map((r) => invitedParticipant(event, r));
   // Squad S1's hangout made by C with O, S, T; S passed (a visible Pass).
   const squadRows = invited({ createdById: C, sourceGroupId: S1 }, rows([C, O, S, T], { [S]: "ghost_passed" }));
   // C's direct hangout with D and E; D ghost passed.
@@ -122,8 +166,8 @@ describe("chatAudience / chatAccess (#212)", () => {
   // A mixed hangout (#207; needs stored provenance, so built by hand): C made it for squad S, T plus D, E directly; E ghost passed.
   const mixedRows: InvitedParticipant[] = [
     { userId: C, voteStatus: "voted", inviteSource: "creator" },
-    { userId: S, voteStatus: "voted", inviteSource: "squad" },
-    { userId: T, voteStatus: "ghost_passed", inviteSource: "squad" },
+    { userId: S, voteStatus: "voted", inviteSource: "squad", sourceGroupIds: [S1] },
+    { userId: T, voteStatus: "ghost_passed", inviteSource: "squad", sourceGroupIds: [S1] },
     { userId: D, voteStatus: "voted", inviteSource: "direct" },
     { userId: E, voteStatus: "ghost_passed", inviteSource: "direct" },
   ];
@@ -153,6 +197,16 @@ describe("chatAudience / chatAccess (#212)", () => {
     for (const status of ["voting", "confirmed", "chatted", "completed"] as const) {
       expect(chatAudience(status, mixedRows)).toEqual([C, S, T]);
     }
+  });
+
+  it("does not open one chat across squads whose members cannot all see each other", () => {
+    const separateSquads: InvitedParticipant[] = [
+      { userId: C, voteStatus: "voted", inviteSource: "creator", sourceGroupIds: [] },
+      { userId: S, voteStatus: "voted", inviteSource: "squad", sourceGroupIds: [S1] },
+      { userId: T, voteStatus: "voted", inviteSource: "squad", sourceGroupIds: ["squad-2"] },
+    ];
+    expect(chatAudience("voting", separateSquads)).toEqual([]);
+    expect(chatAudience("chatted", separateSquads)).toEqual([]);
   });
 
   it("only ever holds people who may all see each other (viewerScope), so no poster is someone a member may not see", () => {

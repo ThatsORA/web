@@ -38,6 +38,12 @@ enum VoteStatus {
   confirmed
 }
 
+enum InviteSource {
+  creator
+  direct
+  squad
+}
+
 enum VenueStatus {
   open
   reported_closed
@@ -240,6 +246,7 @@ model Event {
   id            String      @id @default(uuid()) @map("_id")
   groupKey      String      @map("group_key") // sorted member ids joined
   sourceGroupId String?     @map("source_group_id")
+  sourceGroupIds String[]    @default([]) @map("source_group_ids") // selected squads in a mixed hangout
   createdById   String?     @map("created_by_id")
   status        EventStatus @default(voting)
   startsAt      DateTime    @map("starts_at")
@@ -276,6 +283,8 @@ model EventParticipant {
   eventId    String     @map("event_id")
   userId     String     @map("user_id")
   voteStatus VoteStatus @default(invited) @map("vote_status")
+  inviteSource InviteSource? @map("invite_source") // null on events created before mixed invitations
+  sourceGroupIds String[] @default([]) @map("source_group_ids") // squads that invited this person
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
