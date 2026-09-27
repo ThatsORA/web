@@ -24,7 +24,7 @@ vi.mock("expo-router", () => ({
   },
 }));
 
-vi.mock("../../lib/api", () => ({
+vi.mock("../lib/api", () => ({
   api: vi.fn().mockResolvedValue({
     id: "u1",
     username: "riley",
@@ -33,29 +33,29 @@ vi.mock("../../lib/api", () => ({
   }),
 }));
 
-vi.mock("../../lib/push", () => ({
+vi.mock("../lib/push", () => ({
   unregisterPushToken: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../../lib/secureSession", () => ({
+vi.mock("../lib/secureSession", () => ({
   session: {
     clear: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
-vi.mock("../../features/calendar", () => ({
+vi.mock("./calendar", () => ({
   AvailabilitySettings: (props: any) => ({ type: "AvailabilitySettings", props }),
 }));
 
-vi.mock("../../features/favorites", () => ({
+vi.mock("./favorites", () => ({
   FavoritesSettings: (props: any) => ({ type: "FavoritesSettings", props }),
 }));
 
-vi.mock("../../features/friends", () => ({
+vi.mock("./friends", () => ({
   CloseFriendsSettings: (props: any) => ({ type: "CloseFriendsSettings", props }),
 }));
 
-vi.mock("../../ui", () => ({
+vi.mock("../ui", () => ({
   Button: (props: any) => ({ type: "Button", props }),
   Callout: (props: any) => ({ type: "Callout", props }),
   Card: (props: any) => ({ type: "Card", props, children: props.children }),
@@ -67,7 +67,7 @@ vi.mock("../../ui", () => ({
   }),
 }));
 
-import You from "./you";
+import You from "../app/(main)/you";
 
 function findElements(node: ReactNode): ReactElement[] {
   return Children.toArray(node).flatMap((child) =>
