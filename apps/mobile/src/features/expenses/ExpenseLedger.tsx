@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { z } from "zod";
 import { api } from "../../lib/api";
-import { Badge, Button, Callout, Txt, useTheme } from "../../ui";
+import { Badge, Button, Callout, Modal, Txt, useTheme } from "../../ui";
 import { formatCents } from "./amounts";
 import {
   attendeeName,
@@ -27,6 +27,7 @@ export type ExpenseLedgerViewProps = {
   onToggleSplit?: (splitId: string, nextSettled: boolean) => void;
   onAddExpense?: () => void;
   hideAddButton?: boolean;
+  initialModalOpen?: boolean;
 };
 
 export function ExpenseLedgerView({
@@ -39,9 +40,11 @@ export function ExpenseLedgerView({
   onToggleSplit,
   onAddExpense,
   hideAddButton = false,
+  initialModalOpen = false,
 }: ExpenseLedgerViewProps) {
   const t = useTheme();
   const debts = calculateWhoOwesWhom(expenses);
+  const [isModalOpen, setIsModalOpen] = useState(initialModalOpen);
 
   if (loading && expenses.length === 0) {
     return (
@@ -100,85 +103,97 @@ export function ExpenseLedgerView({
             )}
           </View>
 
-          {/* List of expenses with per-split breakdown */}
-          <View style={{ gap: t.spacing.sm }}>
-            {expenses.map((expense) => (
-              <View
-                key={expense.id}
-                style={{
-                  borderColor: t.colors.border,
-                  borderWidth: 1,
-                  borderRadius: t.radius.sm,
-                  padding: t.spacing.sm,
-                  gap: t.spacing.xs,
-                }}
-              >
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <Txt variant="label" color="heading">
-                    {expense.description}
-                  </Txt>
-                  <Txt variant="label" numeric color="heading">
-                    {formatCents(expense.total_cents)}
-                  </Txt>
-                </View>
-                <Txt variant="small" color="textMuted">
-                  Paid by {attendeeName(expense.paid_by, attendees, currentUserId, { preferYou: false })}
-                </Txt>
+          {/* View all expenses button */}
+          <Button label="View all expenses" variant="outline" onPress={() => setIsModalOpen(true)} />
 
-                <View style={{ marginTop: t.spacing.xs, gap: t.spacing.sm }}>
-                  {expense.splits.map((split, splitIndex) => {
-                    const isPayer = split.user_id === expense.paid_by;
-                    const canToggle = canToggleSplit(split, expense, currentUserId);
-                    return (
-                      <View
-                        key={split.id}
-                        style={{
-                          paddingTop: splitIndex > 0 ? t.spacing.xs : 0,
-                          borderTopWidth: splitIndex > 0 ? 1 : 0,
-                          borderTopColor: t.colors.border,
-                          gap: t.spacing.xs,
-                        }}
-                      >
-                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: t.spacing.sm }}>
-                          <Txt variant="small" style={{ flexShrink: 1 }}>
-                            {attendeeName(split.user_id, attendees, currentUserId)}
-                          </Txt>
-                          <Txt variant="small" numeric color="heading">
-                            {formatCents(split.amount_owed_cents)}
-                          </Txt>
-                        </View>
+          {/* Modal displaying itemized expenses list with paid by info, totals, and per-split breakdown */}
+          <Modal visible={isModalOpen} onClose={() => setIsModalOpen(false)} title="All expenses">
+            <View style={{ gap: t.spacing.sm }}>
+              {expenses.map((expense) => (
+                <View
+                  key={expense.id}
+                  style={{
+                    borderColor: t.colors.border,
+                    borderWidth: 1,
+                    borderRadius: t.radius.sm,
+                    padding: t.spacing.sm,
+                    gap: t.spacing.xs,
+                  }}
+                >
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Txt variant="label" color="heading">
+                      {expense.description}
+                    </Txt>
+                    <Txt variant="label" numeric color="heading">
+                      {formatCents(expense.total_cents)}
+                    </Txt>
+                  </View>
+                  <Txt variant="small" color="textMuted">
+                    Paid by {attendeeName(expense.paid_by, attendees, currentUserId, { preferYou: false })}
+                  </Txt>
+
+                  <View style={{ marginTop: t.spacing.xs, gap: t.spacing.sm }}>
+                    {expense.splits.map((split, splitIndex) => {
+                      const isPayer = split.user_id === expense.paid_by;
+                      const canToggle = canToggleSplit(split, expense, currentUserId);
+                      return (
                         <View
+                          key={split.id}
                           style={{
-                            flexDirection: "row",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            flexWrap: "wrap",
+                            paddingTop: splitIndex > 0 ? t.spacing.xs : 0,
+                            borderTopWidth: splitIndex > 0 ? 1 : 0,
+                            borderTopColor: t.colors.border,
                             gap: t.spacing.xs,
                           }}
                         >
-                          {isPayer ? (
-                            <Badge tone="neutral" label="Payer" />
-                          ) : split.settled ? (
-                            <Badge tone="success" label="Settled" />
-                          ) : (
-                            <Badge tone="warning" label="Owes" />
-                          )}
-                          {canToggle && onToggleSplit ? (
-                            <Button
-                              label={split.settled ? "Mark unsettled" : "Mark settled"}
-                              variant={split.settled ? "ghost" : "outline"}
-                              onPress={() => onToggleSplit(split.id, !split.settled)}
-                              loading={togglingSplitId === split.id}
-                            />
-                          ) : null}
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: t.spacing.sm,
+                            }}
+                          >
+                            <Txt variant="small" style={{ flexShrink: 1 }}>
+                              {attendeeName(split.user_id, attendees, currentUserId)}
+                            </Txt>
+                            <Txt variant="small" numeric color="heading">
+                              {formatCents(split.amount_owed_cents)}
+                            </Txt>
+                          </View>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              flexWrap: "wrap",
+                              gap: t.spacing.xs,
+                            }}
+                          >
+                            {isPayer ? (
+                              <Badge tone="neutral" label="Payer" />
+                            ) : split.settled ? (
+                              <Badge tone="success" label="Settled" />
+                            ) : (
+                              <Badge tone="warning" label="Owes" />
+                            )}
+                            {canToggle && onToggleSplit ? (
+                              <Button
+                                label={split.settled ? "Mark unsettled" : "Mark settled"}
+                                variant={split.settled ? "ghost" : "outline"}
+                                onPress={() => onToggleSplit(split.id, !split.settled)}
+                                loading={togglingSplitId === split.id}
+                              />
+                            ) : null}
+                          </View>
                         </View>
-                      </View>
-                    );
-                  })}
+                      );
+                    })}
+                  </View>
                 </View>
-              </View>
-            ))}
-          </View>
+              ))}
+            </View>
+          </Modal>
         </>
       )}
 
