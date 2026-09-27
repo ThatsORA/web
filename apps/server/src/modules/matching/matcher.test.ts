@@ -99,12 +99,15 @@ function resetData() {
     event: { findFirst: mocks.eventFindFirst, create: mocks.eventCreate },
   }));
   mocks.fetchCandidates.mockResolvedValue(rankedVenues);
-  mocks.curateVenues.mockImplementation(async (venues: RankedVenue[]) => venues.slice(0, 3).map((venue, index: number) => ({
-    ...venue,
-    rank: index + 1,
-    facts_line: `max ${venue.max_travel_min} min travel`,
-    ai_blurb: null,
-  })));
+  mocks.curateVenues.mockImplementation(async (venues: RankedVenue[]) => ({
+    options: venues.slice(0, 3).map((venue, index: number) => ({
+      ...venue,
+      rank: index + 1,
+      facts_line: `max ${venue.max_travel_min} min travel`,
+      ai_blurb: null,
+    })),
+    matchReason: null,
+  }));
   mocks.openVoting.mockResolvedValue(undefined);
 }
 
@@ -249,6 +252,16 @@ describe("matcher pipeline", () => {
     expect(mocks.eventCreate.mock.invocationCallOrder[0]).toBeLessThan(mocks.openVoting.mock.invocationCallOrder[0]!);
   });
 
+  it("stores the curated match reason on the event", async () => {
+    const curate = mocks.curateVenues.getMockImplementation()!;
+    mocks.curateVenues.mockImplementationOnce(async (venues: RankedVenue[]) => ({
+      ...await curate(venues),
+      matchReason: "Shared restaurant favorite on a free Thursday",
+    }));
+    await runPipeline(NOW);
+    expect(mocks.eventCreate.mock.calls[0]![0].data.matchReason).toBe("Shared restaurant favorite on a free Thursday");
+  });
+
   it("creates no duplicate when the pipeline runs twice", async () => {
     mocks.eventFindFirst.mockResolvedValueOnce(null).mockResolvedValue({ id: "event-1" });
     await runPipeline(NOW);
@@ -273,7 +286,7 @@ describe("matcher pipeline", () => {
   });
 
   it("refuses to persist an incomplete curation result", async () => {
-    mocks.curateVenues.mockResolvedValue([]);
+    mocks.curateVenues.mockResolvedValue({ options: [], matchReason: null });
     await expect(runPipeline(NOW)).rejects.toThrow("expected 3");
     expect(mocks.transaction).not.toHaveBeenCalled();
     expect(mocks.openVoting).not.toHaveBeenCalled();
@@ -328,6 +341,13 @@ describe("createUserHangout", () => {
       status: "voting",
     });
     expect(mocks.openVoting).toHaveBeenCalledWith("event-1");
+  });
+
+  it("stores the curated match reason on the event", async () => {
+    const curate = mocks.curateVenues.getMockImplementation()!;
+    mocks.curateVenues.mockImplementationOnce(async (venues: RankedVenue[]) => ({ ...await curate(venues), matchReason: "Cozy pick" }));
+    await createUserHangout(IDS[0]!, [IDS[1]!, IDS[2]!]);
+    expect(mocks.eventCreate.mock.calls[0]![0].data.matchReason).toBe("Cozy pick");
   });
 
   // The mocked user lookup returns all three users, so invite the other two.

@@ -198,7 +198,7 @@ export async function runPipeline(now = new Date()): Promise<void> {
       }));
     const rankedVenues = await fetchCandidates(candidate.slot, venueMembers);
     if (rankedVenues.length < 3) continue;
-    const options = await curateVenues(
+    const { options, matchReason } = await curateVenues(
       rankedVenues,
       curateContext(candidate, favoritesByUser),
     );
@@ -221,7 +221,7 @@ export async function runPipeline(now = new Date()): Promise<void> {
           endsAt: candidate.slot.end,
           vibeTag: candidate.slot.vibe_tag,
           timezone: eventTimezone,
-          matchReason: candidate.matchReason,
+          matchReason: matchReason ?? candidate.matchReason,
           backupVenues: unusedVenueSnapshots(rankedVenues, options),
           voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
           participants: {
@@ -343,7 +343,7 @@ export async function createUserHangout(
   const group = { memberIds, memberTimezones: timezones, groupKey, sourceGroupId: null };
   const candidate = { group, slot: bestSlot, matchReason: null };
 
-  const options = await curateVenues(rankedVenues, curateContext(candidate, favoritesByUser));
+  const { options, matchReason } = await curateVenues(rankedVenues, curateContext(candidate, favoritesByUser));
   if (options.length !== 3) return { error: "no_venues" };
 
   const eventTimezone = timezoneClosestToVenueCentroid(venueMembers, options) ??
@@ -359,6 +359,7 @@ export async function createUserHangout(
         endsAt: bestSlot.end,
         vibeTag: bestSlot.vibe_tag,
         timezone: eventTimezone,
+        matchReason,
         backupVenues: unusedVenueSnapshots(rankedVenues, options),
         voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
         participants: {
