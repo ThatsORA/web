@@ -1,58 +1,27 @@
 // Owner: Ojas — onboarding step 5: search + send friend requests, then star any accepted close friends.
 // Copy explains that close friends are completely private.
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { View } from "react-native";
 import { displayName } from "../../lib/displayName";
 import { stepEyebrow, type OnboardingStepProps } from "../../lib/onboarding";
 import { Button, Chip, Screen, Txt, useTheme } from "../../ui";
 import { FriendSearch } from "./FriendSearch";
-import {
-  getFriendRequests,
-  getFriends,
-  starCloseFriend,
-  unstarCloseFriend,
-  type Friend,
-  type FriendRequestsResponse,
-} from "./friendsApi";
+import { type Friend } from "./friendsApi";
+import { useFriendsData } from "./useFriendsData";
 
 export function FriendsStep({ onDone }: OnboardingStepProps) {
   const t = useTheme();
-  const [friends, setFriends] = useState<Friend[]>([]);
-  const [requests, setRequests] = useState<FriendRequestsResponse>({ incoming: [], outgoing: [] });
+  const { friends, requests, refresh, toggleClose } = useFriendsData();
   const [hasActed, setHasActed] = useState(false);
 
-  const loadData = useCallback(async () => {
-    try {
-      const [friendsList, reqs] = await Promise.all([getFriends(), getFriendRequests()]);
-      setFriends(friendsList);
-      setRequests(reqs);
-    } catch {
-      // Best-effort in onboarding
-    }
-  }, []);
-
-  useEffect(() => {
-    void Promise.resolve().then(loadData);
-  }, [loadData]);
-
-  async function handleToggleClose(f: Friend) {
+  function handleToggleClose(f: Friend) {
     setHasActed(true);
-    const nextClose = !f.close;
-    setFriends((prev) => prev.map((item) => (item.id === f.id ? { ...item, close: nextClose } : item)));
-    try {
-      if (nextClose) {
-        await starCloseFriend(f.username);
-      } else {
-        await unstarCloseFriend(f.id);
-      }
-    } catch {
-      setFriends((prev) => prev.map((item) => (item.id === f.id ? { ...item, close: f.close } : item)));
-    }
+    void toggleClose(f);
   }
 
   function handleRefresh() {
     setHasActed(true);
-    void loadData();
+    void refresh();
   }
 
   const hasCloseFriends = friends.some((f) => f.close);

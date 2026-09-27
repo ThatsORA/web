@@ -13,6 +13,7 @@ import {
   type UserSearchResult,
 } from "./friendsApi";
 import { PersonLink } from "./PersonLink";
+import { useBusyAction } from "./useBusyAction";
 
 export type FriendSearchProps = {
   friends?: Friend[];
@@ -24,8 +25,7 @@ export function FriendSearch({ friends = [], requests = { incoming: [], outgoing
   const t = useTheme();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<UserSearchResult[]>([]);
-  const [actionBusy, setActionBusy] = useState<Record<string, boolean>>({});
-  const [error, setError] = useState<string | null>(null);
+  const { isBusy, error, setError, runAction } = useBusyAction();
   const latest = useRef(0);
 
   async function handleSearch(text: string) {
@@ -48,43 +48,25 @@ export function FriendSearch({ friends = [], requests = { incoming: [], outgoing
     }
   }
 
-  async function handleAdd(username: string, userId: string) {
-    setError(null);
-    setActionBusy((prev) => ({ ...prev, [userId]: true }));
-    try {
+  function handleAdd(username: string, userId: string) {
+    void runAction(userId, async () => {
       await sendFriendRequest(username);
       onRefresh?.();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setActionBusy((prev) => ({ ...prev, [userId]: false }));
-    }
+    });
   }
 
-  async function handleCancel(requestId: string, userId: string) {
-    setError(null);
-    setActionBusy((prev) => ({ ...prev, [userId]: true }));
-    try {
+  function handleCancel(requestId: string, userId: string) {
+    void runAction(userId, async () => {
       await deleteFriendRequest(requestId);
       onRefresh?.();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setActionBusy((prev) => ({ ...prev, [userId]: false }));
-    }
+    });
   }
 
-  async function handleAccept(requestId: string, userId: string) {
-    setError(null);
-    setActionBusy((prev) => ({ ...prev, [userId]: true }));
-    try {
+  function handleAccept(requestId: string, userId: string) {
+    void runAction(userId, async () => {
       await acceptFriendRequest(requestId);
       onRefresh?.();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setActionBusy((prev) => ({ ...prev, [userId]: false }));
-    }
+    });
   }
 
   return (
@@ -102,7 +84,7 @@ export function FriendSearch({ friends = [], requests = { incoming: [], outgoing
             const isFriend = friends.some((f) => f.id === u.id);
             const incoming = requests.incoming.find((r) => r.user.id === u.id);
             const outgoing = requests.outgoing.find((r) => r.user.id === u.id);
-            const busy = !!actionBusy[u.id];
+            const busy = isBusy(u.id);
 
             return (
               <View

@@ -9,6 +9,7 @@ import {
   type FriendRequestsResponse,
 } from "./friendsApi";
 import { PersonLink } from "./PersonLink";
+import { useBusyAction } from "./useBusyAction";
 
 export type RequestsInboxProps = {
   requests: FriendRequestsResponse;
@@ -19,37 +20,24 @@ export type RequestsInboxProps = {
 export function RequestsInbox({ requests, onRefresh, defaultExpanded = false }: RequestsInboxProps) {
   const t = useTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const [busy, setBusy] = useState<Record<string, boolean>>({});
-  const [error, setError] = useState<string | null>(null);
+  const { isBusy, error, runAction } = useBusyAction();
 
   const incomingCount = requests.incoming.length;
   const outgoingCount = requests.outgoing.length;
   const totalCount = incomingCount + outgoingCount;
 
-  async function handleAccept(id: string) {
-    setError(null);
-    setBusy((prev) => ({ ...prev, [id]: true }));
-    try {
+  function handleAccept(id: string) {
+    void runAction(id, async () => {
       await acceptFriendRequest(id);
       onRefresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy((prev) => ({ ...prev, [id]: false }));
-    }
+    });
   }
 
-  async function handleDelete(id: string) {
-    setError(null);
-    setBusy((prev) => ({ ...prev, [id]: true }));
-    try {
+  function handleDelete(id: string) {
+    void runAction(id, async () => {
       await deleteFriendRequest(id);
       onRefresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy((prev) => ({ ...prev, [id]: false }));
-    }
+    });
   }
 
   return (
@@ -112,13 +100,13 @@ export function RequestsInbox({ requests, onRefresh, defaultExpanded = false }: 
                         label="Accept"
                         variant="primary"
                         onPress={() => void handleAccept(req.id)}
-                        loading={!!busy[req.id]}
+                        loading={isBusy(req.id)}
                       />
                       <Button
                         label="Decline"
                         variant="ghost"
                         onPress={() => void handleDelete(req.id)}
-                        loading={!!busy[req.id]}
+                        loading={isBusy(req.id)}
                       />
                     </View>
                   </View>
@@ -152,7 +140,7 @@ export function RequestsInbox({ requests, onRefresh, defaultExpanded = false }: 
                       label="Cancel"
                       variant="ghost"
                       onPress={() => void handleDelete(req.id)}
-                      loading={!!busy[req.id]}
+                      loading={isBusy(req.id)}
                     />
                   </View>
                 ))}
