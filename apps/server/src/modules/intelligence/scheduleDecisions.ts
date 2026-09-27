@@ -1,17 +1,12 @@
-// Owner: Ojas — the propose gate + vibe choice for the matcher (#231, #196).
+// Owner: Ojas — the propose gate for the matcher (#231, #196).
 // One askDecision call per candidate, in the Laya training format (`groupRequest`): `propose`
-// (A = suggest now) and `vibe` (among that window's feasible vibes). Facts are plain words:
-// no names, emails, ids or raw timestamps leave the server.
+// (A = suggest now). No `vibe` question since #311: preference fit picks the activities, each at
+// its own time. Facts are plain words: no names, emails, ids or raw timestamps leave the server.
 import type { RankedGroupSlot } from "../matching/candidates";
-import { earliestTimezone, getLocalParts, type ClassifiedSlot } from "../matching/timeMath";
+import { earliestTimezone, getLocalParts } from "../matching/timeMath";
 import { askDecision, groupRequest, type DecisionRequest, type DecisionResponse } from "./decision";
 
 export const PROPOSE_THRESHOLD = 0.6;
-
-export interface DecisionCandidate extends RankedGroupSlot {
-  /** Every feasible slot of the candidate's free window (feasibleSlots); `slot` is the priority pick. */
-  feasible: ClassifiedSlot[];
-}
 
 type FavoritesByUser = ReadonlyMap<string, readonly { category: string }[]>;
 
@@ -27,7 +22,7 @@ function lastHangout(days: number | null): string {
 }
 
 /** One candidate's request: local day/time, last hangout, and favorites shared by 2+ members. */
-export function decisionRequest(candidate: DecisionCandidate, favoritesByUser: FavoritesByUser): DecisionRequest {
+export function decisionRequest(candidate: RankedGroupSlot, favoritesByUser: FavoritesByUser): DecisionRequest {
   const timezone = earliestTimezone(candidate.slot.start, Object.values(candidate.group.memberTimezones));
   const local = getLocalParts(candidate.slot.start, timezone);
   const time = `${local.hour % 12 || 12}:${String(local.minute).padStart(2, "0")}${local.hour < 12 ? "am" : "pm"}`;
@@ -42,22 +37,17 @@ export function decisionRequest(candidate: DecisionCandidate, favoritesByUser: F
     when: `${local.weekday} ${time}`,
     lastHangout: lastHangout(candidate.daysSinceLastHangout),
     favorites: [...counts].filter(([, n]) => n >= 2).map(([c]) => c).sort(),
-    feasibleVibes: candidate.feasible.map((s) => s.vibe_tag),
+    feasibleVibes: [], // no vibe question (#311)
   });
 }
 
-/** `replies[i]` answers candidate i. Keeps P(A) ≥ 0.6 (every candidate when `force`) and moves each kept one to its chosen vibe's slot. */
-export function applyDecisions<T extends DecisionCandidate>(candidates: readonly T[], replies: DecisionResponse[], force: boolean): T[] {
-  return candidates.flatMap((candidate, i) => {
-    const { answers } = replies[i]!;
-    if (!force && (answers.propose?.probabilities.A ?? 0) < PROPOSE_THRESHOLD) return [];
-    const vibe = answers.vibe?.choice;
-    return [{ ...candidate, slot: candidate.feasible.find((s) => s.vibe_tag === vibe) ?? candidate.slot }];
-  });
+/** `replies[i]` answers candidate i. Keeps P(A) ≥ 0.6, or every candidate when `force`. */
+export function applyDecisions<T extends RankedGroupSlot>(candidates: readonly T[], replies: DecisionResponse[], force: boolean): T[] {
+  return candidates.filter((_, i) => force || (replies[i]!.answers.propose?.probabilities.A ?? 0) >= PROPOSE_THRESHOLD);
 }
 
-/** Fallback when any decision call fails: only the top-ranked candidate, with its priority vibe. */
-export async function scheduleDecisions<T extends DecisionCandidate>(
+/** Fallback when any decision call fails: only the top-ranked candidate. */
+export async function scheduleDecisions<T extends RankedGroupSlot>(
   candidates: readonly T[],
   favoritesByUser: FavoritesByUser,
   force: boolean,

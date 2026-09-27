@@ -406,9 +406,9 @@ whose local wall clock is earliest at the start of the free window.
   - **Sun–Thu:** dinner > night_out > casual_hangout > quick_coffee
 - The slot is `[s, s + len]`. If nothing is feasible, discard W.
 - `feasibleSlots` lists every feasible template; `classifySlot` is that
-  plus the priority pick (#229). The scheduler lets the decision model
-  choose among the feasible vibes, and the priority pick is its fallback
-  (§5).
+  plus the priority pick (#229). The scheduler uses the priority pick;
+  since #311 its activities come from preference fit (§6), not a vibe
+  question.
 - The weekday is taken from the member timezone whose local wall clock is
   earliest at W.start.
 - Every template's latest start + minimum duration ends by 24:00, so no
@@ -457,20 +457,19 @@ deterministic score builds a top-10 shortlist.
 The hard limits apply first: one open proposal per group, and the
 `COOLDOWN_HOURS` (48) cooldown.
 
-**Decision gate + vibe (#231).** One `askDecision` call (Jev)
+**Decision gate (#231).** One `askDecision` call (Jev)
 per shortlisted candidate, in parallel, built by `groupRequest` in the same
-format as Laya's training data (#235). The questions carry plain-word facts
+format as Laya's training data (#235). The question carries plain-word facts
 (size, "Fri 7:00pm", "Last hangout: 3 weeks ago", shared favorites; no
 names, no raw timestamps):
 - `propose`: a 2-option Choice, `A` = suggest a hangout now, `B` = not
   now. Keep the candidate when P(`A`) ≥ 0.6.
-- `vibe` (only when more than one vibe is feasible): a Choice over that
-  window's feasible vibes; use the chosen vibe's slot.
 
-A forced run (the demo button) skips the gate but still lets the model
-pick the vibe. If any decision call fails, only the top-ranked candidate
-is proposed, with the priority vibe. `rankWithGemini` is removed;
-`match_reason` now comes from §8.
+The automated flow no longer asks the group `vibe` question (#311): the
+slot stays the priority pick, and preference fit (§6) chooses the
+activities, each at its own time. A forced run (the demo button) skips the
+gate. If any decision call fails, only the top-ranked candidate is
+proposed. `rankWithGemini` is removed; `match_reason` now comes from §8.
 
 Candidates are processed greedily after the gate. A candidate
 is skipped if its group already has an open event, or if any member already
@@ -511,14 +510,30 @@ near the squad instead of drawn from the vibe's place types
    deadline is derived from it) and at least `MIN_LEAD_HOURS` out. It
    lasts `typical_minutes` and ends inside both the free window and the
    opening hours. Places where it doesn't fit are dropped.
-6. **Pick 3 (code).** `pickActivities(candidates)` returns the 3 best by
-   `route_score` with distinct activity labels. It's the seam where
-   preference fit (#311) will plug in. §8's Gemini text step writes the
-   blurbs; there's no venue-fit decision on this path.
+6. **Preference fit (decision model per member, #311).** One
+   `askDecision(memberFitRequest(profile, candidates))` per squad member,
+   in parallel. `state` is that member's private `pref_activities` and
+   `pref_personality` (each capped at 300 characters, framed as data,
+   never instructions) plus their favorite categories, with no name,
+   username or id; an empty profile sends "No profile yet". The one
+   question, `fit`, is a Choice over the ≤ 15 candidates keyed `c0…cN`,
+   each in plain words ("Bouldering at Movement: climbing gym, $$, ★4.7,
+   ~2h"): no place IDs, raw times or commutes.
+7. **Pick 3 (code).** `pickByPreference`: a candidate's score is the
+   **sum** of the members' probabilities; take the top 3 with distinct
+   activity labels (case-insensitive), topping up from the next best.
+   `squadAppeal` is the mean member probability of the #1 pick.
+   **Gate:** propose only when the §5 `propose` P(`A`) ≥ 0.6 **and**
+   `squadAppeal` ≥ 0.2; the demo button's `force` skips both but still
+   uses this pick. **Fallback:** if any member call fails,
+   `pickActivities` takes the 3 best by `route_score` with distinct
+   labels. §8's Gemini text step writes the blurbs; it never sees the
+   profiles, and there's no venue-fit decision in the automated flow.
 
-If that yields fewer than 3 options, or discovery fails, the scheduler
-falls back to the fixed-vibe venues below. Manual New hangout always
-uses the fixed vibes.
+If fewer than 3 distinct activities come out, or discovery fails, the
+scheduler falls back to the fixed-vibe venues below and takes the 3 best
+by `route_score` (no venue fit). Manual New hangout always uses the fixed
+vibes and §8's venue fit.
 
 **Fixed-vibe venues (manual New hangout, and the scheduler's fallback):**
 
@@ -566,7 +581,7 @@ uses the fixed vibes.
 ### 8. Venue Intelligence (Ojas; decision-model fit filter + Gemini text)
 
 **Called as** `curateVenues(RankedVenue[], context) → EventOption[3]`.
-Automated activity options (§6, #322) call `curateActivities(picks,
+The automated flow (§6, #322, #311) calls `curateActivities(picks,
 context)` instead: code has already picked the 3, so there's no fit
 filter, and the same Gemini text step writes the blurbs, keeping each
 option's `activity`, `starts_at` and `ends_at`.
@@ -793,9 +808,12 @@ flow has no fixed activity list: code finds what's open nearby (§6).
 
 **Decision model (`askDecision`, #228):** Jev `jev-1.13.0`, then the
 deterministic fallback. A fine-tuned, self-hosted Laya in front of Jev is
-deferred to #274 (set `LAYA_URL` to turn it on). It makes three
-decisions: whether to propose to a group now, which feasible vibe to use
-(§5), and which venues fit the vibe (§8). Code computes every option it chooses from.
+deferred to #274 (set `LAYA_URL` to turn it on). In the automated flow
+it decides whether to propose to a group now (§5) and how much each
+member would enjoy each discovered activity, from their private profile
+(preference fit, §6, #311); code sums those into the 3 options. Manual
+New hangout uses it to check which venues fit the vibe (§8). Code computes
+every option it chooses from.
 It also reads each event-chat message's intent (#325: can't make it,
 running late, change spot, logistics, just chatting). When the top intent
 is at least 0.75 and actionable, only the sender is offered Pass (while
@@ -935,6 +953,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-27 | **Squads only; closeness deferred (#320).** The scheduler (weekly cron, demo button, `/internal/run-matcher`) proposes only to whole squads with 3–6 active members and to Riley's Mixers (#215); friend pairs, cliques and one-drop subsets are skipped. Manual hangouts are unchanged. Ranking is `0.6 · staleness + 0.4 · soonness`; closeness is documented as deferred in §5. The demo trio forms a squad instead of starring each other. |
 | 2026-09-27 | **No fixed activity list in the automated flow (#322).** One broad Places Nearby Search finds leisure places near the squad; code keeps the ones open in the free window, ranks them by worst commute, and times each option at or after the slot start. Gemini only labels each place as an activity with a typical length. Until preference fit (#311), code picks the 3 best by commute with distinct labels (`pickActivities`). Fewer than 3 → the fixed-vibe venues. Manual New hangout keeps the fixed vibes. |
 | 2026-09-27 | **Chat intent suggestions (#325).** After a chat message is saved, `askDecision` classifies it in the background (`chatIntentRequest`: the message text only, capped at 300 chars). At ≥ 0.75 on `cant_make_it` or `change_spot` the sender alone gets `chat:suggestion` (`{ event_id, message_id, kind }`) and a chip that runs the existing Pass or Change spot action; `running_late` gets a hint chip; `logistics` and `just_chatting` get nothing. Sender-only because a direct invitee's Pass is a Ghost Pass. Nothing is stored; a failed call does nothing. |
+| 2026-09-27 | **Preference fit picks the options (#311).** Each squad member's private profile (#310) goes to the decision model as one `fit` Choice over the discovered candidates (no names or ids, profile text as data). Code sums the members' probabilities and takes the top 3 distinct activities; the squad is proposed only when `propose` P(A) ≥ 0.6 and `squadAppeal` (the #1 pick's mean probability) ≥ 0.2, and `force` skips both. Any member call fails → the 3 best by commute. The automated flow drops the group `vibe` question and venue fit; Gemini never sees the profiles. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)
 

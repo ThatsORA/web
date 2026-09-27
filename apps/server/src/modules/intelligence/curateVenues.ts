@@ -167,7 +167,7 @@ export async function curateVenues(venues: RankedVenue[], ctx: CurateContext): P
   return result;
 }
 
-/** Activity options code already picked (#322): no venue-fit decision, Gemini writes only the text. */
+/** Options code already picked (the automated flow, #322/#311): no venue-fit decision, Gemini writes only the text. */
 export async function curateActivities(picks: Pick3[], ctx: CurateContext): Promise<Curation> {
   const reviews = await Promise.all(picks.map((v) => reviewSnippets(v.place_id)));
   return writeText(picks.map((v, i) => ({ ...v, reviews: reviews[i]! })), ctx);
