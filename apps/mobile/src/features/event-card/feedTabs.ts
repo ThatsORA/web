@@ -3,7 +3,7 @@ import type { EventCardPayload } from "@web/contract";
 
 export type HangoutTab = "pending" | "confirmed" | "past";
 
-/** Filter event cards by feed sub-tab: Pending (voting/invited), Confirmed (confirmed/chatted), Past (completed/expired). */
+/** Filter event cards by feed sub-tab: Pending (voting, or a late invite to answer), Confirmed (confirmed/chatted), Past (completed/expired). */
 export function filterHangoutsByTab(
   cards: EventCardPayload[],
   tab: HangoutTab,
@@ -17,16 +17,13 @@ export function filterHangoutsByTab(
 
   return cards.filter((card) => {
     if (dismissedSet?.has(card.id)) return false;
+    // Each card is in exactly one tab (#407): a confirmed hangout still waiting on your late-invite answer is Pending.
+    const awaitingAnswer = card.status === "confirmed" && card.my_status === "invited";
     if (tab === "pending") {
-      return (
-        card.status === "voting" ||
-        (card.my_status === "invited" &&
-          card.status !== "completed" &&
-          card.status !== "expired")
-      );
+      return card.status === "voting" || awaitingAnswer;
     }
     if (tab === "confirmed") {
-      return card.status === "confirmed" || card.status === "chatted";
+      return (card.status === "confirmed" && !awaitingAnswer) || card.status === "chatted";
     }
     if (tab === "past") {
       return card.status === "completed" || card.status === "expired";

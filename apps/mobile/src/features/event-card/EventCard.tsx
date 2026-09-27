@@ -11,7 +11,7 @@ import { userIdFromToken } from "../../lib/session";
 import { Badge, Button, Callout, Card, Chip, IconButton, Modal, Txt, useTheme } from "../../ui";
 import { ExpenseForm, ExpenseLedger } from "../expenses";
 import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calendarSync";
-import { canChangeSpot, canDeclineInvite, canInvite, canOpenChat, cardKind, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows } from "./cardState";
+import { canAnswerInvite, canChangeSpot, canInvite, canOpenChat, cardKind, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows } from "./cardState";
 import { changeSpotPrompt } from "./changeSpot";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
 import { optionLabel, placeTitle, progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
@@ -23,7 +23,8 @@ export type CardActions = {
   vote: (optionId: string) => void;
   ghostPass: () => void;
   changeSpot: () => void;
-  /** A late direct invitee's "Can't make it" on a confirmed hangout (#345). */
+  /** A late invitee's "I'm in" / "Can't make it" on a confirmed hangout (#345, #407). */
+  joinInvite: () => void;
   declineInvite: () => void;
 };
 
@@ -385,14 +386,15 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
         ) : null}
       </Card>
       <Card>
-        {canDeclineInvite(card) ? (
-          <Callout tone="info" title="You’re invited">
-            {inviter ? `${inviter.display_name ?? inviter.username} added you to this hangout.` : "You were added to this hangout."}
-            {" "}You’re in unless you say otherwise.
-          </Callout>
-        ) : null}
-        {canDeclineInvite(card) ? (
-          <Button label="Can’t make it" variant="ghost" onPress={actions.declineInvite} disabled={busy} />
+        {canAnswerInvite(card) ? (
+          <>
+            <Callout tone="info" title="You’re invited">
+              {inviter ? `${inviter.display_name ?? inviter.username} added you to this hangout.` : "You were added to this hangout."}
+              {" "}Let them know if you’re coming before it starts.
+            </Callout>
+            <Button label="I’m in" onPress={actions.joinInvite} disabled={busy} />
+            <Button label="Can’t make it" variant="ghost" onPress={actions.declineInvite} disabled={busy} />
+          </>
         ) : null}
         <Txt variant="small" numeric>
           {venue.facts_line}

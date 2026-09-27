@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { InvitedParticipant } from "./invitations";
-import { canDecline, inviteBlock, lateInvitees } from "./lateInvite";
+import { canAnswerInvite, inviteBlock, lateInvitees } from "./lateInvite";
 
 const now = new Date("2026-10-01T12:00:00Z");
 const later = (hours: number) => new Date(now.getTime() + hours * 3600_000);
@@ -49,16 +49,16 @@ describe("lateInvitees", () => {
   });
 });
 
-describe("canDecline", () => {
-  const direct = me({ inviteSource: "direct", voteStatus: "invited" });
-  it("lets a direct invitee who hasn't responded bow out of a confirmed hangout before it starts", () => {
-    expect(canDecline(confirmed, direct, now)).toBe(true);
+describe("canAnswerInvite (#345, #407)", () => {
+  const late = me({ inviteSource: "direct", voteStatus: "invited", sourceGroupIds: ["invited_by:host"] });
+  it("lets a late invitee who hasn't answered say I'm in or Can't make it before the hangout starts", () => {
+    expect(canAnswerInvite(confirmed, late, now)).toBe(true);
   });
-  it("refuses while voting (Ghost Pass instead), after the start, for squad members and people who voted", () => {
-    expect(canDecline(voting, direct, now)).toBe(false);
-    expect(canDecline({ ...confirmed, startsAt: now }, direct, now)).toBe(false);
-    expect(canDecline(confirmed, me({ voteStatus: "invited" }), now)).toBe(false);
-    expect(canDecline(confirmed, me({ inviteSource: "direct", voteStatus: "confirmed" }), now)).toBe(false);
-    expect(canDecline(confirmed, undefined, now)).toBe(false);
+  it("refuses original non-voters, while voting, after the start, once answered, and for outsiders", () => {
+    expect(canAnswerInvite(confirmed, me({ inviteSource: "direct", voteStatus: "invited", sourceGroupIds: [] }), now)).toBe(false);
+    expect(canAnswerInvite(voting, late, now)).toBe(false);
+    expect(canAnswerInvite({ ...confirmed, startsAt: now }, late, now)).toBe(false);
+    expect(canAnswerInvite(confirmed, { ...late, voteStatus: "confirmed" }, now)).toBe(false);
+    expect(canAnswerInvite(confirmed, undefined, now)).toBe(false);
   });
 });

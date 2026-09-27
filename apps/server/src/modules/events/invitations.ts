@@ -43,6 +43,8 @@ export function invitedParticipant<T extends ParticipantRow>(event: EventInvites
     isMixer: event.isMixer === true,
     inviteSource: inviteSource(event, participant.userId, participant),
     sourceGroupIds: sourceSquads(event, participant),
+    // sourceSquads() drops the `invited_by:` marker, so carry who invited a late invitee separately (#407).
+    invitedBy: inviterId(participant),
   };
 }
 
@@ -55,6 +57,8 @@ export interface ParticipantRow {
   isMixer?: boolean;
   inviteSource?: InviteSource | null;
   sourceGroupIds?: readonly string[];
+  /** Who invited this person into an already-closed hangout (#345); set by invitedParticipant(). */
+  invitedBy?: string | null;
 }
 
 // Every pass is stored as `ghost_passed`; its kind comes from the invite source (passKind), so a squad
@@ -65,20 +69,34 @@ export interface InvitedParticipant extends ParticipantRow {
   inviteSource: InviteSource;
 }
 
+/** Voted, or confirmed after close: the only statuses that count as going. */
+const respondedIn = (row: ParticipantRow) => row.voteStatus === "voted" || row.voteStatus === "confirmed";
+
+/** Invited into an already-closed hangout (#345) and hasn't answered I'm in / Can't make it yet (#407). */
+export const lateInvitePending = (row: ParticipantRow) =>
+  row.voteStatus === "invited" && (row.invitedBy ?? inviterId(row)) !== null;
+
 /**
- * Whether this participant still has the event: its card, list entry, chat and socket/push updates (#210).
- * While voting is open everyone does, so a Ghost Pass looks like a vote and can still become one. Once
- * voting closes a Ghost Pass is final and loses the event; a visible Pass (creator, squad, and anyone a
- * selected squad brought in) keeps it, chat included.
+ * Whether this participant still has the event: its card, list entry, chat and socket/push updates (#210, #407).
+ * While voting is open everyone does, so a Ghost Pass looks like a vote and can still become one. Once voting
+ * closes:
+ * - voters keep it;
+ * - a Ghost Pass loses it; a visible Pass (creator, squad) keeps the card but isn't an attendee;
+ * - anyone who didn't vote loses it too (#407), except on a `chatted` (or not yet swept) event, which exists so
+ *   everyone can talk it over, and a late invitee on a confirmed hangout who hasn't answered yet;
+ * - a Mixer keeps only its voters.
  */
-export function keepsAccess(row: InvitedParticipant, votingOpen: boolean): boolean {
-  if (row.isMixer && !votingOpen) return row.voteStatus === "voted" || row.voteStatus === "confirmed";
-  return votingOpen || !hasPassed(row) || passKind(row.inviteSource) === "visible";
+export function keepsAccess(row: InvitedParticipant, votingOpen: boolean, status: EventStatus): boolean {
+  if (votingOpen || respondedIn(row)) return true;
+  if (row.isMixer) return false;
+  if (hasPassed(row)) return passKind(row.inviteSource) === "visible";
+  if (status === "chatted" || status === "voting") return true;
+  return status === "confirmed" && lateInvitePending(row);
 }
 
 /** Who gets this event's updates: every participant who keepsAccess(). */
-export const eventAudience = (rows: readonly InvitedParticipant[], votingOpen: boolean): string[] =>
-  rows.filter((row) => keepsAccess(row, votingOpen)).map((row) => row.userId);
+export const eventAudience = (rows: readonly InvitedParticipant[], votingOpen: boolean, status: EventStatus): string[] =>
+  rows.filter((row) => keepsAccess(row, votingOpen, status)).map((row) => row.userId);
 
 const SQUAD_CHAT_STATUSES: readonly EventStatus[] = ["voting", "confirmed", "chatted", "completed"];
 const POST_CLOSE_CHAT_STATUSES: readonly EventStatus[] = ["confirmed", "completed", "chatted"];
@@ -105,14 +123,14 @@ export function chatAudience(status: EventStatus, rows: readonly InvitedParticip
   // Before close ("voting"), only shared squad hangouts have chat, and direct invitees are kept out.
   if (status === "voting") {
     if (rows.some((row) => row.isMixer) || !sharedSquad) return [];
-    return eventAudience(rows.filter((row) => row.inviteSource !== "direct"), false);
+    return eventAudience(rows.filter((row) => row.inviteSource !== "direct"), false, status);
   }
 
   // Post-close ("confirmed", "completed", "chatted"): attending members of all event types.
   if (POST_CLOSE_CHAT_STATUSES.includes(status)) {
     return rows
       .filter((row) => {
-        if (!keepsAccess(row, false)) return false;
+        if (!keepsAccess(row, false, status)) return false;
         // Squad members and creator in a shared squad hangout keep access even if they visibly passed
         if (sharedSquad && (row.inviteSource === "squad" || row.inviteSource === "creator")) return true;
         // All other participants (direct invitees, mixer participants, or members of non-squad events) must have confirmed attendance
@@ -194,7 +212,7 @@ export function viewerScope(
   const visible = rows.filter((p) => {
     if (p.userId === viewerId) return true;
     if (event.isMixer) return false;
-    if (isConfirmed && !hasPassed(p)) return true;
+    if (isConfirmed && respondedIn(p)) return true;
     return (
       fullRoster ||
       p.inviteSource === "creator" ||
@@ -210,7 +228,8 @@ export function viewerScope(
       inviteSource: p.inviteSource,
       passed: p.userId === viewerId || passKind(p.inviteSource) === "visible" ? hasPassed(p) : null,
     })),
-    attendeeIds: visible.filter((p) => !hasPassed(p)).map((p) => p.userId),
+    // Once confirmed only voters attend (#407); a chatted event's "free people" are everyone who didn't pass.
+    attendeeIds: visible.filter((p) => (isConfirmed ? respondedIn(p) : !hasPassed(p))).map((p) => p.userId),
     seesEveryone: visible.length === event.participants.length,
   };
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { VoteStatus } from "@web/contract";
 import { prisma } from "../../lib/prisma";
-import { chatAccess, chatAudience, eventAudience, eventParticipants, invitedParticipant, inviteSource, inviterId, keepsAccess, passKind, viewerScope, type InvitedParticipant, type ParticipantRow } from "./invitations";
+import { chatAccess, chatAudience, eventAudience, eventParticipants, invitedParticipant, inviteSource, inviterId, keepsAccess, lateInvitePending, passKind, viewerScope, type InvitedParticipant, type ParticipantRow } from "./invitations";
 
 vi.mock("../../lib/prisma", () => ({ prisma: { eventParticipant: { findMany: vi.fn() } } }));
 
@@ -36,8 +36,8 @@ it("reads stored sources for mixed events and derives sources for legacy events"
       event: { createdById: null, sourceGroupId: S1, sourceGroupIds: [] } },
   ] as never);
   expect(await eventParticipants("event-1")).toEqual([
-    { userId: S, voteStatus: "invited", isMixer: false, inviteSource: "squad", sourceGroupIds: [S1] },
-    { userId: T, voteStatus: "invited", isMixer: false, inviteSource: "squad", sourceGroupIds: [S1] },
+    { userId: S, voteStatus: "invited", isMixer: false, inviteSource: "squad", sourceGroupIds: [S1], invitedBy: null },
+    { userId: T, voteStatus: "invited", isMixer: false, inviteSource: "squad", sourceGroupIds: [S1], invitedBy: null },
   ]);
 });
 
@@ -46,8 +46,8 @@ it("keeps only committed Mixer invitees after close and opens chat only for comm
   const invited = rows([C, D, E, O], { [C]: "confirmed", [D]: "voted", [E]: "invited", [O]: "ghost_passed" })
     .map((row) => invitedParticipant(mixer, row));
   expect(invited.map((row) => row.inviteSource)).toEqual(["direct", "direct", "direct", "direct"]);
-  expect(eventAudience(invited, true)).toEqual([C, D, E, O]);
-  expect(eventAudience(invited, false)).toEqual([C, D]);
+  expect(eventAudience(invited, true, "voting")).toEqual([C, D, E, O]);
+  expect(eventAudience(invited, false, "confirmed")).toEqual([C, D]);
   expect(chatAudience("voting", invited)).toEqual([]);
   expect(chatAudience("chatted", invited)).toEqual([C, D]);
 });
@@ -200,21 +200,21 @@ describe("keepsAccess / eventAudience (#210)", () => {
   const row = (list: typeof directRows, id: string) => list.find((p) => p.userId === id)!;
 
   it("keeps everyone while voting is open, so a ghost passer can still return and vote", () => {
-    expect(eventAudience(directRows, true)).toEqual([C, D, E]);
-    expect(keepsAccess(row(directRows, D), true)).toBe(true);
+    expect(eventAudience(directRows, true, "voting")).toEqual([C, D, E]);
+    expect(keepsAccess(row(directRows, D), true, "voting")).toBe(true);
   });
 
   it("after close, a Ghost Pass is final and loses the event; a visible Pass keeps it", () => {
-    expect(keepsAccess(row(directRows, D), false)).toBe(false);
-    expect(eventAudience(directRows, false)).toEqual([C, E]);
-    expect(keepsAccess(row(squadRows, S), false)).toBe(true);
-    expect(keepsAccess(row(squadRows, C), false)).toBe(true);
-    expect(eventAudience(squadRows, false)).toEqual([C, O, S, T]);
+    expect(keepsAccess(row(directRows, D), false, "confirmed")).toBe(false);
+    expect(eventAudience(directRows, false, "confirmed")).toEqual([C, E]);
+    expect(keepsAccess(row(squadRows, S), false, "confirmed")).toBe(true);
+    expect(keepsAccess(row(squadRows, C), false, "confirmed")).toBe(true);
+    expect(eventAudience(squadRows, false, "confirmed")).toEqual([C, O, S, T]);
   });
 
   it("someone in the event through its squad uses squad rules, even if they'd also have been a direct pick", () => {
     expect(row(squadRows, O).inviteSource).toBe("squad");
-    expect(keepsAccess(row(squadRows, O), false)).toBe(true);
+    expect(keepsAccess(row(squadRows, O), false, "confirmed")).toBe(true);
   });
 
   it("a squad Pass is excluded from attendees but stays visible to their squad", () => {
@@ -336,5 +336,50 @@ describe("chatAudience / chatAccess (#212)", () => {
     const now = new Date();
     expect(chatAccess({ status: "voting", endsAt }, squadRows, S, now)).toBe("open");
     expect(chatAccess({ status: "confirmed", endsAt }, squadRows, O, now)).toBe("open");
+  });
+});
+
+describe("non-voters after close (#407)", () => {
+  const event = { createdById: C, sourceGroupId: S1 };
+  // C created it; S voted; T (squad) and D (direct) never voted; L was invited late by S and hasn't answered.
+  const all: InvitedParticipant[] = [
+    { userId: C, voteStatus: "confirmed", inviteSource: "creator", sourceGroupIds: [S1] },
+    { userId: S, voteStatus: "confirmed", inviteSource: "squad", sourceGroupIds: [S1] },
+    { userId: T, voteStatus: "invited", inviteSource: "squad", sourceGroupIds: [S1] },
+    { userId: D, voteStatus: "invited", inviteSource: "direct", sourceGroupIds: [] },
+    { userId: "l", voteStatus: "invited", inviteSource: "direct", sourceGroupIds: [`invited_by:${S}`] },
+  ];
+  const ids = (status: Parameters<typeof eventAudience>[2]) => eventAudience(all, false, status);
+
+  it("drops everyone who didn't vote from a confirmed or completed hangout, squad members included", () => {
+    expect(ids("confirmed")).toEqual([C, S, "l"]);
+    expect(ids("completed")).toEqual([C, S]);
+  });
+
+  it("keeps non-voters on a chatted hangout (and one not yet swept), and everyone while voting is open", () => {
+    expect(ids("chatted")).toEqual([C, S, T, D, "l"]);
+    expect(ids("voting")).toEqual([C, S, T, D, "l"]);
+    expect(eventAudience(all, true, "voting")).toEqual([C, S, T, D, "l"]);
+  });
+
+  it("keeps a late invitee's access through invitedParticipant(), which drops the marker from sourceGroupIds", () => {
+    const raw = { userId: "l", voteStatus: "invited" as const, inviteSource: "direct" as const, sourceGroupIds: [`invited_by:${S}`] };
+    const normalized = invitedParticipant({ createdById: C, sourceGroupId: null }, raw);
+    expect(normalized.sourceGroupIds).toEqual([]);
+    expect(lateInvitePending(normalized)).toBe(true);
+    expect(keepsAccess(normalized, false, "confirmed")).toBe(true);
+  });
+
+  it("recognizes an unanswered late invite only by its inviter marker", () => {
+    expect(all.map(lateInvitePending)).toEqual([false, false, false, false, true]);
+    expect(lateInvitePending({ ...all[4]!, voteStatus: "confirmed" })).toBe(false);
+  });
+
+  it("counts only voters as attendees once confirmed, and shows non-voters to nobody", () => {
+    const scope = viewerScope({ ...event, status: "confirmed", participants: all }, C);
+    expect(scope.attendeeIds).toEqual([C, S]);
+    const squadView = viewerScope({ ...event, status: "confirmed", participants: all }, S);
+    expect(squadView.people.map((p) => p.userId)).not.toContain(D);
+    expect(squadView.attendeeIds).not.toContain(T);
   });
 });

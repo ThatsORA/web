@@ -1,6 +1,6 @@
 import { EventCardPayload } from "@web/contract";
 import { describe, expect, it } from "vitest";
-import { byStart, canChangeSpot, canDeclineInvite, canInvite, inviteSearch, canOpenChat, cardKind, detectSwap, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows, votingTimeRemaining } from "./cardState";
+import { byStart, canChangeSpot, canAnswerInvite, canInvite, inviteSearch, canOpenChat, cardKind, detectSwap, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, participantBreakdown, travelRows, votingTimeRemaining } from "./cardState";
 import { FIXTURES, ME } from "./fixtures";
 
 const get = (label: string) => FIXTURES.find((f) => f.label === label)!.card;
@@ -167,13 +167,13 @@ describe("late invites (#345, #384)", () => {
     expect(canInvite(get("Chatted"), before)).toBe(false);
   });
 
-  it("offers Can't make it only to a direct invitee who hasn't responded to a confirmed hangout", () => {
+  it("offers I'm in / Can't make it only to a direct invitee who hasn't answered a confirmed hangout", () => {
     const lateInvite = { ...confirmed, my_status: "invited" as const, viewer: { ...confirmed.viewer, invite_source: "direct" as const } };
-    expect(canDeclineInvite(lateInvite, before)).toBe(true);
-    expect(canDeclineInvite(lateInvite, after)).toBe(false);
-    expect(canDeclineInvite({ ...lateInvite, my_status: "confirmed" }, before)).toBe(false);
-    expect(canDeclineInvite({ ...lateInvite, viewer: { ...lateInvite.viewer, invite_source: "squad" } }, before)).toBe(false);
-    expect(canDeclineInvite({ ...lateInvite, status: "voting" }, before)).toBe(false);
+    expect(canAnswerInvite(lateInvite, before)).toBe(true);
+    expect(canAnswerInvite(lateInvite, after)).toBe(false);
+    expect(canAnswerInvite({ ...lateInvite, my_status: "confirmed" }, before)).toBe(false);
+    expect(canAnswerInvite({ ...lateInvite, viewer: { ...lateInvite.viewer, invite_source: "squad" } }, before)).toBe(false);
+    expect(canAnswerInvite({ ...lateInvite, status: "voting" }, before)).toBe(false);
   });
 
   it("shows nobody until you search, then marks people already in the group", () => {

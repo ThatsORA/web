@@ -116,12 +116,17 @@ describe("assembleEventCard", () => {
     const card = assembleEventCard(baseEvent, carol, now);
     expect(card.status).toBe("confirmed");
     expect(card.my_status).toBe("invited");
-    // On a confirmed hangout, Carol sees all attendees meeting up (Alice, Bob, Carol)
+    // Carol sees who's going; she isn't an attendee until she taps I'm in (#407).
     expect(card.participants.map((p) => p.id)).toEqual([alice, bob, carol]);
-    expect(card.outcome?.attendees.map((p) => p.id)).toEqual([alice, bob, carol]);
+    expect(card.outcome?.attendees.map((p) => p.id)).toEqual([alice, bob]);
+    const joined = assembleEventCard({
+      ...baseEvent,
+      participants: baseEvent.participants.map((p) => (p.userId === carol ? { ...p, voteStatus: "confirmed" as const } : p)),
+    }, carol, now);
+    expect(joined.outcome?.attendees.map((p) => p.id)).toEqual([alice, bob, carol]);
   });
 
-  it("collapses effectiveStatus to expired when totalUnpassed < 2", () => {
+  it("collapses effectiveStatus to expired when fewer than 2 people are going", () => {
     const expiredEvent: EventWithCardData = {
       ...baseEvent,
       participants: [

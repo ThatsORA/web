@@ -741,7 +741,17 @@ own. The card shows the viewer's kind as `viewer.pass_kind`.
 | While voting is open | Counts as responded; can be replaced by a vote. Keeps the card and every update, exactly like a voter | Same |
 | After close (everyone responded, or the deadline) | Final. The event disappears: 404 on `GET /events/:id`, left out of `GET /events`, 403 on chat, and no more socket events or pushes | Final. Keeps the card, chat (normal time limits) and updates, and isn't an attendee |
 
-- One pure rule decides it: `keepsAccess(row, votingOpen)` in
+**Didn't vote (#407).** Once a hangout is confirmed (or completed), anyone
+still at `invited` loses it like a Ghost Pass, squad members included: no
+card, list entry, chat, pushes or attendance. Only `voted`/`confirmed` count
+as going. A `chatted` hangout keeps its non-voters, because that state exists
+so everyone can talk it over. A **late invite** (#345, marked
+`invited_by:<id>`) can't vote, so on a confirmed hangout it shows in Pending
+with **I'm in** (`POST /events/:id/join` → `confirmed`) and **Can't make it**
+(`POST /events/:id/decline`, a Ghost Pass) until the start; with no answer
+by the start it's gone. The feed puts each card in exactly one tab.
+
+- One pure rule decides it: `keepsAccess(row, votingOpen, status)` in
   `apps/server/src/modules/events/invitations.ts`, with `votingOpen()` in
   `voting/resolution.ts`. Chat always applies the after-close rule, so a
   Ghost Pass never enters chat (`chatAudience()`, #212).
@@ -982,6 +992,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-27 | **Preference fit picks the options (#311).** Each squad member's private profile (#310) goes to the decision model as one `fit` Choice over the discovered candidates (no names or ids, profile text as data). Code sums the members' probabilities and takes the top 3 distinct activities; the squad is proposed only when `propose` P(A) ≥ 0.6 and `squadAppeal` (the #1 pick's mean probability) ≥ 0.2, and `force` skips both. Any member call fails → the 3 best by commute. The automated flow drops the group `vibe` question and venue fit; Gemini never sees the profiles. |
 | 2026-09-27 | **Laya is live (#274).** The fine-tuned checkpoint `TheKnack/laya-web-decisions` runs on a CPU droplet (`scripts/laya/serve.py` behind Caddy at `https://174-138-33-82.sslip.io`). The deploy sets `LAYA_URL`, so `askDecision` tries Laya first, then Jev, then code. |
 | 2026-09-27 | **Close-friend 1-on-1s are back (#404, partly supersedes #320).** With squads only, someone whose squad already had a live hangout and who had fewer than 4 people for a Mixer got nothing from the scheduler or **Find a hangout now**, which contradicted the MVP scope (mutual close-friend pairs + squads). Mutual close-friend pairs are candidates again at the lowest priority, with one new proposal per person per run (`onePairPerPerson()`), so the squad demo still gets exactly one squad card. Closeness stays deferred in ranking. |
+| 2026-09-27 | **Non-voters lose a confirmed hangout (#407).** "Didn't vote" used to count as going: non-voters kept the card, were attendees, and showed in both the Pending and Confirmed tabs. Now after close only voters keep a confirmed or completed hangout (a visible squad/creator Pass still keeps the card, #210); `chatted` keeps everyone. Late invites (#345) answer **I'm in** (new `POST /events/:id/join`) or **Can't make it** before the start, and are attendees only after I'm in. This supersedes #345's "otherwise they count as attending, like any non-responder". `keepsAccess()` / `eventAudience()` now take the event status. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)
 

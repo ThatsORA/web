@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { EventCardPayload, EventOption, optionFromRow, type VoteStatus } from "@web/contract";
 import { publicUserSelect, toPublicUser } from "../auth/helpers";
 import { votingOpen } from "../voting/resolution";
-import { chatAccess, invitedParticipant, inviteSource, keepsAccess, viewerScope } from "./invitations";
+import { chatAccess, invitedParticipant, inviteSource, keepsAccess, lateInvitePending, viewerScope } from "./invitations";
 
 export type EventWithCardData = Prisma.EventGetPayload<{
   include: {
@@ -16,7 +16,11 @@ export type EventWithCardData = Prisma.EventGetPayload<{
 export function canSeeEvent(event: EventWithCardData, userId: string, now: Date): boolean {
   if (event.isMixer && event.status === "expired") return false;
   const mine = event.participants.find((participant) => participant.userId === userId);
-  return !!mine && keepsAccess(invitedParticipant(event, mine), votingOpen(event, now));
+  if (!mine) return false;
+  const row = invitedParticipant(event, mine);
+  // An unanswered late invite goes away once the hangout starts (#407).
+  if (lateInvitePending(row) && now >= event.startsAt) return false;
+  return keepsAccess(row, votingOpen(event, now), event.status);
 }
 
 /** Keeps travel times only for people the viewer may see; the keys would otherwise leak the roster. */
@@ -51,14 +55,14 @@ export function assembleEventCard(event: EventWithCardData, userId: string, now 
     : null;
   const creator = !event.isMixer && event.createdById ? users.get(event.createdById) : undefined;
   const invited = event.participants.map((participant) => invitedParticipant(event, participant));
-  const totalUnpassed = event.participants.filter((p) => p.voteStatus !== "ghost_passed").length;
-  const isLateInvitee = mine.voteStatus === "invited";
-  const effectiveStatus =
-    !event.isMixer &&
-    (event.status === "confirmed" || event.status === "chatted") &&
-    (totalUnpassed < 2 || (!isLateInvitee && scope.attendeeIds.length < 2))
-      ? "expired"
-      : event.status;
+  // Fewer than 2 people going means it isn't happening. Once confirmed only voters go (#407); a chatted
+  // hangout counts everyone who didn't pass. A global count, so a viewer's narrower scope can't expire it.
+  const going = event.participants.filter((p) => event.status === "chatted"
+    ? p.voteStatus !== "ghost_passed"
+    : p.voteStatus === "voted" || p.voteStatus === "confirmed").length;
+  const effectiveStatus = !event.isMixer && (event.status === "confirmed" || event.status === "chatted") && going < 2
+    ? "expired"
+    : event.status;
 
   return EventCardPayload.parse({
     id: event.id,

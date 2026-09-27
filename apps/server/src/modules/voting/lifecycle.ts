@@ -96,7 +96,7 @@ export async function closeVoting(eventId: string): Promise<void> {
     // Voting is closed now: a Ghost Pass is final, so its passer stops getting this event (#210).
     const audience = event.isMixer && r.status === "expired"
       ? participants.map((participant) => participant.userId)
-      : eventAudience(participants, false);
+      : eventAudience(participants, false, r.status);
     emitToUsers(audience, "event:resolved", { event_id: eventId, status: r.status });
     if (r.status === "confirmed") {
       void pushEventResolved(
@@ -124,7 +124,7 @@ export async function sweepVoting(now = new Date()): Promise<void> {
   for (const event of ended) {
     const { count } = await prisma.event.updateMany({ where: { id: event.id, status: "confirmed" }, data: { status: "completed" } });
     if (count) {
-      const audience = eventAudience(await eventParticipants(event.id), false);
+      const audience = eventAudience(await eventParticipants(event.id), false, "completed");
       emitToUsers(audience, "event:resolved", { event_id: event.id, status: "completed" });
     }
   }

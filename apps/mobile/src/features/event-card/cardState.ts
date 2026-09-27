@@ -101,8 +101,11 @@ export function votingTimeRemaining(voteClosesAtStr: string, now = Date.now()): 
 
 
 
-/** Whether "Can't make it" shows for a late invite (#345): a direct invitee who hasn't responded to a confirmed, unstarted hangout. */
-export const canDeclineInvite = (card: EventCardPayload, now = Date.now()) =>
+/**
+ * Whether "I'm in" / "Can't make it" show for a late invite (#345, #407): a direct invitee still at `invited` on a
+ * confirmed, unstarted hangout. Non-voters never get a confirmed card (#407), so only late invitees match.
+ */
+export const canAnswerInvite = (card: EventCardPayload, now = Date.now()) =>
   card.status === "confirmed" && card.my_status === "invited" && card.viewer.invite_source === "direct" &&
   Date.parse(card.starts_at) > now;
 
