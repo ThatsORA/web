@@ -32,6 +32,11 @@ services:
       - key: BUSY_PADDING_MIN
         value: "15"
         scope: RUN_TIME
+      # Self-hosted Laya (#274): apps/server/scripts/laya/serve.py behind Caddy on the droplet.
+      # LAYA_API_KEY is an encrypted secret set in the console.
+      - key: LAYA_URL
+        value: https://174-138-33-82.sslip.io
+        scope: RUN_TIME
       - key: GEMINI_TIMEOUT_MS
         value: "8000"
         scope: RUN_TIME

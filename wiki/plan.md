@@ -823,9 +823,9 @@ hours), route-matrix scoring, each option's time, picking the 3 options,
 and backup ordering. These form the complete fallback path. The automated
 flow has no fixed activity list: code finds what's open nearby (§6).
 
-**Decision model (`askDecision`, #228):** Jev `jev-1.13.0`, then the
-deterministic fallback. A fine-tuned, self-hosted Laya in front of Jev is
-deferred to #274 (set `LAYA_URL` to turn it on). In the automated flow
+**Decision model (`askDecision`, #228):** our fine-tuned, self-hosted Laya
+(#274, when `LAYA_URL` is set), then Jev `jev-1.13.0`, then the
+deterministic fallback. In the automated flow
 it decides whether to propose to a group now (§5) and how much each
 member would enjoy each discovered activity, from their private profile
 (preference fit, §6, #311); code sums those into the 3 options. Manual
@@ -847,8 +847,8 @@ picks the options.
 **Pitch note: teacher and student (next step, #274).** Gemini generates
 scheduling scenarios and Jev labels them with calibrated probabilities (the
 teacher). That training set is built (#235), and the runtime requests match
-its format (#256). Fine-tuning Laya on it (the student) and serving Laya in
-front of Jev is deferred to #274, along with the eval table.
+its format (#256). Laya is fine-tuned on it (the student) and served in
+front of Jev (#274).
 
 **Future work (pitch only):** learned ranking once real hangout history
 exists, natural-language expense entry, and summaries of the fallback chat.
@@ -973,6 +973,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-27 | **Private budget + price cap (#324).** `User.budget` (one JSON field, contract `Budget`): per outing type, typical spend per person (whole USD 0–500) and how often. Private like the matching profile: only `Me` and the decision model, never Gemini. Gemini's describe step also labels each place's spend category; code drops candidates above 1.25 × the lowest member's spend for that category (Places `price_level` → $15/30/60/100), then preference fit sees each member's budget as plain-word lines. |
 | 2026-09-27 | **Invite into an existing hangout (#345).** Any participant who still has the event and hasn't passed can invite accepted friends into a voting or confirmed hangout until it starts (not Mixers), from "Invite friends" on the card. Squad and friend hangouts use the same path; #218 nominations are untouched. Late invitees are always `direct`, so §9 holds unchanged: they see themselves and the creator, their pass is a Ghost Pass, and they never join a squad chat. Inviting someone already in the event returns the same 204, so the response can't reveal a hidden direct invitee. After close a direct invitee who hasn't responded can still say "Can't make it" (`POST /events/:id/decline`, stored as `ghost_passed`) until the start; otherwise they count as attending, like any non-responder. |
 | 2026-09-27 | **Preference fit picks the options (#311).** Each squad member's private profile (#310) goes to the decision model as one `fit` Choice over the discovered candidates (no names or ids, profile text as data). Code sums the members' probabilities and takes the top 3 distinct activities; the squad is proposed only when `propose` P(A) ≥ 0.6 and `squadAppeal` (the #1 pick's mean probability) ≥ 0.2, and `force` skips both. Any member call fails → the 3 best by commute. The automated flow drops the group `vibe` question and venue fit; Gemini never sees the profiles. |
+| 2026-09-27 | **Laya is live (#274).** The fine-tuned checkpoint `TheKnack/laya-web-decisions` runs on a CPU droplet (`scripts/laya/serve.py` behind Caddy at `https://174-138-33-82.sslip.io`). The deploy sets `LAYA_URL`, so `askDecision` tries Laya first, then Jev, then code. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)
 

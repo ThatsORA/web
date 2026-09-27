@@ -57,8 +57,8 @@ touches before you write code.
   venue fit in manual New hangout) go through one client,
   `askDecision` in `apps/server/src/modules/intelligence/`: Jev
   `jev-1.13.0`, then the caller's deterministic fallback (#196, #228).
-  A fine-tuned, self-hosted Laya is deferred to #274; `askDecision`
-  already tries it first when `LAYA_URL` is set, and it's empty today.
+  The fine-tuned, self-hosted Laya (#274) goes first when `LAYA_URL` is
+  set, as it is on the deploy; any Laya failure falls through to Jev.
 - Gemini only writes text: the vote blurbs and `match_reason`, from
   `curateVenues`/`curateActivities`, and each discovered place's activity
   label, typical length and spend category, from `describeActivities`
