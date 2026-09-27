@@ -2,8 +2,14 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ deleteMany: vi.fn(), createMany: vi.fn(), transaction: vi.fn() }));
-vi.mock("../../lib/prisma", () => ({ prisma: { user: { findUnique: async () => ({ passwordChangedAt: null }) }, $transaction: mocks.transaction } }));
+const mocks = vi.hoisted(() => ({ deleteMany: vi.fn(), createMany: vi.fn(), transaction: vi.fn(), findMany: vi.fn() }));
+vi.mock("../../lib/prisma", () => ({
+  prisma: {
+    user: { findUnique: async () => ({ passwordChangedAt: null }) },
+    userFavorite: { findMany: mocks.findMany },
+    $transaction: mocks.transaction,
+  },
+}));
 
 import { signToken } from "../../lib/auth";
 import { favoritesRouter } from "./router";
@@ -22,18 +28,47 @@ beforeAll(async () => {
 afterAll(() => close());
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.findMany.mockResolvedValue([]);
   mocks.deleteMany.mockResolvedValue({ count: 2 });
   mocks.createMany.mockResolvedValue({ count: 1 });
   mocks.transaction.mockImplementation(async (callback) =>
     callback({ userFavorite: { deleteMany: mocks.deleteMany, createMany: mocks.createMany } }),
   );
 });
+const get = (auth = true) =>
+  fetch(base, {
+    method: "GET",
+    headers: { ...(auth ? { authorization: `Bearer ${signToken(userId)}` } : {}) },
+  });
 const put = (payload: unknown, auth = true) =>
   fetch(base, {
     method: "PUT",
     headers: { "content-type": "application/json", ...(auth ? { authorization: `Bearer ${signToken(userId)}` } : {}) },
     body: JSON.stringify(payload),
   });
+
+describe("GET /favorites", () => {
+  it("requires authentication", async () => {
+    expect((await get(false)).status).toBe(401);
+    expect(mocks.findMany).not.toHaveBeenCalled();
+  });
+
+  it("returns empty list when user has no favorites", async () => {
+    mocks.findMany.mockResolvedValue([]);
+    const response = await get(true);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ categories: [] });
+    expect(mocks.findMany).toHaveBeenCalledWith({ where: { userId }, select: { category: true } });
+  });
+
+  it("returns list of category strings when user has saved favorites", async () => {
+    mocks.findMany.mockResolvedValue([{ category: "coffee_shop" }, { category: "art_gallery" }]);
+    const response = await get(true);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ categories: ["coffee_shop", "art_gallery"] });
+    expect(mocks.findMany).toHaveBeenCalledWith({ where: { userId }, select: { category: true } });
+  });
+});
 
 describe("PUT /favorites", () => {
   it("requires authentication", async () => {
