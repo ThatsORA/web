@@ -17,6 +17,11 @@ touches before you write code.
 - Votes are anonymous. No API response or socket payload may reveal who
   voted for what. Progress is `responded/total`, and a ghost pass counts
   as responded. Tallies stay hidden until voting closes.
+- Event payloads are scoped per viewer (#206, plan §9 "Who sees what").
+  Only a hangout's human creator sees its whole roster; nobody else ever
+  receives a direct invitee they can't see, a Ghost Pass marker, or an
+  attendee list, travel time or tally that reveals one. Build every event
+  payload (card, list, chat membership, presence) on `viewerScope()`.
 - Friend status (pending/accepted) is visible to both people. Close-friend
   status never is: no endpoint or socket payload reveals whether someone
   marked you close, and a declined friend request is never announced.

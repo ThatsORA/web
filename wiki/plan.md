@@ -45,6 +45,16 @@ using seeded accounts.
 8. **Vote (A, B).** Both vote, voting closes early because everyone has
    responded, and the card flips to **Confirmed**. It shows the venue,
    each person's travel time, and a map pin.
+
+> **Superseded by #206 (per-viewer privacy).** Steps 6–8 describe the
+> original shared participant card, where every phone listed everyone and,
+> after close, an attendee list that showed who ghost passed by their
+> absence. That no longer holds. The demo proposal is an automated
+> close-friend hangout, so each person is a direct invite with no human
+> creator view: every phone shows only its owner in "who", "your" travel
+> time, and "2 of 3 responded"; after close nobody sees an attendee list
+> or tallies that could reveal Ojas's Ghost Pass. A squad hangout (or a
+> hangout someone made) shows more; see §9 "Who sees what".
 9. **Finale: "It's closed" (B).** Riley taps the button, and all phones
    swap instantly to the backup venue: "Swapped to X · max 11 min".
 
@@ -240,6 +250,8 @@ events
 
 event_participants
   event_id, user_id, vote_status enum(invited, voted, ghost_passed, confirmed)
+  invite_source enum(creator, direct, squad) default 'direct'   -- #206; picked both ways → squad
+  squad_ids text[] default '{}'    -- the selected squads that brought them in; empty unless squad
   pk(event_id, user_id)
 
 event_options                      -- the 3 vote choices
@@ -294,8 +306,8 @@ Every route except signup and login requires `Authorization: Bearer <JWT>`.
 | POST | /friends/close | Ojas | `{ username }` sets my direction; 409 unless we're accepted friends. If it becomes mutual, triggers the matcher for affected groups |
 | DELETE | /friends/close/:userId | Ojas | Clear my direction silently; 409 unless we're accepted friends |
 | PUT | /favorites | Andy | `{ categories: string[] }` |
-| GET | /events | Andy | My open and recent events |
-| GET | /events/:id | Andy | `EventCardPayload`: options, facts, blurbs, progress, outcome. Never includes voter identities |
+| GET | /events | Andy | My open and recent events, each card scoped to me (§9 "Who sees what") |
+| GET | /events/:id | Andy | `EventCardPayload`: options, facts, blurbs, progress, outcome, `viewer`. Scoped to the caller (§9 "Who sees what"). Never includes voter identities |
 | POST | /events/:id/vote | Ojas | `{ option_id }`. Can be changed until voting closes |
 | POST | /events/:id/ghost-pass | Ojas | Quietly opt out |
 | POST | /events/:id/report-closed | Riley | `{ current_place_id }`. Returns 409 if someone already swapped |
@@ -516,11 +528,57 @@ so it never looks broken.
   - Tallies stay hidden until voting closes.
   - Progress shows "responded / total", and **a ghost pass counts as
     responded**, so it looks exactly like a vote.
-  - Once confirmed, the attendee list is shown, so a ghost-passer's
-    absence is visible but never announced. That makes it quiet, not
-    invisible, and the pitch should say so honestly.
+  - Once confirmed, each person sees only the attendees they're allowed
+    to see (below), so a direct invitee's Ghost Pass can only be inferred
+    by the hangout's human creator. This supersedes the original shared
+    attendee list, where a ghost-passer's absence was visible to everyone.
 - **Closing:** voting closes early once everyone has responded, and
   otherwise at `vote_closes_at`. A sweep runs every 15 seconds.
+
+### Who sees what (#206)
+
+Every participant row stores how the person got in (`invite_source`) and,
+for squad invites, which selected squads brought them (`squad_ids`):
+
+- **`creator`**: the human who made the hangout, when they aren't in a
+  selected squad. Automated hangouts have no creator row and no creator
+  view.
+- **`direct`**: picked as a person, or proposed automatically outside a
+  squad (close-friend cliques, later Mixers #215/#220).
+- **`squad`**: brought in by a selected squad. Someone picked both
+  directly and through a squad (or through several squads) is one row,
+  and squad rules apply.
+
+Pass kind follows the source: a direct invite's pass is a **Ghost Pass**
+(looks exactly like a vote, never shown to anyone); the creator's and a
+squad member's pass is a **visible Pass** ("can't make it"). What each
+viewer gets on the card, list, and any future chat membership or presence
+(all computed by one pure function, `viewerScope()` in
+`apps/server/src/modules/events/invitations.ts`):
+
+| Viewer | Sees these people | Sees these passes | Tallies after close |
+| --- | --- | --- | --- |
+| Human creator | Everyone (`viewer.full_roster`) | Visible passes; attendees after close, so they alone can infer a Ghost Pass | Yes |
+| Squad member | Themselves, the creator, and members of a squad they came in with | Those people's visible passes | Only if they can see everyone |
+| Direct invitee | Themselves and the creator | The creator's visible pass | Only if they can see everyone |
+| Anyone, automated hangout | As above, with no creator | As above | As above |
+
+- `participants`, `outcome.attendees` and every option's
+  `travel_minutes` hold only people the viewer may see; `passed` is null
+  where the viewer may not see it (never "didn't pass").
+- `progress` stays `responded / total` for everyone (a Ghost Pass counts
+  as responded). Mixers hide the total later (#220).
+- Socket payloads name no people (`{ event_id }`, counts, status); each
+  client refetches its own scoped card. Chat messages show only their own
+  poster; there are no membership, presence or system messages. #212 must
+  build any of those on `viewerScope()`.
+- **Honest limit:** the outcome itself can't be hidden. If a small
+  hangout expires because people passed, the remaining guests learn it
+  isn't happening, which can imply who passed. The card never names
+  anyone.
+- Pass lifecycle (returning from a Ghost Pass before close, finality,
+  squad Pass as its own status, and denying ghost-passers the event and
+  chat after close) is #210, built on this.
 
 ### 10. Resolution (Ojas)
 
@@ -535,7 +593,8 @@ so it never looks broken.
   - `backup_venues` = the losing options (most votes first, then by
     route_score), followed by the unused top-5 venues.
 - **At least 2 people remain but fewer than 2 votes:** the event becomes
-  `chatted`. The card shows the window and who's free, plus a
+  `chatted`. The card shows the window and who's free (only people the
+  viewer may see, §9), plus a
   "Plan it yourselves" button that opens the OS share sheet with a
   prefilled message. This replaces the fallback chat.
 - **After the slot ends,** a `confirmed` event becomes `completed`.
@@ -696,6 +755,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-26 | **Profiles (#96, after the demo).** Every user in an API payload is a `PublicUser` `{ id, username, display_name }` where `display_name` falls back to the username. Avatar upload is deferred until a DigitalOcean Spaces bucket exists. |
 | 2026-09-26 | **Display labels (#211).** Andy owns how a person is labeled across the mobile app: `displayName()` in `apps/mobile/src/lib/displayName.ts` (the display name, else the username). Lists and profiles keep `@username` under the name where people need to tell accounts apart or search. Onboarding asks for the name right after sign-up (skippable, never on login). Label-only edits to Ojas's feature screens get Ojas's review; `features/friends/PersonLink.tsx` is co-owned. |
 | 2026-09-26 | **Demo location: around FIU's Modesto A. Maidique Campus (Miami).** It's the hackathon venue, so the presenter's live device location is on campus. |
+| 2026-09-26 | **Invite source and per-viewer privacy (#206).** Each participant stores `invite_source` (creator/direct/squad) and `squad_ids`; picked both ways means squad. Only the human creator sees the whole roster and can infer a Ghost Pass; squad members see their squad and its visible passes; direct invitees see themselves and the creator. Automated close-friend proposals are direct invites with no creator view; automated squad proposals use squad rules. The creator's own pass is visible to everyone (they're the host). This supersedes the shared participant card and attendee list (§9 "Who sees what"). **Backfill** (`scripts/backfill.ts`, every deploy): participants of events with `source_group_id` → squad with that squad; the event's `created_by_id` → creator; everyone else → direct. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)
 
