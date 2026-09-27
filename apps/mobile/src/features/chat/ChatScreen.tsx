@@ -1,4 +1,4 @@
-// Owner: Ojas — fallback group chat screen for chatted events.
+// Owner: Ojas — event group chat: squad hangouts from creation (#212), other events as the chatted fallback.
 // Thin socket payload rule: event:message triggers refetch of GET /events/:id/messages.
 // Read-only after ends_at.
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -145,7 +145,7 @@ export function ChatScreen({ eventId, isEnded = false, onBack }: Props) {
             </View>
           ) : null}
           <Txt variant="eyebrow" color="textMuted">
-            FALLBACK GROUP CHAT
+            GROUP CHAT
           </Txt>
           <Txt variant="display" accessibilityRole="header">
             Event Chat
@@ -153,7 +153,7 @@ export function ChatScreen({ eventId, isEnded = false, onBack }: Props) {
           <Txt variant="body" color="textMuted">
             {isEnded
               ? "This event has ended (read-only)."
-              : "Coordinate backup plans with the group."}
+              : "Coordinate with the group."}
           </Txt>
         </View>
 
@@ -202,8 +202,7 @@ export function ChatScreen({ eventId, isEnded = false, onBack }: Props) {
 
           {!loading && messages.length === 0 && !error ? (
             <Callout tone="info" title="No messages yet">
-              The vote didn&apos;t settle on a single venue, but you matched! Use this chat
-              to coordinate what to do instead.
+              Say hi and make a plan together.
             </Callout>
           ) : null}
 

@@ -162,10 +162,14 @@ describe("chatRouter", () => {
       expect(res.status).toBe(200);
     });
 
-    it("rejects reading when event is not chatted", async () => {
-      mocks.eventFindUnique.mockResolvedValueOnce(makeEvent({ status: "voting" }));
-      const res = await get();
-      expect(res.status).toBe(400);
+    it("gives a direct-only hangout no chat while voting or after confirmation, with the same 403 as a stranger", async () => {
+      for (const status of ["voting", "confirmed", "expired"]) {
+        mocks.eventFindUnique.mockResolvedValueOnce(makeEvent({ status }));
+        const res = await get();
+        expect(res.status).toBe(403);
+        expect(await res.json()).toEqual({ error: "forbidden", message: "Chat isn't available to you for this event" });
+      }
+      expect(mocks.chatMessageFindMany).not.toHaveBeenCalled();
     });
 
     it("allows reading after endsAt (read-only mode)", async () => {
@@ -249,10 +253,10 @@ describe("chatRouter", () => {
       expect(mocks.chatMessageCreate).not.toHaveBeenCalled();
     });
 
-    it("rejects posting when event status is not chatted", async () => {
+    it("rejects posting in a direct-only hangout before it's chatted (403)", async () => {
       mocks.eventFindUnique.mockResolvedValueOnce(makeEvent({ status: "voting" }));
       const res = await post({ body: "Hello" });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(403);
       expect(mocks.chatMessageCreate).not.toHaveBeenCalled();
     });
 
@@ -269,6 +273,74 @@ describe("chatRouter", () => {
       expect((await post({ body: "" })).status).toBe(400);
       expect((await post({ body: "a".repeat(1001) })).status).toBe(400);
       expect(mocks.chatMessageCreate).not.toHaveBeenCalled();
+    });
+  });
+
+  // #212: a squad hangout's chat is open from creation, stays open after confirmation, and goes read-only at endsAt.
+  describe("squad hangout chat (#212)", () => {
+    beforeEach(() => {
+      mocks.participantFindMany.mockResolvedValue(squadParticipants);
+      mocks.chatMessageFindMany.mockResolvedValue([]);
+      mocks.chatMessageCreate.mockImplementation(async ({ data }) => ({ id: messageId2, ...data, createdAt: new Date() }));
+    });
+
+    for (const status of ["voting", "confirmed", "chatted"]) {
+      it(`lets squad members read and post while ${status}, and sends event:message to exactly the chat audience`, async () => {
+        mocks.eventFindUnique.mockResolvedValue(makeEvent({ status }));
+        mocks.userFindUnique.mockResolvedValueOnce({ id: friendId, username: "riley" });
+        expect((await get("", signToken(friendId))).status).toBe(200);
+        const res = await post({ body: "Tacos?" }, signToken(friendId));
+        expect(res.status).toBe(201);
+        expect(mocks.emitToUsers).toHaveBeenCalledWith([userId, squadPasserId], "event:message", { event_id: eventId });
+      });
+    }
+
+    it("lets a squad member who passed read and post while voting is still open", async () => {
+      mocks.eventFindUnique.mockResolvedValue(makeEvent({ status: "voting" }));
+      mocks.userFindUnique.mockResolvedValueOnce({ id: squadPasserId, username: "sam" });
+      expect((await get("", signToken(squadPasserId))).status).toBe(200);
+      expect((await post({ body: "Can't make it" }, signToken(squadPasserId))).status).toBe(201);
+    });
+
+    it("keeps a completed squad hangout readable but read-only after it ends", async () => {
+      mocks.eventFindUnique.mockResolvedValue(makeEvent({ status: "completed", endsAt: new Date(Date.now() - 60_000) }));
+      expect((await get("", signToken(friendId))).status).toBe(200);
+      const res = await post({ body: "Fun night" }, signToken(friendId));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: "chat_closed" });
+      expect(mocks.chatMessageCreate).not.toHaveBeenCalled();
+    });
+
+    it("closes chat when a squad hangout expires", async () => {
+      mocks.eventFindUnique.mockResolvedValue(makeEvent({ status: "expired" }));
+      expect((await get("", signToken(friendId))).status).toBe(403);
+      expect((await post({ body: "Hi" }, signToken(friendId))).status).toBe(403);
+    });
+
+    it("rejects a stranger while voting and after confirmation", async () => {
+      const strangerId = "9948fb35-1518-481d-ab60-cfd2dcc28ac9";
+      for (const status of ["voting", "confirmed"]) {
+        mocks.eventFindUnique.mockResolvedValue(makeEvent({ status }));
+        expect((await get("", signToken(strangerId))).status).toBe(403);
+        expect((await post({ body: "Hi" }, signToken(strangerId))).status).toBe(403);
+      }
+      expect(mocks.chatMessageCreate).not.toHaveBeenCalled();
+      expect(mocks.emitToUsers).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("direct invitees (#212)", () => {
+    it("keeps a direct ghost passer out even while voting is open, when they could still return and vote", async () => {
+      mocks.eventFindUnique.mockResolvedValue(makeEvent({ status: "voting", voteClosesAt: new Date(Date.now() + 60_000) }));
+      expect((await get("", signToken(ghostId))).status).toBe(403);
+      expect((await post({ body: "Hi" }, signToken(ghostId))).status).toBe(403);
+    });
+
+    it("never sends event:message to a direct ghost passer in the chatted fallback", async () => {
+      mocks.chatMessageCreate.mockResolvedValueOnce({ id: messageId2, eventId, userId: friendId, body: "Hi", createdAt: new Date() });
+      mocks.userFindUnique.mockResolvedValueOnce({ id: friendId, username: "riley" });
+      expect((await post({ body: "Hi" }, signToken(friendId))).status).toBe(201);
+      expect(mocks.emitToUsers).toHaveBeenCalledWith([userId], "event:message", { event_id: eventId });
     });
   });
 });
