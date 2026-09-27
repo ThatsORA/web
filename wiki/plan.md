@@ -34,8 +34,9 @@ using seeded accounts.
    **Join** and is active at once (#275). The scheduler proposes to
    squads only (#320), so the squad forms the group; close-friend stars
    no longer do.
-6. **The proposal appears (A, B, C).** The presenter taps **Find a hangout
-   now** (`POST /scheduler/run`, #232/#233). An event card for the squad
+6. **The proposal appears (A, B, C).** An operator phone (Ojas on C, or
+   Andy) taps **Find a hangout now** (`POST /scheduler/run`, #232/#233);
+   the button is operator-only (#403), so the presenter's phone doesn't show it. An event card for the squad
    arrives on all three phones within a few seconds (a "Finding a time…" state covers the
    wait): "Thu · 6:30–8:30pm · Dinner". It shows
    three venue options. Each has an AI blurb plus a line of facts, for
@@ -804,8 +805,9 @@ manual.
 ### Matcher triggers
 
 - node-cron weekly, Monday 09:00 America/New_York (#232)
-- `POST /scheduler/run`, logged in, behind the **Find a hangout now** demo
-  button (#232/#233). It replies `202` and runs a forced
+- `POST /scheduler/run`, logged in as an operator (`OPERATOR_USERNAMES`,
+  #403; anyone else gets `403 forbidden`), behind the **Find a hangout now**
+  demo button (#232/#233), which only operators see (`Me.is_operator`). It replies `202` and runs a forced
   `triggerMatcher({ force: true })` in the background.
 - `POST /internal/run-matcher`
 
@@ -867,6 +869,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | REPORT_CLOSED_WINDOW_HOURS | 24 | 168 |
 | DEMO_MODE | false | true only if the network fails (replays `fixtures/`) |
 | INTERNAL_SECRET | — | set |
+| OPERATOR_USERNAMES | "ojas" | Andy's and Ojas's demo usernames, comma-separated (#403) |
 
 ## Workflow & Agent Rules (details in `wiki/workflow.md`)
 

@@ -160,7 +160,17 @@ describe("auth router", () => {
     expect((await call("GET", "/me")).status).toBe(401);
     mocks.findUnique.mockResolvedValueOnce(user);
     const body = await (await call("GET", "/me", undefined, true)).json();
-    expect(body).toEqual({ id: user.id, username: "ojas", email: user.email, timezone: user.timezone, home_lat: null, home_lng: null, travel_mode: "DRIVE", email_verified: true, display_name: null, bio: null, pref_activities: null, pref_personality: null, budget: null });
+    expect(body).toEqual({ id: user.id, username: "ojas", email: user.email, timezone: user.timezone, home_lat: null, home_lng: null, travel_mode: "DRIVE", email_verified: true, display_name: null, bio: null, pref_activities: null, pref_personality: null, budget: null, is_operator: true });
+  });
+  it("GET /me reports operators from OPERATOR_USERNAMES", async () => {
+    const was = env.OPERATOR_USERNAMES;
+    env.OPERATOR_USERNAMES = ["andy", "ojas"];
+    try {
+      mocks.findUnique.mockResolvedValueOnce(user);
+      expect(await (await call("GET", "/me", undefined, true)).json()).toMatchObject({ is_operator: true });
+    } finally {
+      env.OPERATOR_USERNAMES = was;
+    }
   });
   it("PATCH /me rounds home coordinates to 3 decimals", async () => {
     mocks.update.mockImplementation(async ({ data }) => ({ ...user, homeLat: data.homeLat, homeLng: data.homeLng }));

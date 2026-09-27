@@ -71,6 +71,7 @@ export const Me = z.object({
   pref_activities: z.string().nullable(), // private: never in PublicUser/PublicProfile/event/chat/socket
   pref_personality: z.string().nullable(),
   budget: Budget.nullable(), // private, like pref_*
+  is_operator: z.boolean(), // may run the scheduler on demand (#403); never in PublicUser
 });
 export const VerifyEmailRequest = z.object({ code: z.string().regex(/^\d{6}$/) });
 export const PatchMeRequest = z

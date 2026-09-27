@@ -28,6 +28,11 @@ const Env = z.object({
     .string()
     .default("true")
     .transform((v) => v === "true"),
+  // Usernames allowed to run the squad scheduler on demand (#403), e.g. "andy,ojas". Defaults to the seeded demo account "ojas".
+  OPERATOR_USERNAMES: z
+    .string()
+    .default("ojas")
+    .transform((v) => v.split(",").map((u) => u.trim().toLowerCase()).filter(Boolean)),
   DEMO_MODE: z
     .string()
     .default("false")

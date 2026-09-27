@@ -33,8 +33,12 @@ export function toMe(user: User): MeT {
     pref_activities: user.prefActivities,
     pref_personality: user.prefPersonality,
     budget: (user.budget ?? null) as Budget | null, // validated by PatchMeRequest on write
+    is_operator: isOperator(user.username),
   };
 }
+
+/** Demo operators (OPERATOR_USERNAMES) may run the squad scheduler on demand (#403). */
+export const isOperator = (username: string) => env.OPERATOR_USERNAMES.includes(username);
 
 /** The only shape another user leaves the server in: no email, no close-friend status. */
 export const publicUserSelect = { id: true, username: true, displayName: true } as const;
