@@ -1,4 +1,5 @@
 // Owner: Andy — event feed; renders the event card in every state.
+import { Me, routes } from "@web/contract";
 import { Link, router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
@@ -17,6 +18,7 @@ import {
   useEvents,
   type HangoutTab,
 } from "../../features/event-card";
+import { api } from "../../lib/api";
 import { useFindNow } from "../../lib/findNow";
 import { useFeedEmptyState } from "../../lib/matcherTrigger";
 import { FRIENDS_HREF, NEW_HANGOUT_HREF } from "../../lib/routes";
@@ -37,6 +39,11 @@ export default function Home() {
   const [seenPendingIds, setSeenPendingIds] = useState<string[]>([]);
   const feedState = useFeedEmptyState(cards.length);
   const findNow = useFindNow(cards.map((c) => c.id));
+  const [isOperator, setIsOperator] = useState(false);
+  useEffect(() => {
+    // Only demo operators may run the scheduler (#403); on error the button just stays hidden.
+    api(routes.me, Me).then((me) => setIsOperator(me.is_operator)).catch(() => {});
+  }, []);
   const finding = feedState === "finding" || findNow.state === "finding";
   const { event } = useLocalSearchParams<{ event?: string }>();
   const scrollRef = useRef<ScrollView>(null);
@@ -112,8 +119,10 @@ export default function Home() {
     >
 
       <Button label="+ New hangout" onPress={() => router.push(NEW_HANGOUT_HREF)} />
-      {/* Demo step 5 (#233): runs the scheduler now; the card arrives over the socket. */}
-      <Button label="Find a hangout now" variant="outline" loading={findNow.state === "finding"} onPress={() => void findNow.find()} />
+      {/* Demo step 5 (#233), operator phone only (#403): runs the scheduler now; the card arrives over the socket. */}
+      {isOperator ? (
+        <Button label="Find a hangout now" variant="outline" loading={findNow.state === "finding"} onPress={() => void findNow.find()} />
+      ) : null}
 
       <HangoutSubTabs
         activeTab={activeTab}
@@ -131,12 +140,12 @@ export default function Home() {
           ))
         : null}
 
-      {findNow.error ? (
+      {isOperator && findNow.error ? (
         <Callout tone="danger" title="Couldn't start the search">
           {findNow.error}
         </Callout>
       ) : null}
-      {findNow.state === "timedOut" ? (
+      {isOperator && findNow.state === "timedOut" ? (
         <Callout title="No new hangout yet">The scheduler didn’t find a new plan. Try again in a bit.</Callout>
       ) : null}
       {error ? (
