@@ -51,10 +51,14 @@ export function assembleEventCard(event: EventWithCardData, userId: string, now 
     : null;
   const creator = !event.isMixer && event.createdById ? users.get(event.createdById) : undefined;
   const invited = event.participants.map((participant) => invitedParticipant(event, participant));
-
-  const effectiveStatus = !event.isMixer && (event.status === "confirmed" || event.status === "chatted") && scope.attendeeIds.length < 2
-    ? "expired"
-    : event.status;
+  const totalUnpassed = event.participants.filter((p) => p.voteStatus !== "ghost_passed").length;
+  const isLateInvitee = mine.voteStatus === "invited";
+  const effectiveStatus =
+    !event.isMixer &&
+    (event.status === "confirmed" || event.status === "chatted") &&
+    (totalUnpassed < 2 || (!isLateInvitee && scope.attendeeIds.length < 2))
+      ? "expired"
+      : event.status;
 
   return EventCardPayload.parse({
     id: event.id,

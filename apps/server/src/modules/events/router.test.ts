@@ -456,7 +456,7 @@ describe("inviting into an existing hangout (#345)", () => {
     const response = await post(`/events/${eventId}/invite`, alice, { invitee_ids: [carol, dave] });
     expect(response.status).toBe(204);
     expect(participantMocks.create.mock.calls.map(([args]) => args.data)).toEqual([carol, dave].map((userId) => ({
-      eventId, userId, voteStatus: "invited", inviteSource: "direct", sourceGroupIds: [],
+      eventId, userId, voteStatus: "invited", inviteSource: "direct", sourceGroupIds: [`invited_by:${alice}`],
     })));
     expect(realtimeMocks.emitToUsers).toHaveBeenCalledWith([carol, dave], "event:created", { event_id: eventId });
     expect(realtimeMocks.pushEventCreated).toHaveBeenCalledWith([carol, dave], eventId, expect.objectContaining({ vibeTag: "dinner" }));

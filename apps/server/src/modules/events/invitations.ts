@@ -160,12 +160,19 @@ export interface ViewerScope {
   seesEveryone: boolean;
 }
 
+/** If this participant was invited directly into an existing event, returns who invited them. */
+export function inviterId(participant?: ParticipantRow): string | null {
+  const match = participant?.sourceGroupIds?.find((id) => id.startsWith("invited_by:"));
+  return match ? match.slice("invited_by:".length) : null;
+}
+
 /**
  * What `viewerId` may see of an event:
  * - the human creator sees everyone (and `full_roster`); automated events have no creator;
  * - everyone sees the creator, and the creator's pass;
  * - squad members see people invited by at least one of the same squads, and their visible passes;
- * - nobody but the creator sees a direct invitee, and nobody ever sees a Ghost Pass.
+ * - direct invitees see themselves, the creator, and who invited them; inviters see their direct invitees;
+ * - nobody ever sees a Ghost Pass.
  */
 export function viewerScope(
   event: EventInvites & { participants: readonly ParticipantRow[] },
@@ -176,12 +183,22 @@ export function viewerScope(
   const mySource = inviteSource(event, viewerId, me);
   const fullRoster = !event.isMixer && mySource === "creator";
   const mySquads = new Set(sourceSquads(event, me));
-  const rows = event.participants.map((p) => ({ ...p, inviteSource: inviteSource(event, p.userId, p) }));
+  const myInviter = inviterId(me);
+  const rows = event.participants.map((p) => ({
+    ...p,
+    inviteSource: inviteSource(event, p.userId, p),
+    inviter: inviterId(p),
+  }));
   const visible = rows.filter((p) => {
     if (p.userId === viewerId) return true;
     if (event.isMixer) return false;
-    return fullRoster || p.inviteSource === "creator" ||
-      (p.inviteSource === "squad" && mySource === "squad" && sourceSquads(event, p).some((id) => mySquads.has(id)));
+    return (
+      fullRoster ||
+      p.inviteSource === "creator" ||
+      (p.inviteSource === "squad" && mySource === "squad" && sourceSquads(event, p).some((id) => mySquads.has(id))) ||
+      (myInviter !== null && p.userId === myInviter) ||
+      (p.inviter === viewerId)
+    );
   });
   return {
     viewer: { invite_source: mySource, pass_kind: passKind(mySource), full_roster: fullRoster },

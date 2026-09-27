@@ -133,7 +133,7 @@ eventsRouter.post(routes.eventInvite(":id"), requireAuth, express.json(), async 
   if (added.length === 0) return res.status(204).end();
 
   await prisma.$transaction(added.map((invitee) => prisma.eventParticipant.create({
-    data: { eventId: event.id, userId: invitee, voteStatus: "invited", inviteSource: "direct", sourceGroupIds: [] },
+    data: { eventId: event.id, userId: invitee, voteStatus: "invited", inviteSource: "direct", sourceGroupIds: [`invited_by:${userId}`] },
   })));
 
   emitToUsers(added, "event:created", { event_id: event.id });
