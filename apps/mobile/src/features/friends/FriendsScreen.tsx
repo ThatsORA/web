@@ -1,12 +1,14 @@
 // Owner: Ojas — Friends tab screen: search, friend requests inbox, friends list, and close-friend star toggle.
 // Invariant: privacy — close-friend star status is never revealed to the other person.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { useFriendEvents } from "../event-card";
+import { displayName } from "../../lib/displayName";
 import { Button, Callout, Card, Chip, Screen, Txt, useTheme } from "../../ui";
 import { FriendSearch } from "./FriendSearch";
 import { PersonLink } from "./PersonLink";
 import { RequestsInbox } from "./RequestsInbox";
+import { UnfriendConfirmation } from "./UnfriendConfirmation";
 import {
   getFriendRequests,
   getFriends,
@@ -26,6 +28,8 @@ export function FriendsScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyUnfriend, setBusyUnfriend] = useState<Record<string, boolean>>({});
+  const [confirmingUnfriend, setConfirmingUnfriend] = useState<Friend | null>(null);
+  const removingUserId = useRef<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoadError(null);
@@ -72,17 +76,22 @@ export function FriendsScreen() {
     }
   }
 
-  async function handleUnfriend(userId: string) {
+  async function handleUnfriend() {
+    const friend = confirmingUnfriend;
+    if (!friend || removingUserId.current) return;
+    removingUserId.current = friend.id;
     setActionError(null);
-    setBusyUnfriend((prev) => ({ ...prev, [userId]: true }));
+    setBusyUnfriend((prev) => ({ ...prev, [friend.id]: true }));
     try {
-      await unfriend(userId);
-      setFriends((prev) => prev.filter((item) => item.id !== userId));
+      await unfriend(friend.id);
+      setFriends((prev) => prev.filter((item) => item.id !== friend.id));
+      setConfirmingUnfriend(null);
       await loadData();
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : String(e));
+      setActionError(`Couldn't unfriend ${displayName(friend)}. ${e instanceof Error ? e.message : String(e)}`);
     } finally {
-      setBusyUnfriend((prev) => ({ ...prev, [userId]: false }));
+      removingUserId.current = null;
+      setBusyUnfriend((prev) => ({ ...prev, [friend.id]: false }));
     }
   }
 
@@ -122,6 +131,15 @@ export function FriendsScreen() {
           <Callout tone="danger" title="Something went wrong">
             {actionError}
           </Callout>
+        ) : null}
+
+        {confirmingUnfriend ? (
+          <UnfriendConfirmation
+            friend={confirmingUnfriend}
+            busy={!!busyUnfriend[confirmingUnfriend.id]}
+            onCancel={() => { setConfirmingUnfriend(null); setActionError(null); }}
+            onConfirm={() => void handleUnfriend()}
+          />
         ) : null}
 
         {loadError ? (
@@ -172,7 +190,8 @@ export function FriendsScreen() {
                   <Button
                     label="Unfriend"
                     variant="ghost"
-                    onPress={() => void handleUnfriend(f.id)}
+                    onPress={() => { setActionError(null); setConfirmingUnfriend(f); }}
+                    disabled={!!confirmingUnfriend || !!removingUserId.current}
                     loading={!!busyUnfriend[f.id]}
                   />
                 </View>
