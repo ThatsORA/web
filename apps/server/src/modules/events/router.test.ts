@@ -156,8 +156,8 @@ const event = () => ({
   // alice made it and invited bob and ghost directly; invite source comes from createdById/sourceGroupId (#206).
   participants: [
     { userId: alice, voteStatus: "voted", user: { id: alice, username: "alice" } },
-    // A private matching profile (#310) the card must never carry, even if a row came back with it.
-    { userId: bob, voteStatus: "voted", user: { id: bob, username: "bob", prefActivities: "secret-activities", prefPersonality: "secret-personality" } },
+    // A private matching profile (#310) and budget (#324) the card must never carry, even if a row came back with them.
+    { userId: bob, voteStatus: "voted", user: { id: bob, username: "bob", prefActivities: "secret-activities", prefPersonality: "secret-personality", budget: { nice_dinner: { spend: 437, often: "weekly" } } } },
     { userId: ghost, voteStatus: "ghost_passed", user: { id: ghost, username: "ghost" } },
   ],
   options: [option(firstOption, 1), option(secondOption, 2)],
@@ -233,13 +233,14 @@ describe("events router", () => {
     }));
   });
 
-  it("never puts the private matching profile on the card (#310)", async () => {
+  it("never puts the private matching profile or budget on the card (#310, #324)", async () => {
     for (const path of ["/events", `/events/${eventId}`]) {
-      expect(await (await get(path, alice)).text()).not.toMatch(/secret|pref_/);
+      expect(await (await get(path, alice)).text()).not.toMatch(/secret|pref_|budget|437/);
     }
     const select = mocks.findFirst.mock.calls[0]![0].include.participants.include.user.select;
     expect(select).not.toHaveProperty("prefActivities");
     expect(select).not.toHaveProperty("prefPersonality");
+    expect(select).not.toHaveProperty("budget");
   });
 
   it("keeps voter identities hidden in GET /events response", async () => {

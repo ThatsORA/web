@@ -71,10 +71,10 @@ describe("timeCandidates", () => {
   it("times each place by its typical length, drops the ones that don't fit, and keeps the order", () => {
     const out = timeCandidates(
       [venue("climb", [{ start: FROM, end: TO }]), venue("short", [{ start: FROM, end: d("2026-10-01T23:30:00Z") }])],
-      new Map([["climb", { activity: "Bouldering", typical_minutes: 120 }], ["short", { activity: "Tacos", typical_minutes: 90 }]]),
+      new Map([["climb", { activity: "Bouldering", typical_minutes: 120, spend_category: "tickets_activities" as const }], ["short", { activity: "Tacos", typical_minutes: 90, spend_category: "casual_meal" as const }]]),
     );
     expect(out).toEqual([expect.objectContaining({
-      place_id: "climb", activity: "Bouldering", starts_at: "2026-10-01T22:30:00.000Z", ends_at: "2026-10-02T00:30:00.000Z",
+      place_id: "climb", activity: "Bouldering", spend_category: "tickets_activities", starts_at: "2026-10-01T22:30:00.000Z", ends_at: "2026-10-02T00:30:00.000Z",
     })]);
     expect(out[0]).not.toHaveProperty("open");
   });

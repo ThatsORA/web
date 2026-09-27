@@ -25,6 +25,14 @@ export const DisplayName = z.string().trim().min(1).max(40);
 export const Bio = z.string().trim().max(160);
 /** Private matching profile (#310): only the owner (via Me) and the server-side decision model see it. */
 export const PrefText = z.string().trim().max(300);
+/** Private budget (#324): per outing type, typical USD spend per person and how often. Same privacy as PrefText. */
+export const SpendCategory = z.enum(["coffee_snacks", "casual_meal", "nice_dinner", "drinks_night_out", "tickets_activities"]);
+export const SpendOften = z.enum(["weekly", "few_times_a_month", "monthly", "rarely"]);
+export const BudgetEntry = z.object({ spend: z.number().int().min(0).max(500), often: SpendOften });
+export const Budget = z.record(SpendCategory, BudgetEntry); // every category optional; unknown keys rejected
+export type SpendCategory = z.infer<typeof SpendCategory>;
+export type SpendOften = z.infer<typeof SpendOften>;
+export type Budget = z.infer<typeof Budget>;
 
 export const SignupRequest = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -62,6 +70,7 @@ export const Me = z.object({
   bio: z.string().nullable(),
   pref_activities: z.string().nullable(), // private: never in PublicUser/PublicProfile/event/chat/socket
   pref_personality: z.string().nullable(),
+  budget: Budget.nullable(), // private, like pref_*
 });
 export const VerifyEmailRequest = z.object({ code: z.string().regex(/^\d{6}$/) });
 export const PatchMeRequest = z
@@ -74,6 +83,7 @@ export const PatchMeRequest = z
     bio: Bio.nullable(),
     pref_activities: PrefText.nullable(), // null or "" clears it
     pref_personality: PrefText.nullable(),
+    budget: Budget.nullable(), // null clears it
     username: Username, // at most once per 30 days; 409 username_taken / username_cooldown
   })
   .partial();

@@ -1,6 +1,6 @@
 // Owner: Ojas — pure auth/profile helpers.
 import { Prisma, type User } from "@prisma/client";
-import type { Me } from "@web/contract";
+import type { Budget, Me } from "@web/contract";
 import type { z } from "zod";
 import { env } from "../../env";
 
@@ -32,6 +32,7 @@ export function toMe(user: User): MeT {
     bio: user.bio,
     pref_activities: user.prefActivities,
     pref_personality: user.prefPersonality,
+    budget: (user.budget ?? null) as Budget | null, // validated by PatchMeRequest on write
   };
 }
 

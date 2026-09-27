@@ -8,7 +8,7 @@ vi.mock("./decision", async (importOriginal) => ({
 
 import { env } from "../../env";
 import type { ActivityCandidate } from "../venues/discover";
-import { chooseActivities, describeActivities, fallbackActivity, pickActivities, pickByPreference } from "./activities";
+import { chooseActivities, describeActivities, fallbackActivity, pickActivities, pickByPreference, spendCategoryFor, withinBudget } from "./activities";
 import { memberFitRequest } from "./decision";
 
 const places = [
@@ -20,8 +20,18 @@ const places = [
 
 describe("fallbackActivity", () => {
   it("labels from the primary type with 90 minutes", () => {
-    expect(fallbackActivity("bowling_alley")).toEqual({ activity: "Bowling alley", typical_minutes: 90 });
-    expect(fallbackActivity(null)).toEqual({ activity: "Hangout", typical_minutes: 90 });
+    expect(fallbackActivity("bowling_alley")).toEqual({ activity: "Bowling alley", typical_minutes: 90, spend_category: "tickets_activities" });
+    expect(fallbackActivity(null)).toEqual({ activity: "Hangout", typical_minutes: 90, spend_category: "tickets_activities" });
+  });
+
+  it("maps the primary type to a spend category (#324)", () => {
+    expect(spendCategoryFor("restaurant")).toBe("casual_meal");
+    expect(spendCategoryFor("bar")).toBe("drinks_night_out");
+    expect(spendCategoryFor("night_club")).toBe("drinks_night_out");
+    expect(spendCategoryFor("cafe")).toBe("coffee_snacks");
+    expect(spendCategoryFor("bakery")).toBe("coffee_snacks");
+    expect(spendCategoryFor("museum")).toBe("tickets_activities");
+    expect(spendCategoryFor(null)).toBe("tickets_activities");
   });
 });
 
@@ -46,23 +56,24 @@ describe("describeActivities", () => {
 
   it("makes one call with a JSON schema; keeps valid entries, drops unknown ids, falls back on bad ones", async () => {
     reply = gemini([
-      { place_id: "p1", activity: " Bouldering ", typical_minutes: 120 },
+      { place_id: "p1", activity: " Bouldering ", typical_minutes: 120, spend_category: "tickets_activities" },
       { place_id: "p2", activity: "x".repeat(41), typical_minutes: 90 }, // label too long
       { place_id: "p3", activity: "Sunset walk", typical_minutes: 300 }, // too long a visit
       { place_id: "ghost", activity: "Karaoke", typical_minutes: 60 }, // not an input place
+      { place_id: "p4", activity: "Tacos", typical_minutes: 60, spend_category: "caviar" }, // bad category → from the type
     ]);
     const out = await describeActivities(places);
 
     expect(fetchMock).toHaveBeenCalledOnce();
     const body = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(body.generationConfig.responseSchema.properties.activities.items.required)
-      .toEqual(["place_id", "activity", "typical_minutes"]);
+      .toEqual(["place_id", "activity", "typical_minutes", "spend_category"]);
     expect(body.contents[0].parts[0].text).toContain('"place_id":"p1","name":"Movement Gym"');
     expect(Object.fromEntries(out)).toEqual({
-      p1: { activity: "Bouldering", typical_minutes: 120 },
-      p2: { activity: "Bowling alley", typical_minutes: 90 },
-      p3: { activity: "Park", typical_minutes: 90 },
-      p4: { activity: "Hangout", typical_minutes: 90 },
+      p1: { activity: "Bouldering", typical_minutes: 120, spend_category: "tickets_activities" },
+      p2: { activity: "Bowling alley", typical_minutes: 90, spend_category: "tickets_activities" },
+      p3: { activity: "Park", typical_minutes: 90, spend_category: "tickets_activities" },
+      p4: { activity: "Tacos", typical_minutes: 60, spend_category: "tickets_activities" },
     });
   });
 
@@ -78,19 +89,19 @@ describe("describeActivities", () => {
     reply = () => new Promise((_, reject) =>
       fetchMock.mock.calls.at(-1)![1]!.signal!.addEventListener("abort", () => reject(new Error("aborted"))));
     const out = await describeActivities(places);
-    expect(out.get("p1")).toEqual({ activity: "Sports activity location", typical_minutes: 90 });
+    expect(out.get("p1")).toEqual(fallbackActivity("sports_activity_location"));
   });
 
   it("skips the call without a key", async () => {
     env.GEMINI_API_KEY = "";
-    expect((await describeActivities(places)).get("p2")).toEqual({ activity: "Bowling alley", typical_minutes: 90 });
+    expect((await describeActivities(places)).get("p2")).toEqual(fallbackActivity("bowling_alley"));
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
 const c = (place_id: string, activity: string, route_score: number): ActivityCandidate => ({
   place_id, name: place_id, lat: 0, lng: 0, primary_type: null, price_level: null, rating: null, user_rating_count: null,
-  travel_minutes: {}, max_travel_min: route_score, route_score, activity,
+  travel_minutes: {}, max_travel_min: route_score, route_score, activity, spend_category: "tickets_activities",
   starts_at: "2026-10-01T22:30:00.000Z", ends_at: "2026-10-02T00:00:00.000Z",
 });
 
@@ -103,6 +114,34 @@ describe("pickActivities", () => {
 
   it("returns fewer than 3 when there aren't 3 distinct labels", () => {
     expect(pickActivities([c("a", "Tacos", 10), c("b", "Tacos", 12), c("d", "Bouldering", 30)])).toHaveLength(2);
+  });
+});
+
+describe("withinBudget (#324)", () => {
+  const priced = (place_id: string, price_level: number | null, spend_category: ActivityCandidate["spend_category"]) =>
+    ({ ...c(place_id, place_id, 10), price_level, spend_category });
+  const cands = [
+    priced("cheap-dinner", 2, "nice_dinner"), // ~$30
+    priced("fancy-dinner", 4, "nice_dinner"), // ~$100
+    priced("wine", 3, "drinks_night_out"), // ~$60
+    priced("unpriced", null, "nice_dinner"),
+  ];
+  const ids = (list: readonly ActivityCandidate[]) => list.map((x) => x.place_id);
+
+  it("keeps everything when nobody set a budget", () => {
+    expect(ids(withinBudget(cands, [null, null]))).toEqual(ids(cands));
+    expect(ids(withinBudget(cands, [{}]))).toEqual(ids(cands));
+  });
+
+  it("caps at 1.25 × the lowest member's spend for the candidate's category; unpriced is kept", () => {
+    const budgets = [{ nice_dinner: { spend: 80, often: "monthly" as const } }, { nice_dinner: { spend: 24, often: "rarely" as const } }];
+    expect(ids(withinBudget(cands, budgets))).toEqual(["cheap-dinner", "wine", "unpriced"]); // cap $30: $30 ok, $100 out
+    expect(ids(withinBudget(cands, [{ nice_dinner: { spend: 23, often: "weekly" as const } }]))).toEqual(["wine", "unpriced"]); // cap $28.75
+  });
+
+  it("with a partial budget, only categories somebody set are capped", () => {
+    const budgets = [{ drinks_night_out: { spend: 40, often: "weekly" as const } }, null]; // cap $50 on drinks only
+    expect(ids(withinBudget(cands, budgets))).toEqual(["cheap-dinner", "fancy-dinner", "unpriced"]);
   });
 });
 
@@ -127,8 +166,8 @@ describe("pickByPreference (#311)", () => {
 describe("chooseActivities (#311)", () => {
   const cands = [c("a", "Tacos", 10), c("d", "Bouldering", 30), c("f", "Karaoke", 40), c("g", "Museum", 50)];
   const profiles = [
-    { activities: "climbing", personality: null, favorites: [] },
-    { activities: null, personality: null, favorites: ["bar"] },
+    { activities: "climbing", personality: null, favorites: [], budget: null },
+    { activities: null, personality: null, favorites: ["bar"], budget: { coffee_snacks: { spend: 8, often: "weekly" as const } } },
   ];
   const fit = (probs: number[]) => ({
     model: "jev-1.13.0",

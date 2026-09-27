@@ -2,7 +2,7 @@
 // No fixed activity list: ONE Places Nearby Search (New) over broad leisure types, then code keeps the
 // places open ≥ 45 min in the free window, ranks them by worst member commute and times each option.
 // Gemini only labels them (intelligence/activities.ts). Manual hangouts keep the fixed vibes.
-import type { RankedVenue } from "@web/contract";
+import type { RankedVenue, SpendCategory } from "@web/contract";
 import { withFixture } from "../../lib/demoMode";
 import type { ActivityInfo } from "../intelligence/activities";
 import { getLocalParts, localToUtc, mergeIntervals, type ClassifiedSlot, type Interval } from "../matching/timeMath";
@@ -139,7 +139,7 @@ export async function discoverPlaces(
   return ranked.map((venue) => ({ ...venue, open: openById.get(venue.place_id)! }));
 }
 
-export type ActivityCandidate = RankedVenue & { activity: string; starts_at: string; ends_at: string };
+export type ActivityCandidate = RankedVenue & { activity: string; spend_category: SpendCategory; starts_at: string; ends_at: string };
 
 /**
  * Each place as an activity at its own time: the first open 15-min mark that fits its typical length.
@@ -150,8 +150,8 @@ export function timeCandidates(
   activities: ReadonlyMap<string, ActivityInfo>,
 ): ActivityCandidate[] {
   return places.flatMap(({ open, ...venue }) => {
-    const { activity, typical_minutes } = activities.get(venue.place_id)!;
+    const { activity, typical_minutes, spend_category } = activities.get(venue.place_id)!;
     const time = firstFit(open, typical_minutes);
-    return time ? [{ ...venue, activity, starts_at: time.start.toISOString(), ends_at: time.end.toISOString() }] : [];
+    return time ? [{ ...venue, activity, spend_category, starts_at: time.start.toISOString(), ends_at: time.end.toISOString() }] : [];
   });
 }

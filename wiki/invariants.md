@@ -30,10 +30,11 @@ touches before you write code.
 - Friend status (pending/accepted) is visible to both people. Close-friend
   status never is: no endpoint or socket payload reveals whether someone
   marked you close, and a declined friend request is never announced.
-- The matching profile (`pref_activities`, `pref_personality`, #310) is
-  private. Only its owner (via `Me`) and the server-side decision model
-  ever see it: never `PublicUser`, `PublicProfile`, event, chat or socket
-  payloads. Read other users only through `publicUserSelect`.
+- The matching profile (`pref_activities`, `pref_personality`, #310) and
+  the budget (`budget`, #324) are private. Only their owner (via `Me`)
+  and the server-side decision model ever see them: never `PublicUser`,
+  `PublicProfile`, event, chat or socket payloads, and never Gemini.
+  Read other users only through `publicUserSelect`.
 - Other users only ever leave the server as `PublicUser` (id, username,
   display_name) or `PublicProfile`, which are zod-parsed so extra fields
   (email, close-friend flags) are stripped.
@@ -60,14 +61,16 @@ touches before you write code.
   already tries it first when `LAYA_URL` is set, and it's empty today.
 - Gemini only writes text: the vote blurbs and `match_reason`, from
   `curateVenues`/`curateActivities`, and each discovered place's activity
-  label and typical length, from `describeActivities` (#322).
+  label, typical length and spend category, from `describeActivities`
+  (#322, #324).
   `rankWithGemini` was removed (#231). Gemini never receives a matching
   profile; its text may name a shared interest in plain words from the
   input it has (favorite counts, the options), never quote a profile.
 - Preference fit (#311): one `memberFitRequest` per squad member. The
-  member's `pref_activities`/`pref_personality` (≤ 300 characters each)
-  and favorite categories go only to `askDecision`, framed as data with
-  fixed instructions, with no name, username or id. Candidates are
+  member's `pref_activities`/`pref_personality` (≤ 300 characters each),
+  budget (plain-word lines, #324) and favorite categories go only to
+  `askDecision`, framed as data with fixed instructions, with no name,
+  username or id. The budget price cap (`withinBudget`) is code. Candidates are
   plain words keyed `c0…cN`: no place IDs, raw times or commutes. Code
   sums the members' probabilities, picks the 3 and applies the
   `squadAppeal` ≥ 0.2 gate.

@@ -1,5 +1,18 @@
 // Owner: Andy — My profile (#97): pure helpers for the edit screen. No React Native.
-import { ApiError as ApiErrorBody, Bio, ChangeEmailRequest, DisplayName, Instant, Me, PatchMeRequest, Username } from "@web/contract";
+import {
+  ApiError as ApiErrorBody,
+  Bio,
+  BudgetEntry,
+  ChangeEmailRequest,
+  DisplayName,
+  Instant,
+  Me,
+  PatchMeRequest,
+  SpendCategory,
+  Username,
+  type Budget,
+  type SpendOften,
+} from "@web/contract";
 import { z } from "zod";
 import { ApiError } from "./api";
 
@@ -44,17 +57,66 @@ export function buildProfilePatch(
 
 export const PREF_MAX = 300; // PrefText in the contract; the fields cap input at this
 
-/** The PATCH /me body for the Preferences form (#310): only fields that changed, blank clears (null). Null when nothing changed. */
+/**
+ * The PATCH /me body for the Preferences form (#310, #324): only fields that changed, blank clears (null).
+ * Null when nothing changed. `budget` comes from `buildBudget`.
+ */
 export function buildPrefsPatch(
-  me: Pick<MeData, "pref_activities" | "pref_personality">,
-  draft: { activities: string; personality: string },
+  me: Pick<MeData, "pref_activities" | "pref_personality" | "budget">,
+  draft: { activities: string; personality: string; budget: Budget | null },
 ): Patch | null {
   const patch: Patch = {};
   const activities = draft.activities.trim() || null;
   const personality = draft.personality.trim() || null;
   if (activities !== me.pref_activities) patch.pref_activities = activities;
   if (personality !== me.pref_personality) patch.pref_personality = personality;
+  const sameBudget = SpendCategory.options.every(
+    (k) => draft.budget?.[k]?.spend === me.budget?.[k]?.spend && draft.budget?.[k]?.often === me.budget?.[k]?.often,
+  );
+  if (!sameBudget) patch.budget = draft.budget;
   return Object.keys(patch).length ? patch : null;
+}
+
+export const SPEND_LABELS: Record<SpendCategory, string> = {
+  coffee_snacks: "Coffee & snacks",
+  casual_meal: "Casual meal",
+  nice_dinner: "Nice dinner",
+  drinks_night_out: "Drinks / night out",
+  tickets_activities: "Tickets & activities",
+};
+export const OFTEN_LABELS: Record<SpendOften, string> = {
+  weekly: "Weekly",
+  few_times_a_month: "Few times a month",
+  monthly: "Monthly",
+  rarely: "Rarely",
+};
+
+/** One budget row as typed: the dollar text and the picked frequency. */
+export type BudgetDraft = Record<SpendCategory, { spend: string; often: SpendOften | null }>;
+
+export function budgetDraft(budget: Budget | null): BudgetDraft {
+  return Object.fromEntries(
+    SpendCategory.options.map((k) => [k, { spend: budget?.[k] ? String(budget[k].spend) : "", often: budget?.[k]?.often ?? null }]),
+  ) as BudgetDraft;
+}
+
+/**
+ * The private budget (#324) from the form. A row with neither field is unset; a row needs both a whole-dollar
+ * amount 0–500 and a frequency. No rows set → null (clears it). `errors` are per category.
+ */
+export function buildBudget(draft: BudgetDraft): { budget: Budget | null; errors: Partial<Record<SpendCategory, string>> } {
+  const budget: Budget = {};
+  const errors: Partial<Record<SpendCategory, string>> = {};
+  for (const k of SpendCategory.options) {
+    const spend = draft[k].spend.trim();
+    const often = draft[k].often;
+    if (!spend && !often) continue;
+    const dollars = /^\d+$/.test(spend) ? Number(spend) : NaN;
+    if (!BudgetEntry.shape.spend.safeParse(dollars).success) errors[k] = "Enter whole dollars, 0 to 500.";
+    else if (!often) errors[k] = "Pick how often.";
+    else budget[k] = { spend: dollars, often };
+  }
+  return { budget: Object.keys(budget).length ? budget : null, errors };
 }
 
 /** Message for an invalid username draft, or null when it's valid. */

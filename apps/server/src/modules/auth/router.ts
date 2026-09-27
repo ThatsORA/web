@@ -123,7 +123,7 @@ authRouter.get(routes.me, requireAuth, async (req, res) => {
 authRouter.patch(routes.me, requireAuth, async (req, res) => {
   const parsed = PatchMeRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
-  const { timezone, home_lat, home_lng, travel_mode, display_name, bio, pref_activities, pref_personality, username } = parsed.data;
+  const { timezone, home_lat, home_lng, travel_mode, display_name, bio, pref_activities, pref_personality, budget, username } = parsed.data;
   const userId = (req as AuthedRequest).userId;
   let usernameChangedAt: Date | undefined;
   if (username !== undefined) {
@@ -147,6 +147,7 @@ authRouter.patch(routes.me, requireAuth, async (req, res) => {
         bio: bio === "" ? null : bio,
         prefActivities: pref_activities === "" ? null : pref_activities,
         prefPersonality: pref_personality === "" ? null : pref_personality,
+        budget,
         ...(usernameChangedAt ? { username, usernameChangedAt } : {}),
       },
     });
