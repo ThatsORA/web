@@ -219,6 +219,7 @@ describe("matcher pipeline", () => {
       friendships[0]!, friendships[1]!,
       { ...friendships[0]!, userHighId: fourthId },
     ]);
+    mocks.explicitGroupFindMany.mockResolvedValue([]); // no squad, so the Mixer is the only candidate
 
     await runPipeline(NOW);
 
