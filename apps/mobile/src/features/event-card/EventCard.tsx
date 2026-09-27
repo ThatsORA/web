@@ -5,9 +5,11 @@ import { router } from "expo-router";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { ActionSheetIOS, ActivityIndicator, Linking, Platform, View } from "react-native";
+import { getToken } from "../../lib/api";
 import { CHAT_PATHNAME } from "../../lib/routes";
+import { userIdFromToken } from "../../lib/session";
 import { Badge, Button, Callout, Card, Txt, useTheme } from "../../ui";
-import { ExpenseForm } from "../expenses";
+import { ExpenseForm, ExpenseLedger } from "../expenses";
 import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calendarSync";
 import { canChangeSpot, canOpenChat, cardKind, freePeople, hasEnded, passButtonLabel, passedNotice, travelRows } from "./cardState";
 import { changeSpotPrompt } from "./changeSpot";
@@ -177,12 +179,14 @@ function OptionRow({ option, mine, disabled, onVote }: { option: EventOption; mi
 function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & { venue: EventOption }) {
   const t = useTheme();
   const [showExpense, setShowExpense] = useState(false);
+  const [expenseRefresh, setExpenseRefresh] = useState(0);
   const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
   const [calendarNotice, setCalendarNotice] = useState<string | null>(null);
   const [addingCalendar, setAddingCalendar] = useState(false);
   const [confirmingChange, setConfirmingChange] = useState(false);
   const status = card.status === "completed" ? "Done" : "Confirmed";
   const attendees = card.outcome?.attendees ?? [];
+  const currentUserId = userIdFromToken(getToken());
 
   useEffect(() => {
     if (swapped) {
@@ -308,14 +312,27 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
         {calendarNotice ? <Callout tone="warning">{calendarNotice}</Callout> : null}
         {canOpenChat(card) ? <Button label="Open chat" variant="outline" onPress={handleOpenChat} /> : null}
         {attendees.length > 0 ? (
-          showExpense ? (
-            <View style={{ gap: t.spacing.sm }}>
-              <ExpenseForm eventId={card.id} attendees={attendees} onSaved={() => setShowExpense(false)} />
-              <Button label="Cancel" variant="ghost" onPress={() => setShowExpense(false)} />
-            </View>
-          ) : (
-            <Button label="Add expense" variant="outline" onPress={() => setShowExpense(true)} />
-          )
+          <ExpenseLedger
+            eventId={card.id}
+            attendees={attendees}
+            currentUserId={currentUserId}
+            refreshTrigger={expenseRefresh}
+            onAddExpense={() => setShowExpense(true)}
+            hideAddButton={showExpense}
+          />
+        ) : null}
+        {attendees.length > 0 && showExpense ? (
+          <View style={{ gap: t.spacing.sm }}>
+            <ExpenseForm
+              eventId={card.id}
+              attendees={attendees}
+              onSaved={() => {
+                setShowExpense(false);
+                setExpenseRefresh((c) => c + 1);
+              }}
+            />
+            <Button label="Cancel" variant="ghost" onPress={() => setShowExpense(false)} />
+          </View>
         ) : null}
         {notice ? <Callout tone="danger">{notice}</Callout> : null}
       </Card>

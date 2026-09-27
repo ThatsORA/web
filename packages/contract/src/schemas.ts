@@ -333,7 +333,33 @@ export const CreateExpenseRequest = z.object({
   // Custom split (#81); omitted → equal split. Must sum exactly to total_cents.
   splits: z.array(z.object({ user_id: Id, amount_cents: z.number().int().nonnegative() })).optional(),
 });
+export type CreateExpenseRequest = z.infer<typeof CreateExpenseRequest>;
+
 export const PatchExpenseSplitRequest = z.object({ settled: z.boolean() });
+export type PatchExpenseSplitRequest = z.infer<typeof PatchExpenseSplitRequest>;
+
+export const ExpenseSplit = z.object({
+  id: Id,
+  user_id: Id,
+  amount_owed_cents: z.number().int(),
+  settled: z.boolean(),
+});
+export type ExpenseSplit = z.infer<typeof ExpenseSplit>;
+
+export const Expense = z.object({
+  id: Id,
+  paid_by: Id,
+  total_cents: z.number().int(),
+  description: z.string(),
+  created_at: Instant,
+  splits: z.array(ExpenseSplit),
+});
+export type Expense = z.infer<typeof Expense>;
+
+export const ExpensesResponse = z.object({
+  expenses: z.array(Expense),
+});
+export type ExpensesResponse = z.infer<typeof ExpensesResponse>;
 
 // ---------- chat (Ojas) ----------
 export const ChatMessage = z.object({
