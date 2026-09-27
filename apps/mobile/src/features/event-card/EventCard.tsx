@@ -9,7 +9,7 @@ import { CHAT_PATHNAME } from "../../lib/routes";
 import { Badge, Button, Callout, Card, Txt, useTheme } from "../../ui";
 import { ExpenseForm } from "../expenses";
 import { addConfirmedEventToCalendar, syncSwappedEventToCalendar } from "./calendarSync";
-import { canChangeSpot, canOpenChat, cardKind, freePeople, hasEnded, passButtonLabel, passedNotice, travelRows } from "./cardState";
+import { canChangeSpot, canOpenChat, cardKind, freePeople, hasEnded, isSquadHangout, passButtonLabel, passedNotice, travelRows } from "./cardState";
 import { changeSpotPrompt } from "./changeSpot";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
 import { progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
@@ -67,13 +67,18 @@ export function EventCard(props: Props) {
 function Header({ card, eyebrow, badge, onBrand }: { card: EventCardPayload; eyebrow: string; badge?: ReactNode; onBrand?: boolean }) {
   const t = useTheme();
   const color = onBrand ? "onPrimary" : undefined;
+  const isSquad = isSquadHangout(card);
+
   return (
     <View style={{ gap: t.spacing.xs }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: t.spacing.sm }}>
         <Txt variant="eyebrow" color={color}>
           {eyebrow}
         </Txt>
-        {badge}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: t.spacing.xs }}>
+          {isSquad ? <Badge tone="info" label="Squad Hangout" /> : null}
+          {badge}
+        </View>
       </View>
       {onBrand ? null : (
         <>
@@ -90,6 +95,7 @@ function Header({ card, eyebrow, badge, onBrand }: { card: EventCardPayload; eye
 
 function OpenCard({ card, actions, busy, notice }: Props) {
   const kind = cardKind(card);
+  const isSquad = isSquadHangout(card);
   const handleOpenChat = () => {
     router.push({
       pathname: CHAT_PATHNAME,
@@ -97,9 +103,11 @@ function OpenCard({ card, actions, busy, notice }: Props) {
     });
   };
 
+  const eyebrow = isSquad ? `Squad · ${vibeLabel(card.vibe_tag)}` : vibeLabel(card.vibe_tag);
+
   return (
-    <Card>
-      <Header card={card} eyebrow={vibeLabel(card.vibe_tag)} badge={kind === "voting" ? <Badge tone="new" label="New" /> : null} />
+    <Card tint={isSquad}>
+      <Header card={card} eyebrow={eyebrow} badge={kind === "voting" ? <Badge tone="new" label="New" /> : null} />
 
       {kind === "voting" || kind === "waiting" ? (
         <>
@@ -245,13 +253,16 @@ function ConfirmedCard({ card, venue, actions, swapped, busy, notice }: Props & 
     });
   };
 
+  const isSquad = isSquadHangout(card);
+  const squadPrefix = isSquad ? "Squad · " : "";
+
   return (
     <View>
       <Card brand>
         <Header
           card={card}
           onBrand
-          eyebrow={`${status} · ${vibeLabel(card.vibe_tag)}`}
+          eyebrow={`${status} · ${squadPrefix}${vibeLabel(card.vibe_tag)}`}
           badge={swapped ? <Badge tone="new" label="Swapped" /> : null}
         />
         <Txt variant="headline" color="onPrimary" accessibilityRole="header">

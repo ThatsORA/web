@@ -59,3 +59,8 @@ export const passedNotice = (viewer: EventViewer) =>
 /** Whether "Open chat" should be shown on this card (active squad/mixed hangouts from creation, or chatted fallback). */
 export const canOpenChat = (card: { viewer?: EventViewer | null }) => card.viewer?.chat != null;
 
+/** Squad hangouts are created via squad selection (#206, #268). */
+export const isSquadHangout = (card: { viewer?: Pick<EventViewer, "invite_source"> | null }) =>
+  card.viewer?.invite_source === "squad";
+
+
