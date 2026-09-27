@@ -1,18 +1,9 @@
-// Owner: Andy — pure logic for the "+ New hangout" screen (#70): the invite limit,
+// Owner: Andy — pure logic for the "+ New hangout" screen (#70, #363): who's invited,
 // the this/next week range, and the POST /events body. No React Native.
 import { CreateEventRequest, type VibeTag } from "@web/contract";
 import { ApiError } from "./api";
 
-/** CreateEventRequest allows 1–5 invitees. */
-export const MAX_INVITEES = 5;
-
 export type Week = "this" | "next";
-
-/** Adds or removes `id`. Adding past MAX_INVITEES is ignored. */
-export function toggleInvitee(selected: string[], id: string): string[] {
-  if (selected.includes(id)) return selected.filter((s) => s !== id);
-  return selected.length >= MAX_INVITEES ? selected : [...selected, id];
-}
 
 export type SquadMemberLike = { id: string; username?: string; display_name?: string | null; status?: string };
 export type SquadLike = { id: string; name: string; members: SquadMemberLike[] };
@@ -20,15 +11,14 @@ export type SquadLike = { id: string; name: string; members: SquadMemberLike[] }
 export interface DeduplicatedInviteesResult {
   inviteeIds: string[];
   squadMemberIds: string[];
-  directPersonIds: string[];
-  totalCount: number;
-  isValidCount: boolean;
+  /** At least one person besides me: the server needs someone to schedule against. */
+  canSubmit: boolean;
 }
 
 /**
  * Deduplicates invitees selected via squads and direct individual friend picks.
  * Overlap between squads and individual picks is counted once.
- * The creator (caller) is excluded from invitees and included in totalCount.
+ * The creator (caller) is never an invitee.
  */
 export function getDeduplicatedInvitees(
   selectedSquadIds: string[],
@@ -58,15 +48,11 @@ export function getDeduplicatedInvitees(
   }
 
   const inviteeIds = Array.from(new Set([...squadMemberIdSet, ...directPersonIdSet]));
-  const totalCount = inviteeIds.length + 1;
-  const isValidCount = inviteeIds.length >= 1 && inviteeIds.length <= MAX_INVITEES;
 
   return {
     inviteeIds,
     squadMemberIds: Array.from(squadMemberIdSet),
-    directPersonIds: Array.from(directPersonIdSet),
-    totalCount,
-    isValidCount,
+    canSubmit: inviteeIds.length >= 1,
   };
 }
 
