@@ -1,11 +1,13 @@
 // Owner: Ojas — activity labels for discovered places (#322). Gemini only writes text: ONE call per
 // squad labels each place as an activity with a typical length. Code validates every entry and falls
-// back per place (primary type, 90 min); a failed call falls back for all. Picking the 3 is code.
+// back per place (primary type, 90 min); a failed call falls back for all. Picking the 3 is code:
+// preference fit (#311) sums each member's decision-model probabilities over the candidates.
 import { z } from "zod";
 import type { RankedVenue } from "@web/contract";
 import { env } from "../../env";
 import type { ActivityCandidate } from "../venues/discover";
 import { callGemini } from "./curateVenues";
+import { askDecision, memberFitRequest, type MemberProfile } from "./decision";
 
 export interface ActivityInfo {
   activity: string; // "Bouldering"
@@ -73,15 +75,60 @@ export async function describeActivities(places: readonly Place[]): Promise<Map<
   return out;
 }
 
-/**
- * The 3 vote options. Seam for preference fit (#311): until then, the 3 best by worst member commute
- * (route_score) with distinct activity labels. Fewer than 3 distinct → returns fewer.
- */
-export function pickActivities(candidates: readonly ActivityCandidate[]): ActivityCandidate[] {
+const byCommute = (a: ActivityCandidate, b: ActivityCandidate) => a.route_score - b.route_score || a.place_id.localeCompare(b.place_id);
+
+/** The first 3 of `ranked` with distinct activity labels (case-insensitive); a repeat is skipped for the next best. */
+function distinctTop3(ranked: readonly ActivityCandidate[]): ActivityCandidate[] {
   const byLabel = new Map<string, ActivityCandidate>();
-  for (const c of [...candidates].sort((a, b) => a.route_score - b.route_score || a.place_id.localeCompare(b.place_id))) {
+  for (const c of ranked) {
     const label = c.activity.toLowerCase();
     if (!byLabel.has(label)) byLabel.set(label, c);
   }
   return [...byLabel.values()].slice(0, 3);
+}
+
+/**
+ * The fallback 3 vote options: the best by worst member commute (route_score) with distinct activity labels.
+ * Fewer than 3 distinct → returns fewer.
+ */
+export function pickActivities(candidates: readonly ActivityCandidate[]): ActivityCandidate[] {
+  return distinctTop3([...candidates].sort(byCommute));
+}
+
+/**
+ * Preference fit aggregation (#311). `memberProbs[m][i]` = member m's P(candidate i).
+ * Score = the sum over members; the top 3 with distinct labels (ties by commute).
+ * `squadAppeal` = the mean member probability of the #1 pick.
+ */
+export function pickByPreference(
+  candidates: readonly ActivityCandidate[],
+  memberProbs: readonly (readonly number[])[],
+): { picks: ActivityCandidate[]; squadAppeal: number } {
+  const score = new Map(candidates.map((c, i) => [c, memberProbs.reduce((sum, probs) => sum + probs[i]!, 0)]));
+  const picks = distinctTop3([...candidates].sort((a, b) => score.get(b)! - score.get(a)! || byCommute(a, b)));
+  return { picks, squadAppeal: picks.length ? score.get(picks[0]!)! / memberProbs.length : 0 };
+}
+
+export const APPEAL_THRESHOLD = 0.2;
+
+/**
+ * The 3 vote options for a squad (#311): one `fit` decision per member, in parallel, summed by code.
+ * `null` = the squad's appeal is under 0.2, so don't propose (`force` skips that gate but keeps the pick).
+ * Any member call fails → `pickActivities` (by commute). Fewer than 3 distinct labels → no model call.
+ */
+export async function chooseActivities(
+  candidates: readonly ActivityCandidate[],
+  profiles: readonly MemberProfile[],
+  force: boolean,
+): Promise<ActivityCandidate[] | null> {
+  const fallback = pickActivities(candidates);
+  if (fallback.length < 3) return fallback;
+  let result: ReturnType<typeof pickByPreference>;
+  try {
+    const replies = await Promise.all(profiles.map((p) => askDecision(memberFitRequest(p, candidates))));
+    result = pickByPreference(candidates, replies.map((r) => candidates.map((_, i) => r.answers.fit!.probabilities[`c${i}`]!)));
+  } catch {
+    return fallback;
+  }
+  return force || result.squadAppeal >= APPEAL_THRESHOLD ? result.picks : null;
 }

@@ -4,7 +4,7 @@
 import type { CurateContext, EventOption, RankedVenue } from "@web/contract";
 import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
-import { describeActivities, pickActivities } from "../intelligence/activities";
+import { chooseActivities, describeActivities } from "../intelligence/activities";
 import { curateActivities, curateVenues, factsLine, type Curation } from "../intelligence/curateVenues";
 import { scheduleDecisions } from "../intelligence/scheduleDecisions";
 import { discoverPlaces, timeCandidates, type ActivityCandidate } from "../venues/discover";
@@ -13,7 +13,7 @@ import { openVoting } from "../voting/lifecycle";
 import { candidateGroups, groupKey, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
 import type { ResolvedManualSelection } from "./manualSelection";
 import { mixerCandidates } from "./mixerCandidates";
-import { classifySlot, earliestTimezone, feasibleSlots, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot, type TimeWindow } from "./timeMath";
+import { classifySlot, earliestTimezone, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot, type TimeWindow } from "./timeMath";
 
 export { freeWindows, classifySlot } from "./timeMath";
 
@@ -202,7 +202,7 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
   const favoritesByUser = new Map(users.map((user) => [user.id, user.favorites]));
   const eventsByParticipant = openEventsByParticipant(openEvents);
   const groupSlots: GroupSlot[] = [];
-  const windowBySlot = new Map<ClassifiedSlot, { window: TimeWindow; feasible: ClassifiedSlot[] }>();
+  const windowBySlot = new Map<ClassifiedSlot, TimeWindow>();
 
   for (const group of groups) {
     if (group.isMixer && !eligibleMixerKeys.has(group.groupKey)) continue;
@@ -223,7 +223,7 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
       const slot = classifySlot(window, Object.values(group.memberTimezones));
       if (!slot) continue;
       groupSlots.push({ group, slot });
-      windowBySlot.set(slot, { window, feasible: feasibleSlots(window, Object.values(group.memberTimezones)) });
+      windowBySlot.set(slot, window);
     }
   }
 
@@ -237,37 +237,40 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
     now,
     env.COOLDOWN_HOURS,
   );
-  // ponytail: the vibe is chosen after selection, so a longer vibe slot could overlap another
-  // candidate from the same run; re-check the overlap if it ever matters.
   const selected = await scheduleDecisions(
-    shortlist.map((candidate) => ({ ...candidate, ...windowBySlot.get(candidate.slot)! })),
+    shortlist.map((candidate) => ({ ...candidate, window: windowBySlot.get(candidate.slot)! })),
     favoritesByUser,
     force,
   );
   for (const candidate of selected) {
-    const venueMembers = candidate.group.memberIds
-      .map((id) => usersById.get(id))
-      .filter((user) => user !== undefined)
-      .map((user) => ({
-        id: user.id,
-        timezone: user.timezone,
-        homeLat: user.homeLat,
-        homeLng: user.homeLng,
-        favorites: user.favorites,
-        travelMode: user.travelMode,
-      }));
+    const members = candidate.group.memberIds.map((id) => usersById.get(id)).filter((user) => user !== undefined);
+    const venueMembers = members.map((user) => ({
+      id: user.id,
+      timezone: user.timezone,
+      homeLat: user.homeLat,
+      homeLng: user.homeLng,
+      favorites: user.favorites,
+      travelMode: user.travelMode,
+    }));
     const context = curateContext(candidate, favoritesByUser);
-    // #322: activities discovered near the squad, each at its own time. Fewer than 3 → the fixed-vibe venues.
+    // #322: activities discovered near the squad, each at its own time. #311: each member's private
+    // profile scores them (server-only; Gemini never sees it). Fewer than 3 → the fixed-vibe venues.
     const activities = await activityCandidates(candidate.slot, candidate.window, venueMembers, now);
-    const picks = pickActivities(activities);
+    const picks = await chooseActivities(activities, members.map((user) => ({
+      activities: user.prefActivities,
+      personality: user.prefPersonality,
+      favorites: [...new Set(user.favorites.map((favorite) => favorite.category))],
+    })), force);
+    if (!picks) continue; // the squad's appeal is under the gate
     let rankedVenues: RankedVenue[] = activities;
     let curation: Curation;
     if (picks.length === 3) {
       curation = await curateActivities(picks, context);
     } else {
+      // No venue-fit decision in the automated flow (#311): the 3 best by commute, Gemini writes the text.
       rankedVenues = await fetchCandidates(candidate.slot, venueMembers);
       if (rankedVenues.length < 3) continue;
-      curation = await curateVenues(rankedVenues, context);
+      curation = await curateActivities([...rankedVenues].sort((a, b) => a.route_score - b.route_score).slice(0, 3), context);
     }
     const { options, matchReason } = curation;
     if (options.length !== 3) throw new Error(`Venue curation returned ${options.length} options; expected 3`);
@@ -307,7 +310,7 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
   }
 }
 
-/** `force` skips the propose gate (the model still picks the vibe); a coalesced forced call forces the rerun. */
+/** `force` skips the propose and appeal gates (preference fit still picks the options); a coalesced forced call forces the rerun. */
 export function triggerMatcher({ force = false }: { force?: boolean } = {}): Promise<void> {
   forceNext ||= force;
   if (running) {

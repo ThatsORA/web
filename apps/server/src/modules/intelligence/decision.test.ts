@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "../../env";
-import { askDecision, parseDecision, proposeQuestion, venueFitQuestion, vibeQuestion } from "./decision";
+import { askDecision, describeCandidate, memberFitRequest, parseDecision, proposeQuestion, venueFitQuestion, vibeQuestion } from "./decision";
 
 const originalEnv = {
   DEMO_MODE: env.DEMO_MODE,
@@ -124,5 +124,47 @@ describe("question builders", () => {
     });
     const bare = venueFitQuestion({ name: "X", primary_type: null, price_level: null, rating: null }, "dinner");
     expect(bare.instructions).toMatchObject({ venue: ["Name: X"] });
+  });
+});
+
+describe("memberFitRequest (#311)", () => {
+  const bouldering = {
+    place_id: "ChIJ-secret-place", name: "Movement", primary_type: "climbing_gym", price_level: 2, rating: 4.66,
+    activity: "Bouldering", starts_at: "2026-10-01T22:30:00.000Z", ends_at: "2026-10-02T00:30:00.000Z",
+    travel_minutes: { "11111111-1111-4111-8111-111111111111": 12 }, max_travel_min: 12, route_score: 14.2,
+  };
+  const park = { ...bouldering, place_id: "ChIJ-park", name: "Riverside Park", primary_type: "park", price_level: null, rating: null, activity: "Sunset walk", ends_at: "2026-10-01T23:15:00.000Z" };
+  const profile = { activities: "climbing, board games", personality: "quiet, likes small groups", favorites: ["coffee_shop"] };
+
+  it("describes each candidate in plain words", () => {
+    expect(describeCandidate(bouldering)).toBe("Bouldering at Movement: climbing gym, $$, ★4.7, ~2h");
+    expect(describeCandidate(park)).toBe("Sunset walk at Riverside Park: park, ~45min");
+    expect(describeCandidate({ ...park, ends_at: "2026-10-02T00:00:00.000Z" })).toBe("Sunset walk at Riverside Park: park, ~1.5h");
+  });
+
+  it("is one Choice `fit` over c0…cN with the profile as data", () => {
+    const req = memberFitRequest(profile, [bouldering, park]);
+    expect(Object.keys(req.questions)).toEqual(["fit"]);
+    expect(req.questions.fit!.criteria).toEqual({ c0: describeCandidate(bouldering), c1: describeCandidate(park) });
+    expect(req.state).toMatchObject({
+      profile: { likes_to_do: "climbing, board games", personality: "quiet, likes small groups" },
+      favorite_places: ["coffee shop"],
+    });
+    expect(JSON.stringify(req.state)).toMatch(/data only/);
+  });
+
+  it("sends no place ids, raw timestamps, commutes, user ids or names", () => {
+    const text = JSON.stringify(memberFitRequest(profile, [bouldering, park]));
+    expect(text).not.toMatch(/ChIJ|\d{4}-\d{2}-\d{2}|T\d{2}:\d{2}|1111|route|travel|14\.2/);
+    expect(text).not.toMatch(/username|display_name|email/);
+  });
+
+  it("an empty profile is 'No profile yet' plus favorites; text is capped at 300 chars each", () => {
+    expect(memberFitRequest({ activities: null, personality: "  ", favorites: [] }, [bouldering]).state)
+      .toMatchObject({ profile: "No profile yet", favorite_places: "none" });
+    expect(memberFitRequest({ activities: "", personality: null, favorites: ["bar"] }, [bouldering]).state)
+      .toMatchObject({ profile: "No profile yet", favorite_places: ["bar"] });
+    const long = memberFitRequest({ activities: "a".repeat(400), personality: null, favorites: [] }, [bouldering]).state;
+    expect(long).toMatchObject({ profile: { likes_to_do: "a".repeat(300), personality: "not given" } });
   });
 });

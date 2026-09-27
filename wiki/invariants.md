@@ -52,7 +52,8 @@ touches before you write code.
 - Travel mode supports `DRIVE`, `TRANSIT`, `WALK`, and `BICYCLE`, with `routingPreference: TRAFFIC_AWARE` sent only for `DRIVE`.
 
 **AI boundary**
-- Decisions (the propose gate, the vibe, venue fit) go through one client,
+- Decisions (the propose gate and preference fit in the automated flow,
+  venue fit in manual New hangout) go through one client,
   `askDecision` in `apps/server/src/modules/intelligence/`: Jev
   `jev-1.13.0`, then the caller's deterministic fallback (#196, #228).
   A fine-tuned, self-hosted Laya is deferred to #274; `askDecision`
@@ -60,14 +61,23 @@ touches before you write code.
 - Gemini only writes text: the vote blurbs and `match_reason`, from
   `curateVenues`/`curateActivities`, and each discovered place's activity
   label and typical length, from `describeActivities` (#322).
-  `rankWithGemini` was removed (#231).
+  `rankWithGemini` was removed (#231). Gemini never receives a matching
+  profile; its text may name a shared interest in plain words from the
+  input it has (favorite counts, the options), never quote a profile.
+- Preference fit (#311): one `memberFitRequest` per squad member. The
+  member's `pref_activities`/`pref_personality` (≤ 300 characters each)
+  and favorite categories go only to `askDecision`, framed as data with
+  fixed instructions, with no name, username or id. Candidates are
+  plain words keyed `c0…cN`: no place IDs, raw times or commutes. Code
+  sums the members' probabilities, picks the 3 and applies the
+  `squadAppeal` ≥ 0.2 gate.
 - Free windows, groups, which vibes are feasible for a slot, shortlist
   scoring, place discovery and filtering (opening hours included), route
   scoring, each option's time, picking the 3 options and backups stay
   deterministic TypeScript. The automated flow has no fixed activity
   list; Gemini only labels places code already found. The model only
-  chooses among options code already computed (the vibe among the
-  feasible ones, which venues fit).
+  chooses among options code already computed (which discovered
+  activity each member would enjoy, which venues fit).
 - Every AI call has a timeout, a deterministic fallback, and goes through
   `withFixture`. Gemini output uses a JSON `responseSchema` with
   validated IDs.
