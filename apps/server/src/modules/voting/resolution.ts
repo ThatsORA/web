@@ -8,7 +8,11 @@ export function voteClosesAt(openedAt: Date, startsAt: Date, timeoutSec: number)
   return new Date(Math.min(openedAt.getTime() + timeoutSec * 1000, startsAt.getTime() - TWO_HOURS_MS));
 }
 
-/** A ghost pass counts as responded, so it looks exactly like a vote. */
+/** Open until the event resolves or its deadline passes, whichever comes first (the sweep can lag the deadline). */
+export const votingOpen = (event: { status: string; voteClosesAt: Date }, now: Date): boolean =>
+  event.status === "voting" && event.voteClosesAt > now;
+
+/** Any pass (Ghost or visible) counts as responded, so a Ghost Pass looks exactly like a vote. */
 export function progress(statuses: readonly VoteStatus[]) {
   return { responded: statuses.filter((s) => s !== "invited").length, total: statuses.length };
 }

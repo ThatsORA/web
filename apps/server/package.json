@@ -13,7 +13,8 @@
     "db:smoke": "tsx scripts/db-smoke.ts",
     "db:backfill": "tsx scripts/backfill.ts",
     "db:seed": "tsx scripts/seed.ts",
-    "demo:reset": "tsx scripts/demo-reset.ts"
+    "demo:reset": "tsx scripts/demo-reset.ts",
+    "decision-data": "tsx scripts/decision-data.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

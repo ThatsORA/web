@@ -1,7 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { EventCardPayload, EventOption, optionFromRow, type VoteStatus } from "@web/contract";
 import { publicUserSelect, toPublicUser } from "../auth/helpers";
-import { viewerScope } from "./invitations";
+import { votingOpen } from "../voting/resolution";
+import { inviteSource, keepsAccess, viewerScope } from "./invitations";
 
 export type EventWithCardData = Prisma.EventGetPayload<{
   include: {
@@ -10,6 +11,12 @@ export type EventWithCardData = Prisma.EventGetPayload<{
     votes: { select: { userId: true; optionId: true } };
   };
 }>;
+
+/** Whether `userId` still gets this event's card (#210): once voting closes, a Ghost Pass loses it. */
+export function canSeeEvent(event: EventWithCardData, userId: string, now: Date): boolean {
+  const mine = event.participants.find((participant) => participant.userId === userId);
+  return !!mine && keepsAccess({ ...mine, inviteSource: inviteSource(event, userId) }, votingOpen(event, now));
+}
 
 /** Keeps travel times only for people the viewer may see; the keys would otherwise leak the roster. */
 function scopedTravel(option: EventOption, visible: ReadonlySet<string>): EventOption {

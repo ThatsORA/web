@@ -442,16 +442,17 @@ The hard limits apply first: one open proposal per group, and the
 `COOLDOWN_HOURS` (48) cooldown.
 
 **Decision gate + vibe (#231).** One `askDecision` call (Laya, then Jev)
-covers the shortlist. Each candidate gets two questions in plain words
-(size, "Fri 7:00pm", "last hangout: over 2 weeks ago", shared favorites;
-no names, no raw timestamps):
-- `propose_<i>`: a 2-option Choice, `A` = suggest a hangout now, `B` = not
+per shortlisted candidate, in parallel, built by `groupRequest` in the same
+format as Laya's training data (#235). The questions carry plain-word facts
+(size, "Fri 7:00pm", "Last hangout: 3 weeks ago", shared favorites; no
+names, no raw timestamps):
+- `propose`: a 2-option Choice, `A` = suggest a hangout now, `B` = not
   now. Keep the candidate when P(`A`) ≥ 0.6.
-- `vibe_<i>`: a Choice over that window's feasible vibes only; use the
-  chosen vibe's slot.
+- `vibe` (only when more than one vibe is feasible): a Choice over that
+  window's feasible vibes; use the chosen vibe's slot.
 
 A forced run (the demo button) skips the gate but still lets the model
-pick the vibe. If the decision call fails, only the top-ranked candidate
+pick the vibe. If any decision call fails, only the top-ranked candidate
 is proposed, with the priority vibe. `rankWithGemini` is removed;
 `match_reason` now comes from §8.
 
@@ -514,8 +515,9 @@ belongs to an open event whose slot overlaps.
 - Context: the vibe tag, the slot's local time, and counts of the group's
   favorite categories.
 
-**Fit filter (#230):** one `askDecision` call with a `venueFitQuestion`
-per venue, a 2-option Choice (`A` fits the vibe / `B` doesn't) that sees
+**Fit filter (#230):** one `askDecision` call per venue, in parallel,
+built by `venueFitRequest` in the Laya training format (#235): `venue_fit`,
+a 2-option Choice (`A` fits the vibe / `B` doesn't) that sees
 only the name, primary type and review snippets. It catches reviews that
 contradict the vibe, for example a steakhouse tagged casual. Code keeps
 the venues where P(`A`) ≥ 0.5, takes the top 3 by `route_score`, and tops
@@ -526,7 +528,7 @@ the 3 blurbs and the card's `match_reason` (90 characters or fewer each),
 using only facts from the input. The place IDs must match the 3 chosen
 venues.
 
-**Fallback:** if the decision call fails, use the top 3 by `route_score`.
+**Fallback:** if any decision call fails, use the top 3 by `route_score`.
 If Gemini fails or misses `GEMINI_TIMEOUT_MS` (8 seconds), `ai_blurb` and
 `match_reason` are null. The card always shows the deterministic
 `facts_line`, so it never looks broken. Both callers (the matcher and
@@ -539,8 +541,10 @@ manual New hangout) always get exactly 3 options.
 - **Opening:** the event is created with status `voting`. Set
   `vote_closes_at` to whichever comes first: creation + `VOTE_TIMEOUT_SEC`,
   or 2 hours before the slot starts.
-- **Casting:** each participant either votes for one option (and can
-  change it until close) or taps Ghost Pass.
+- **Casting:** each participant either votes for one option or passes
+  (`POST /events/:id/ghost-pass`; a Ghost Pass or a visible Pass depending
+  on how they were invited, see "Pass lifecycle" below). Either response
+  can replace the other until voting closes.
 - **Anonymity:**
   - The API and sockets never expose who voted for what.
   - Tallies stay hidden until voting closes.
@@ -551,7 +555,8 @@ manual New hangout) always get exactly 3 options.
     by the hangout's human creator. This supersedes the original shared
     attendee list, where a ghost-passer's absence was visible to everyone.
 - **Closing:** voting closes early once everyone has responded, and
-  otherwise at `vote_closes_at`. A sweep runs every 15 seconds.
+  otherwise at `vote_closes_at`. A sweep runs every 15 seconds. After
+  close every response is final.
 
 ### Who sees what (#206)
 
@@ -599,9 +604,35 @@ viewer gets on the card, list, and any future chat membership or presence
   hangout expires because people passed, the remaining guests learn it
   isn't happening, which can imply who passed. The card never names
   anyone.
-- Pass lifecycle (returning from a Ghost Pass before close, finality,
-  squad Pass as its own status, and denying ghost-passers the event and
-  chat after close) is #210, built on this.
+
+### Pass lifecycle (#210)
+
+Every pass is stored as `vote_status = ghost_passed`; its kind comes from
+the invite source (`passKind()`), so a squad Pass has no status of its
+own. The card shows the viewer's kind as `viewer.pass_kind`.
+
+| | Ghost Pass (direct invite) | Visible Pass (creator or squad) |
+| --- | --- | --- |
+| While voting is open | Counts as responded; can be replaced by a vote. Keeps the card and every update, exactly like a voter | Same |
+| After close (everyone responded, or the deadline) | Final. The event disappears: 404 on `GET /events/:id`, left out of `GET /events`, 403 on chat, and no more socket events or pushes | Final. Keeps the card, chat (normal time limits) and updates, and isn't an attendee |
+
+- One pure rule decides it: `keepsAccess(row, votingOpen)` in
+  `apps/server/src/modules/events/invitations.ts`, with `votingOpen()` in
+  `voting/resolution.ts`. Chat always applies the after-close rule, so a
+  Ghost Pass never enters chat (#212 builds on this).
+- Every post-close audience (event list/detail, `event:resolved`, the
+  resolved push, chat and `event:message`) goes through `keepsAccess()` /
+  `eventAudience()`. Voting, chat and realtime read invite source only
+  through `eventParticipants()`, so moving where it's stored changes one
+  place.
+- **Not yet covered:** the venue swap (§11, Riley's `venues/router.ts`)
+  still sends `event:venue_changed` and its push to every participant, and
+  its 409 returns a card without the access check. It needs
+  `eventAudience(…, false)` for recipients and `canSeeEvent()` for the
+  caller (follow-up for Riley).
+- Before close, progress, notifications and the card look the same for a
+  Ghost Pass and a vote; others can't observe the ghost passer losing the
+  event afterwards.
 
 ### 10. Resolution (Ojas)
 
@@ -793,6 +824,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-26 | **Display labels (#211).** Andy owns how a person is labeled across the mobile app: `displayName()` in `apps/mobile/src/lib/displayName.ts` (the display name, else the username). Lists and profiles keep `@username` under the name where people need to tell accounts apart or search. Onboarding asks for the name right after sign-up (skippable, never on login). Label-only edits to Ojas's feature screens get Ojas's review; `features/friends/PersonLink.tsx` is co-owned. |
 | 2026-09-26 | **Demo location: around FIU's Modesto A. Maidique Campus (Miami).** It's the hackathon venue, so the presenter's live device location is on campus. |
 | 2026-09-26 | **Invite source and per-viewer privacy (#206).** Each participant's `invite_source` (creator/direct/squad) is derived from the event's `created_by_id` and `source_group_id`, with no new columns (the schema stays with its steward). Only the human creator sees the whole roster and can infer a Ghost Pass; squad members see their squad and its visible passes; direct invitees see themselves and the creator. Automated close-friend proposals are direct invites with no creator view; automated squad proposals use squad rules. The creator's own pass is visible to everyone (they're the host). This supersedes the shared participant card and attendee list (§9 "Who sees what"). Stored per-participant provenance for mixed events (#207) is a `schema` issue for Ojas. |
+| 2026-09-26 | **Pass lifecycle (#210).** A squad Pass reuses `vote_status = ghost_passed` instead of a new status; the kind (Ghost vs visible) is derived from invite source with `passKind()`, so no schema change was needed. A vote can replace a pass until voting closes; after close both are final. A direct invitee's Ghost Pass then loses the event (card, list, chat, sockets, push); a visible Pass (creator or squad) keeps the card and chat and isn't an attendee. The pass endpoint keeps its `ghost-pass` path. See §9 "Pass lifecycle". |
 | 2026-09-26 | **Decision models: Laya + Jev; Gemini writes text (#196, #227).** Decisions (propose gate, vibe, venue fit) go through `askDecision`: fine-tuned Laya (self-hosted) first, then Jev `jev-1.13.0`, then deterministic code. Gemini only writes blurbs and `match_reason`, and generates Laya's training scenarios; Jev labels them. `rankWithGemini` is removed (#231). Auto-proposals come back weekly (Mon 09:00 America/New_York) plus a "Find a hangout now" demo button (#232/#233), which replaces the close-friend star as the demo trigger. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)
