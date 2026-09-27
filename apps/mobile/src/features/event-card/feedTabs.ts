@@ -32,14 +32,48 @@ export function isPendingInvite(card: EventCardPayload, now = Date.now()): boole
   return true;
 }
 
-/** True if there is at least one active hangout where the caller has a pending invite before its start time. */
-export function hasPendingNotification(cards: EventCardPayload[], now = Date.now()): boolean {
-  return cards.some((card) => isPendingInvite(card, now));
+/**
+ * Returns the IDs of all active hangouts with pending invites before start time.
+ */
+export function getPendingInviteIds(cards: EventCardPayload[], now = Date.now()): string[] {
+  return cards.filter((card) => isPendingInvite(card, now)).map((card) => card.id);
 }
 
-/** Count of active hangouts with pending invites before start time. */
-export function pendingNotificationCount(cards: EventCardPayload[], now = Date.now()): number {
-  return cards.filter((card) => isPendingInvite(card, now)).length;
+/**
+ * True if there is at least one active hangout where the caller has a pending invite before its start time,
+ * excluding any cards that have already been seen/dismissed.
+ */
+export function hasPendingNotification(
+  cards: EventCardPayload[],
+  seenIdsOrNow?: ReadonlySet<string> | readonly string[] | number,
+  now = Date.now(),
+): boolean {
+  let seenSet: ReadonlySet<string> | null = null;
+  let currentTime = now;
+  if (typeof seenIdsOrNow === "number") {
+    currentTime = seenIdsOrNow;
+  } else if (seenIdsOrNow) {
+    seenSet = seenIdsOrNow instanceof Set ? seenIdsOrNow : new Set(seenIdsOrNow);
+  }
+  return cards.some((card) => isPendingInvite(card, currentTime) && (!seenSet || !seenSet.has(card.id)));
+}
+
+/**
+ * Count of active hangouts with pending invites before start time that have not been seen/dismissed.
+ */
+export function pendingNotificationCount(
+  cards: EventCardPayload[],
+  seenIdsOrNow?: ReadonlySet<string> | readonly string[] | number,
+  now = Date.now(),
+): number {
+  let seenSet: ReadonlySet<string> | null = null;
+  let currentTime = now;
+  if (typeof seenIdsOrNow === "number") {
+    currentTime = seenIdsOrNow;
+  } else if (seenIdsOrNow) {
+    seenSet = seenIdsOrNow instanceof Set ? seenIdsOrNow : new Set(seenIdsOrNow);
+  }
+  return cards.filter((card) => isPendingInvite(card, currentTime) && (!seenSet || !seenSet.has(card.id))).length;
 }
 
 /**
