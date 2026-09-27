@@ -869,7 +869,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | REPORT_CLOSED_WINDOW_HOURS | 24 | 168 |
 | DEMO_MODE | false | true only if the network fails (replays `fixtures/`) |
 | INTERNAL_SECRET | — | set |
-| OPERATOR_USERNAMES | "" (nobody) | Andy's and Ojas's demo usernames, comma-separated (#403) |
+| OPERATOR_USERNAMES | "ojas" | Andy's and Ojas's demo usernames, comma-separated (#403) |
 
 ## Workflow & Agent Rules (details in `wiki/workflow.md`)
 
