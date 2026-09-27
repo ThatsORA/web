@@ -206,6 +206,41 @@ describe("open event index", () => {
 });
 
 describe("matcher pipeline", () => {
+  it("sends a two-hop Mixer through the existing scheduler, availability, venue and voting pipeline", async () => {
+    const fourthId = "44444444-4444-4444-8444-444444444444";
+    const fourth = {
+      ...users[0]!, id: fourthId, username: "user4", email: "user4@example.com",
+      busyBlocks: busyBlocks.filter((block) => block.userId === IDS[0]).map((block) => ({
+        ...block, id: block.id.replace(IDS[0]!, fourthId), userId: fourthId,
+      })),
+    };
+    mocks.userFindMany.mockResolvedValue([...users, fourth]);
+    mocks.explicitGroupFindMany.mockResolvedValue([]); // no squad, so the Mixer is the only candidate
+    mocks.friendshipFindMany.mockResolvedValue([
+      friendships[0]!, friendships[1]!,
+      { ...friendships[0]!, userHighId: fourthId },
+    ]);
+
+    await runPipeline(NOW);
+
+    expect(mocks.askDecision).toHaveBeenCalledOnce();
+    expect(mocks.eventCreate).toHaveBeenCalledOnce();
+    const data = mocks.eventCreate.mock.calls[0]![0].data;
+    expect(data).toMatchObject({
+      groupKey: [...IDS, fourthId].sort().join(","),
+      sourceGroupId: null,
+      isMixer: true,
+      status: "voting",
+    });
+    expect(data.createdById).toBeUndefined();
+    expect(data.participants.create).toEqual([...IDS, fourthId].sort().map((userId) => ({
+      userId, voteStatus: "invited", inviteSource: "direct",
+    })));
+    expect(mocks.fetchCandidates).toHaveBeenCalledOnce();
+    expect(mocks.curateVenues).toHaveBeenCalledOnce();
+    expect(mocks.openVoting).toHaveBeenCalledWith("event-1");
+  });
+
   it("loads DB state and atomically writes the one Thursday dinner event", async () => {
     await runPipeline(NOW);
 
