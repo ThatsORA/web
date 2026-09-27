@@ -1,5 +1,5 @@
 // Owner: Ojas — Laya training data (#235). Gemini writes synthetic scenarios, Jev labels them
-// through the same #228 question builders runtime uses, and we write the Laya notebook's format.
+// through the same request builders runtime uses, and we write the Laya notebook's format.
 // Run: pnpm --filter @web/server decision-data [totalScenarios]   (needs GEMINI_API_KEY + JEV_API_KEY)
 // Resumable: every step appends to scripts/decision-data/ and skips ids already written.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -8,14 +8,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { VibeTag } from "@web/contract";
 import { env } from "../src/env";
-import {
-  groupFacts,
-  parseDecision,
-  proposeQuestion,
-  venueFitQuestion,
-  vibeQuestion,
-  type DecisionQuestions,
-} from "../src/modules/intelligence/decision";
+import { groupRequest, parseDecision, venueFitRequest, type DecisionRequest } from "../src/modules/intelligence/decision";
 
 const OUT = join(import.meta.dirname, "decision-data");
 const SCENARIOS = join(OUT, "scenarios.jsonl"); // every Gemini scenario, append-only
@@ -221,21 +214,10 @@ async function generateScenarios(targets: Record<Kind, number>) {
 
 // ---------- questions + records (Laya notebook format) ----------
 
-const GROUP_STATE = { task: "A friend-hangout app's weekly check: should it suggest a hangout to this friend group now, and what kind?" };
-
-/** The state + questions sent to the decision model for one scenario, built with the runtime #228 builders. */
-export function buildCase(s: Scenario): { state: unknown; questions: DecisionQuestions } {
-  if (s.kind === "venue") {
-    const venue = { name: s.name, primary_type: s.primary_type, price_level: s.price_level, rating: s.rating };
-    return {
-      state: { name: s.name, primary_type: s.primary_type, reviews: s.reviews },
-      questions: { venue_fit: venueFitQuestion(venue, s.vibe) },
-    };
-  }
-  const facts = groupFacts({ size: s.size, when: s.when, lastHangout: s.last_hangout, favorites: s.shared_favorites });
-  const questions: DecisionQuestions = { propose: proposeQuestion(facts) };
-  if (s.feasible_vibes.length >= 2) questions.vibe = vibeQuestion(facts, s.feasible_vibes); // 1 option = nothing to decide
-  return { state: GROUP_STATE, questions };
+/** The request sent to the decision model for one scenario, built with the same builders runtime uses. */
+export function buildCase(s: Scenario): DecisionRequest {
+  if (s.kind === "venue") return venueFitRequest(s, s.vibe);
+  return groupRequest({ size: s.size, when: s.when, lastHangout: s.last_hangout, favorites: s.shared_favorites, feasibleVibes: s.feasible_vibes });
 }
 
 /** Held-out gold: every GOLD_EVERY-th scenario of each kind, up to GOLD_PER_KIND. */

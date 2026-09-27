@@ -17,6 +17,11 @@ export interface ChoiceQuestion {
   criteria: Record<string, string>;
 }
 export type DecisionQuestions = Record<string, ChoiceQuestion>;
+/** One /v1/systemone request body minus the model. Build it with `groupRequest` or `venueFitRequest`. */
+export interface DecisionRequest {
+  state: object;
+  questions: DecisionQuestions;
+}
 
 // Thresholds read `probabilities`, not `confidence`: Laya and Jev define confidence differently.
 const ChoiceAnswer = z.object({
@@ -51,7 +56,7 @@ async function callProvider(base: string, apiKey: string, model: string, state: 
   return parseDecision(await r.json(), questions);
 }
 
-export async function askDecision(state: string | object, questions: DecisionQuestions): Promise<DecisionResponse> {
+export async function askDecision({ state, questions }: DecisionRequest): Promise<DecisionResponse> {
   const key = createHash("sha256").update(JSON.stringify({ state, questions })).digest("hex");
   const raw = await withFixture("decision", key, async () => {
     if (env.LAYA_URL) {
@@ -67,7 +72,8 @@ export async function askDecision(state: string | object, questions: DecisionQue
   return parseDecision(raw, questions); // fixtures are unvalidated JSON
 }
 
-// ---------- question builders (shared by runtime and the training-data script, #235) ----------
+// ---------- request builders (shared by runtime and the training-data script, #235) ----------
+// The fine-tuned Laya only sees requests in the training format, so runtime must build them here too.
 // Yes/no questions are 2-option A/B Choices: neutral keys, because Laya's noul has label bias.
 
 const VIBE_DESCRIPTIONS: Record<VibeTag, string> = {
@@ -77,8 +83,8 @@ const VIBE_DESCRIPTIONS: Record<VibeTag, string> = {
   night_out: "A night out of two to three hours at a bar, club or bowling alley",
 };
 
-/** Plain-word group facts for `proposeQuestion`/`vibeQuestion`. Runtime (#231) and the training data (#235) share this format. */
-export function groupFacts(g: { size: number; when: string; lastHangout: string; favorites: string[] }): string[] {
+/** Plain-word group facts for `proposeQuestion`/`vibeQuestion`. */
+function groupFacts(g: { size: number; when: string; lastHangout: string; favorites: string[] }): string[] {
   return [
     `Group of ${g.size} friends`,
     `Shared free time: ${g.when}`,
@@ -117,5 +123,23 @@ export function venueFitQuestion(venue: VenueFacts, vibe: VibeTag): ChoiceQuesti
     type: "choice",
     instructions: { venue: facts, hangout: VIBE_DESCRIPTIONS[vibe], question: "Is `venue` a good place for `hangout`?" },
     criteria: { A: "Yes, it fits this hangout", B: "No, it does not fit this hangout" },
+  };
+}
+
+const GROUP_STATE = { task: "A friend-hangout app's weekly check: should it suggest a hangout to this friend group now, and what kind?" };
+
+/** One group: `propose`, plus `vibe` when there is more than one feasible vibe to choose from. */
+export function groupRequest(g: Parameters<typeof groupFacts>[0] & { feasibleVibes: VibeTag[] }): DecisionRequest {
+  const facts = groupFacts(g);
+  const questions: DecisionQuestions = { propose: proposeQuestion(facts) };
+  if (g.feasibleVibes.length >= 2) questions.vibe = vibeQuestion(facts, g.feasibleVibes);
+  return { state: GROUP_STATE, questions };
+}
+
+/** One venue: `venue_fit`, with the review snippets in `state`. */
+export function venueFitRequest(venue: VenueFacts & { reviews: string[] }, vibe: VibeTag): DecisionRequest {
+  return {
+    state: { name: venue.name, primary_type: venue.primary_type, reviews: venue.reviews },
+    questions: { venue_fit: venueFitQuestion(venue, vibe) },
   };
 }
