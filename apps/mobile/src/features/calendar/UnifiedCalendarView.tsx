@@ -144,11 +144,11 @@ export function UnifiedScheduleView({
                       backgroundColor: theme.colors.surfaceMuted,
                       borderWidth: 1,
                       borderColor: theme.colors.border,
-                      opacity: 0.9,
+                      opacity: 0.6,
                     }}
                   >
                     <View style={{ flex: 1 }}>
-                      <Txt variant="body" color="heading">
+                      <Txt variant="body" color="textMuted">
                         {item.title}
                       </Txt>
                       <Txt variant="small" color="textMuted" numeric>
