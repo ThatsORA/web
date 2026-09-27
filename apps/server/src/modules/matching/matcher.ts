@@ -10,7 +10,7 @@ import { scheduleDecisions } from "../intelligence/scheduleDecisions";
 import { discoverPlaces, timeCandidates, type ActivityCandidate } from "../venues/discover";
 import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
 import { openVoting } from "../voting/lifecycle";
-import { candidateGroups, groupKey, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
+import { candidateGroups, groupKey, onePairPerPerson, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
 import type { ResolvedManualSelection } from "./manualSelection";
 import { mixerCandidates } from "./mixerCandidates";
 import { classifySlot, earliestTimezone, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot, type TimeWindow } from "./timeMath";
@@ -155,8 +155,8 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
     where: { id: { in: referencedUserIds } },
     select: { id: true, timezone: true },
   });
-  // Squads + Mixers (#320): whole squads (3–6 active members) and Riley's Mixers (#215). Friend pairs,
-  // cliques and one-drop subsets are skipped. Manual hangouts never come through here.
+  // Squads + Mixers (#320): whole squads (3–6 active members) and Riley's Mixers (#215), plus mutual
+  // close-friend 1-on-1s (#404). Cliques and one-drop subsets are skipped. Manual hangouts never come through here.
   const squadKeys = new Set(explicitGroups.map((group) =>
     groupKey(group.members.filter((member) => member.status === "active").map((member) => member.userId))));
   const squads = candidateGroups(identities, [], explicitGroups).filter((group) => squadKeys.has(group.groupKey));
@@ -165,6 +165,10 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
   for (const { group } of possibleMixers) {
     // A selected Squad keeps its provenance; otherwise a 4–6 person eligible group is a Mixer.
     if (!groupsByKey.get(group.groupKey)?.sourceGroupId) groupsByKey.set(group.groupKey, group);
+  }
+  // Both people starred each other and the friendship is accepted: the 2-member groups candidateGroups() builds.
+  for (const pair of candidateGroups(identities, friendships).filter((group) => group.memberIds.length === 2)) {
+    if (!groupsByKey.has(pair.groupKey)) groupsByKey.set(pair.groupKey, pair);
   }
   const groups = [...groupsByKey.values()];
   if (!groups.length) return;
@@ -228,15 +232,15 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
   }
 
   const ranked = rankCandidates(groupSlots, friendships, now);
-  // Preserve squad precedence, then offer anonymous Mixers before ordinary direct proposals.
+  // Squads first, then anonymous Mixers, then close-friend 1-on-1s (at most one per person per run).
   const priority = (group: typeof ranked[number]["group"]) => group.sourceGroupId ? 2 : group.isMixer ? 1 : 0;
   ranked.sort((a, b) => priority(b.group) - priority(a.group));
-  const shortlist = selectRankedCandidates(
+  const shortlist = onePairPerPerson(selectRankedCandidates(
     ranked,
     [...openEvents, ...cooldownEvents],
     now,
     env.COOLDOWN_HOURS,
-  );
+  ));
   const selected = await scheduleDecisions(
     shortlist.map((candidate) => ({ ...candidate, window: windowBySlot.get(candidate.slot)! })),
     favoritesByUser,

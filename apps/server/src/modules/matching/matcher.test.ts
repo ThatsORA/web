@@ -263,7 +263,8 @@ describe("matcher pipeline", () => {
     });
     expect(mocks.eventFindMany).toHaveBeenNthCalledWith(2, {
       where: {
-        groupKey: { in: [IDS.join(",")] },
+        // The squad, then each mutual close-friend pair (#404).
+        groupKey: { in: [IDS.join(","), `${IDS[0]},${IDS[1]}`, `${IDS[0]},${IDS[2]}`, `${IDS[1]},${IDS[2]}`] },
         status: { in: ["expired", "chatted"] },
         resolvedAt: { gte: new Date(NOW.getTime() - env.COOLDOWN_HOURS * 60 * 60 * 1_000) },
       },
@@ -283,6 +284,7 @@ describe("matcher pipeline", () => {
         favorite_counts: { restaurant: 2, coffee_shop: 1 },
       },
     );
+    // Everyone also starred each other, but a squad card this run means no extra 1-on-1s (#404).
     expect(mocks.transaction).toHaveBeenCalledOnce();
     expect(mocks.eventFindFirst).toHaveBeenCalledWith({
       where: { groupKey: IDS.join(","), status: { in: ["voting", "confirmed"] } },
@@ -325,11 +327,34 @@ describe("matcher pipeline", () => {
     expect(mocks.eventCreate.mock.invocationCallOrder[0]).toBeLessThan(mocks.openVoting.mock.invocationCallOrder[0]!);
   });
 
-  it("proposes to whole squads only: a close-friend clique or a squad with an invited member gets nothing", async () => {
-    mocks.explicitGroupFindMany.mockResolvedValue([]);
+  it("never proposes a close-friend clique; mutual close friends get one 1-on-1 per person per run (#404)", async () => {
+    mocks.explicitGroupFindMany.mockResolvedValue([]); // three mutual close friends, no squad
     await runPipeline(NOW);
+    expect(mocks.eventCreate).toHaveBeenCalledOnce(); // one pair; the other two each share a person with it
+    const data = mocks.eventCreate.mock.calls[0]![0].data;
+    expect(data).toMatchObject({ groupKey: `${IDS[0]},${IDS[1]}`, sourceGroupId: null, isMixer: false });
+    expect(data.participants.create).toEqual([IDS[0], IDS[1]].map((userId) => ({ userId, voteStatus: "invited" })));
+  });
+
+  it("offers a 1-on-1 when the squad already has a live hangout (#404)", async () => {
+    // The squad is confirmed for Tuesday (inside everyone's busy block), so only the pair can use Thursday.
+    const confirmed = {
+      groupKey: IDS.join(","), status: "confirmed", startsAt: new Date("2026-09-29T22:00:00Z"),
+      endsAt: new Date("2026-09-30T00:00:00Z"), resolvedAt: NOW, participants: IDS.map((userId) => ({ userId })),
+    };
+    mocks.eventFindMany.mockImplementation(async (args: { where: { status: { in: string[] } } }) =>
+      args.where.status.in.includes("confirmed") ? [confirmed] : []);
+    await runPipeline(NOW);
+    expect(mocks.eventCreate).toHaveBeenCalledOnce();
+    expect(mocks.eventCreate.mock.calls[0]![0].data).toMatchObject({
+      groupKey: `${IDS[0]},${IDS[1]}`, sourceGroupId: null, startsAt: new Date("2026-10-01T22:30:00Z"),
+    });
+  });
+
+  it("proposes nothing for a squad with an invited member when nobody starred each other", async () => {
     const invited = { ...squad, members: squad.members.map((m, i) => (i === 2 ? { ...m, status: "invited" } : m)) };
     mocks.explicitGroupFindMany.mockResolvedValue([invited]);
+    mocks.friendshipFindMany.mockResolvedValue(friendships.map((f) => ({ ...f, highAddedLow: false })));
     await runPipeline(NOW);
     expect(mocks.fetchCandidates).not.toHaveBeenCalled();
     expect(mocks.eventCreate).not.toHaveBeenCalled();
