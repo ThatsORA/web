@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { buildCreateEventRequest, getDeduplicatedInvitees, getSelectedSquadMembers, noMatchReason, otherWeek, weekRange } from "./newHangout";
+import { z } from "zod";
+import { buildCreateEventRequest, getDeduplicatedInvitees, getSelectedSquadMembers, newHangoutErrorMessage, noMatchReason, otherWeek, weekRange } from "./newHangout";
 
 const ids = Array.from({ length: 6 }, (_, i) => `00000000-0000-4000-8000-00000000000${i}`);
 
@@ -64,6 +65,32 @@ describe("noMatchReason", () => {
     expect(noMatchReason(new ApiError(422, { error: "no_venues" }))).toBe("no_venues");
     expect(noMatchReason(new ApiError(400, { error: "invalid_invitees" }))).toBeNull();
     expect(noMatchReason(new Error("network"))).toBeNull();
+  });
+});
+
+describe("newHangoutErrorMessage", () => {
+  const response = (status: number, error: string) => newHangoutErrorMessage(new ApiError(status, { error }));
+
+  it("explains an existing hangout and where to find it", () => {
+    expect(response(409, "already_open")).toMatch(/already open.*Hangouts/);
+  });
+
+  it("explains invalid invitees, squads, and selections", () => {
+    expect(response(400, "invalid_invitees")).toMatch(/invitees.*Update who’s coming/);
+    expect(response(400, "invalid_squads")).toMatch(/squad.*Update who’s coming/);
+    expect(response(400, "invalid_selection")).toMatch(/at least one other person/);
+  });
+
+  it("distinguishes an expired session from server and network failures", () => {
+    expect(response(401, "unauthorized")).toMatch(/session expired/);
+    expect(response(500, "internal_error")).toMatch(/server.*Check Hangouts/);
+    expect(newHangoutErrorMessage(new TypeError("Network request failed"))).toMatch(/Couldn't confirm.*Check Hangouts/);
+  });
+
+  it("warns that a failed client parse may follow successful creation", () => {
+    const parsed = z.object({ id: z.string() }).safeParse({ id: 42 });
+    if (parsed.success) throw new Error("Expected a validation error");
+    expect(newHangoutErrorMessage(parsed.error)).toMatch(/may have started.*Check Hangouts/);
   });
 });
 
