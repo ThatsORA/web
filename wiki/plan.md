@@ -596,8 +596,25 @@ viewer gets on the card, list, and any future chat membership or presence
   as responded). Mixers hide the total later (#220).
 - Socket payloads name no people (`{ event_id }`, counts, status); each
   client refetches its own scoped card. Chat messages show only their own
-  poster; there are no membership, presence or system messages. #212 must
-  build any of those on `viewerScope()`.
+  poster; there are no membership, presence or system messages.
+- **Event chat (#212).** Who is in an event's chat comes from one pure
+  rule, `chatAudience()` in `invitations.ts`, built on `eventAudience()`;
+  the chat routes, `event:message` recipients and the card's
+  `viewer.chat` (`open` / `read_only` / null) all use it. A chat shows
+  every poster to every member, so its members must all be allowed to see
+  each other:
+  - **Squad hangouts** (any squad invitee) get chat from creation, while
+    voting, after confirmation and as `chatted`, for the creator and the
+    squad. Their passes are visible, so a squad Pass keeps chat. Direct
+    invitees in a mixed hangout are never in it: they may only see
+    themselves and the creator, and squad members may not see them.
+  - **Every other event** (direct-only, automated close-friend) has chat
+    only as the `chatted` fallback, for everyone who keeps access after
+    close, as before.
+  - A Ghost Pass never enters chat, even while voting is open. Posting
+    stops at `ends_at` (read-only after, until cleanup 7 days later); an
+    `expired` event has no chat. Anyone outside the chat gets the same
+    403, whether or not the event has one.
 - **Honest limit:** the outcome itself can't be hidden. If a small
   hangout expires because people passed, the remaining guests learn it
   isn't happening, which can imply who passed. The card never names
@@ -617,7 +634,7 @@ own. The card shows the viewer's kind as `viewer.pass_kind`.
 - One pure rule decides it: `keepsAccess(row, votingOpen)` in
   `apps/server/src/modules/events/invitations.ts`, with `votingOpen()` in
   `voting/resolution.ts`. Chat always applies the after-close rule, so a
-  Ghost Pass never enters chat (#212 builds on this).
+  Ghost Pass never enters chat (`chatAudience()`, #212).
 - Every post-close audience (event list/detail, `event:resolved`, the
   resolved push, chat and `event:message`) goes through `keepsAccess()` /
   `eventAudience()`. Voting, chat and realtime read invite source only
@@ -823,6 +840,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-26 | **Demo location: around FIU's Modesto A. Maidique Campus (Miami).** It's the hackathon venue, so the presenter's live device location is on campus. |
 | 2026-09-26 | **Invite source and per-viewer privacy (#206).** Each participant's `invite_source` (creator/direct/squad) is derived from the event's `created_by_id` and `source_group_id`, with no new columns (the schema stays with its steward). Only the human creator sees the whole roster and can infer a Ghost Pass; squad members see their squad and its visible passes; direct invitees see themselves and the creator. Automated close-friend proposals are direct invites with no creator view; automated squad proposals use squad rules. The creator's own pass is visible to everyone (they're the host). This supersedes the shared participant card and attendee list (§9 "Who sees what"). Stored per-participant provenance for mixed events (#207) is a `schema` issue for Ojas. |
 | 2026-09-26 | **Pass lifecycle (#210).** A squad Pass reuses `vote_status = ghost_passed` instead of a new status; the kind (Ghost vs visible) is derived from invite source with `passKind()`, so no schema change was needed. A vote can replace a pass until voting closes; after close both are final. A direct invitee's Ghost Pass then loses the event (card, list, chat, sockets, push); a visible Pass (creator or squad) keeps the card and chat and isn't an attendee. The pass endpoint keeps its `ghost-pass` path. See §9 "Pass lifecycle". |
+| 2026-09-26 | **Event chat for squad hangouts (#212).** Squad hangouts (any squad invitee) get the existing chat (same messages, paging, `event:message` and `ChatScreen`) from creation: while voting, after confirmation, as `chatted`, and read-only after `ends_at`; `expired` closes it. Members are the creator and the squad, squad passers included. Direct invitees are never in a squad or mixed chat, as readers or posters: a poster's name reveals them to everyone in the room, and a direct invitee may only see themselves and the creator, so any room holding direct invitees next to squad members breaks §9. Direct-only events keep the `chatted` fallback exactly as before. One rule, `chatAudience()` on `eventAudience()`, feeds the routes, the socket recipients and the card's new `viewer.chat` (`open`/`read_only`/null), so the client never infers it (#217 shows "Open chat" from it). See §9 "Event chat". |
 | 2026-09-26 | **Decision models: Laya + Jev; Gemini writes text (#196, #227).** Decisions (propose gate, vibe, venue fit) go through `askDecision`: fine-tuned Laya (self-hosted) first, then Jev `jev-1.13.0`, then deterministic code. Gemini only writes blurbs and `match_reason`, and generates Laya's training scenarios; Jev labels them. `rankWithGemini` is removed (#231). Auto-proposals come back weekly (Mon 09:00 America/New_York) plus a "Find a hangout now" demo button (#232/#233), which replaces the close-friend star as the demo trigger. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)
