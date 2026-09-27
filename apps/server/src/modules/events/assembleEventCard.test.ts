@@ -116,8 +116,9 @@ describe("assembleEventCard", () => {
     const card = assembleEventCard(baseEvent, carol, now);
     expect(card.status).toBe("confirmed");
     expect(card.my_status).toBe("invited");
-    // Carol sees herself and Alice (who invited her)
-    expect(card.participants.map((p) => p.id)).toEqual([alice, carol]);
+    // On a confirmed hangout, Carol sees all attendees meeting up (Alice, Bob, Carol)
+    expect(card.participants.map((p) => p.id)).toEqual([alice, bob, carol]);
+    expect(card.outcome?.attendees.map((p) => p.id)).toEqual([alice, bob, carol]);
   });
 
   it("collapses effectiveStatus to expired when totalUnpassed < 2", () => {

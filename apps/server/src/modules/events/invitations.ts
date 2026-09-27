@@ -13,6 +13,7 @@ export interface EventInvites {
   createdById: string | null;
   sourceGroupId: string | null;
   sourceGroupIds?: readonly string[];
+  status?: EventStatus;
 }
 
 /**
@@ -189,9 +190,11 @@ export function viewerScope(
     inviteSource: inviteSource(event, p.userId, p),
     inviter: inviterId(p),
   }));
+  const isConfirmed = event.status === "confirmed" || event.status === "completed";
   const visible = rows.filter((p) => {
     if (p.userId === viewerId) return true;
     if (event.isMixer) return false;
+    if (isConfirmed && !hasPassed(p)) return true;
     return (
       fullRoster ||
       p.inviteSource === "creator" ||
