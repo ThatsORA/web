@@ -4,13 +4,15 @@
 import type { CurateContext, EventOption, RankedVenue } from "@web/contract";
 import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
-import { curateVenues, factsLine } from "../intelligence/curateVenues";
+import { describeActivities, pickActivities } from "../intelligence/activities";
+import { curateActivities, curateVenues, factsLine, type Curation } from "../intelligence/curateVenues";
 import { scheduleDecisions } from "../intelligence/scheduleDecisions";
+import { discoverPlaces, timeCandidates, type ActivityCandidate } from "../venues/discover";
 import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
 import { openVoting } from "../voting/lifecycle";
 import { candidateGroups, groupKey, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
 import type { ResolvedManualSelection } from "./manualSelection";
-import { classifySlot, earliestTimezone, feasibleSlots, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot } from "./timeMath";
+import { classifySlot, earliestTimezone, feasibleSlots, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot, type TimeWindow } from "./timeMath";
 
 export { freeWindows, classifySlot } from "./timeMath";
 
@@ -114,6 +116,27 @@ export function optionData(option: EventOption) {
   };
 }
 
+/**
+ * Nearby places labelled as activities (#322), each timed inside the free window, at least
+ * MIN_LEAD_HOURS out and never before the slot start (the voting deadline derives from it).
+ * Any failure → none, so the caller falls back to the fixed-vibe venues.
+ */
+async function activityCandidates(
+  slot: ClassifiedSlot,
+  window: TimeWindow,
+  members: readonly VenueMember[],
+  now: Date,
+): Promise<ActivityCandidate[]> {
+  const from = new Date(Math.max(slot.start.getTime(), now.getTime() + env.MIN_LEAD_HOURS * 3_600_000));
+  try {
+    const places = await discoverPlaces(slot, from, window.end, members);
+    return timeCandidates(places, await describeActivities(places));
+  } catch (e) {
+    console.error("activity discovery", e);
+    return [];
+  }
+}
+
 export async function runPipeline(now = new Date(), { force = false }: { force?: boolean } = {}): Promise<void> {
   const [friendships, explicitGroups] = await Promise.all([
     prisma.friendship.findMany(),
@@ -166,7 +189,7 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
   const favoritesByUser = new Map(users.map((user) => [user.id, user.favorites]));
   const eventsByParticipant = openEventsByParticipant(openEvents);
   const groupSlots: GroupSlot[] = [];
-  const feasibleBySlot = new Map<ClassifiedSlot, ClassifiedSlot[]>();
+  const windowBySlot = new Map<ClassifiedSlot, { window: TimeWindow; feasible: ClassifiedSlot[] }>();
 
   for (const group of groups) {
     const members = group.memberIds.map((id) => usersById.get(id)).filter((user) => user !== undefined);
@@ -186,7 +209,7 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
       const slot = classifySlot(window, Object.values(group.memberTimezones));
       if (!slot) continue;
       groupSlots.push({ group, slot });
-      feasibleBySlot.set(slot, feasibleSlots(window, Object.values(group.memberTimezones)));
+      windowBySlot.set(slot, { window, feasible: feasibleSlots(window, Object.values(group.memberTimezones)) });
     }
   }
 
@@ -199,7 +222,7 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
   // ponytail: the vibe is chosen after selection, so a longer vibe slot could overlap another
   // candidate from the same run; re-check the overlap if it ever matters.
   const selected = await scheduleDecisions(
-    shortlist.map((candidate) => ({ ...candidate, feasible: feasibleBySlot.get(candidate.slot)! })),
+    shortlist.map((candidate) => ({ ...candidate, ...windowBySlot.get(candidate.slot)! })),
     favoritesByUser,
     force,
   );
@@ -215,12 +238,20 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
         favorites: user.favorites,
         travelMode: user.travelMode,
       }));
-    const rankedVenues = await fetchCandidates(candidate.slot, venueMembers);
-    if (rankedVenues.length < 3) continue;
-    const { options, matchReason } = await curateVenues(
-      rankedVenues,
-      curateContext(candidate, favoritesByUser),
-    );
+    const context = curateContext(candidate, favoritesByUser);
+    // #322: activities discovered near the squad, each at its own time. Fewer than 3 → the fixed-vibe venues.
+    const activities = await activityCandidates(candidate.slot, candidate.window, venueMembers, now);
+    const picks = pickActivities(activities);
+    let rankedVenues: RankedVenue[] = activities;
+    let curation: Curation;
+    if (picks.length === 3) {
+      curation = await curateActivities(picks, context);
+    } else {
+      rankedVenues = await fetchCandidates(candidate.slot, venueMembers);
+      if (rankedVenues.length < 3) continue;
+      curation = await curateVenues(rankedVenues, context);
+    }
+    const { options, matchReason } = curation;
     if (options.length !== 3) throw new Error(`Venue curation returned ${options.length} options; expected 3`);
     const eventTimezone = timezoneClosestToVenueCentroid(venueMembers, options) ??
       earliestTimezone(candidate.slot.start, Object.values(candidate.group.memberTimezones));

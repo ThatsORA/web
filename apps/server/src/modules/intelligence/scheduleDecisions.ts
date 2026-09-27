@@ -47,7 +47,7 @@ export function decisionRequest(candidate: DecisionCandidate, favoritesByUser: F
 }
 
 /** `replies[i]` answers candidate i. Keeps P(A) ≥ 0.6 (every candidate when `force`) and moves each kept one to its chosen vibe's slot. */
-export function applyDecisions(candidates: readonly DecisionCandidate[], replies: DecisionResponse[], force: boolean): DecisionCandidate[] {
+export function applyDecisions<T extends DecisionCandidate>(candidates: readonly T[], replies: DecisionResponse[], force: boolean): T[] {
   return candidates.flatMap((candidate, i) => {
     const { answers } = replies[i]!;
     if (!force && (answers.propose?.probabilities.A ?? 0) < PROPOSE_THRESHOLD) return [];
@@ -57,11 +57,11 @@ export function applyDecisions(candidates: readonly DecisionCandidate[], replies
 }
 
 /** Fallback when any decision call fails: only the top-ranked candidate, with its priority vibe. */
-export async function scheduleDecisions(
-  candidates: readonly DecisionCandidate[],
+export async function scheduleDecisions<T extends DecisionCandidate>(
+  candidates: readonly T[],
   favoritesByUser: FavoritesByUser,
   force: boolean,
-): Promise<DecisionCandidate[]> {
+): Promise<T[]> {
   try {
     const replies = await Promise.all(candidates.map((c) => askDecision(decisionRequest(c, favoritesByUser))));
     return applyDecisions(candidates, replies, force);
