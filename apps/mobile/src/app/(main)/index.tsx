@@ -12,6 +12,8 @@ import {
   getPendingInviteIds,
   getRecentlyCancelledCards,
   hasPendingNotification,
+  loadDismissedHangouts,
+  saveDismissedHangouts,
   useEvents,
   type HangoutTab,
 } from "../../features/event-card";
@@ -69,8 +71,24 @@ export default function Home() {
     }, [markPendingSeen]),
   );
 
+  useEffect(() => {
+    void loadDismissedHangouts().then((ids) => {
+      if (ids.length > 0) {
+        setDismissedCancelledIds((prev) => Array.from(new Set([...prev, ...ids])));
+      }
+    });
+  }, []);
+
+  const handleDismissCancelled = useCallback((cardId: string) => {
+    setDismissedCancelledIds((prev) => {
+      const updated = Array.from(new Set([...prev, cardId]));
+      void saveDismissedHangouts(updated);
+      return updated;
+    });
+  }, []);
+
   const hasNotification = hasPendingNotification(cards, seenPendingIds);
-  const filteredCards = filterHangoutsByTab(cards, activeTab);
+  const filteredCards = filterHangoutsByTab(cards, activeTab, dismissedCancelledIds);
   const recentlyCancelledCards = getRecentlyCancelledCards(cards, dismissedCancelledIds);
 
   // The card may already be on screen (warm app); otherwise its onLayout below scrolls.
@@ -108,9 +126,7 @@ export default function Home() {
             <CancelledHangoutCard
               key={`cancelled-${card.id}`}
               card={card}
-              onDismiss={() => {
-                setDismissedCancelledIds((prev) => [...prev, card.id]);
-              }}
+              onDismiss={() => handleDismissCancelled(card.id)}
             />
           ))
         : null}

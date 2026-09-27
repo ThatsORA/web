@@ -4,8 +4,19 @@ import type { EventCardPayload } from "@web/contract";
 export type HangoutTab = "pending" | "confirmed" | "past";
 
 /** Filter event cards by feed sub-tab: Pending (voting/invited), Confirmed (confirmed/chatted), Past (completed/expired). */
-export function filterHangoutsByTab(cards: EventCardPayload[], tab: HangoutTab): EventCardPayload[] {
+export function filterHangoutsByTab(
+  cards: EventCardPayload[],
+  tab: HangoutTab,
+  dismissedIds?: ReadonlySet<string> | readonly string[],
+): EventCardPayload[] {
+  const dismissedSet = dismissedIds
+    ? dismissedIds instanceof Set
+      ? dismissedIds
+      : new Set(dismissedIds)
+    : null;
+
   return cards.filter((card) => {
+    if (dismissedSet?.has(card.id)) return false;
     if (tab === "pending") {
       return (
         card.status === "voting" ||
