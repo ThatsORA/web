@@ -23,9 +23,6 @@ services:
       - key: VOTE_TIMEOUT_SEC
         value: "43200"
         scope: RUN_TIME
-      - key: COOLDOWN_HOURS
-        value: "0"
-        scope: RUN_TIME
       - key: MATCH_HORIZON_DAYS
         value: "7"
         scope: RUN_TIME

@@ -7,11 +7,13 @@ import { sweepVoting } from "./modules/voting/lifecycle";
 import { promoteDueInvites } from "./modules/groups/router";
 import { cleanupChatMessages } from "./modules/chat";
 import { syncAllGoogleCalendars } from "./modules/calendar/googleSync";
+import { triggerMatcher } from "./modules/matching/matcher";
 
 const server = createServer(createApp());
 attachRealtime(server);
 
-// Auto-proposals are off until a real scheduler lands (#196). Manual hangouts and /internal/run-matcher still work.
+// Auto-proposals run weekly (Mon 09:00 New York) or on demand via POST /scheduler/run (#232).
+cron.schedule("0 9 * * 1", () => void triggerMatcher().catch((e: unknown) => console.error("triggerMatcher", e)), { timezone: "America/New_York" });
 cron.schedule("0 * * * *", () => void cleanupChatMessages().catch((e: unknown) => console.error("cleanupChatMessages", e)));
 cron.schedule("*/15 * * * *", () => void syncAllGoogleCalendars().catch((e: unknown) => console.error("syncAllGoogleCalendars", e)));
 setInterval(() => void sweepVoting(), 15_000);
