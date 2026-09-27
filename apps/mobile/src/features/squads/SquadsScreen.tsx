@@ -10,7 +10,7 @@ import {
 } from "@web/contract";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { View } from "react-native";
+import { RefreshControl, View } from "react-native";
 import { z } from "zod";
 import { api, ApiError, getToken } from "../../lib/api";
 import { displayName } from "../../lib/displayName";
@@ -29,6 +29,7 @@ export function SquadsScreen() {
   const [squads, setSquads] = useState<SquadT[]>([]);
   const [friends, setFriends] = useState<FriendT[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [picker, setPicker] = useState<"new" | null>(null); // "new" while the create form is open
   const [picked, setPicked] = useState<string[]>([]);
   const [name, setName] = useState("");
@@ -39,6 +40,7 @@ export function SquadsScreen() {
       const [s, f] = await Promise.all([api(routes.squads, SquadsResponse), api(routes.friends, FriendsResponse)]);
       setSquads(s.squads);
       setFriends(f.friends);
+      setError(null);
     } catch (e) {
       setError(squadErrorMessage(errorCode(e)));
     }
@@ -48,6 +50,15 @@ export function SquadsScreen() {
       void load();
     }, [load]),
   );
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function run(call: () => Promise<unknown>) {
     setError(null);
@@ -81,7 +92,18 @@ export function SquadsScreen() {
   const others = (s: SquadT) => s.members.filter((m) => m.status === "active").map(displayName).join(", ");
 
   return (
-    <Screen title="Squads">
+    <Screen
+      title="Squads"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void refresh()}
+          tintColor={t.colors.primary}
+          colors={[t.colors.primary]}
+          progressBackgroundColor={t.colors.surface}
+        />
+      }
+    >
       {!friends.length ? (
         <Txt variant="small">Squads are made of friends. Add some on the Friends tab first.</Txt>
       ) : picker === "new" ? (

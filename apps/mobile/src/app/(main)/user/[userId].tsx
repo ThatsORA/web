@@ -4,7 +4,7 @@
 import { PublicProfile, routes } from "@web/contract";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { View } from "react-native";
+import { RefreshControl, View } from "react-native";
 import type { z } from "zod";
 import { deleteFriendRequest, getFriendRequests, sendFriendRequest } from "../../../features/friends";
 import { api, getToken } from "../../../lib/api";
@@ -22,6 +22,7 @@ function UserProfile({ userId }: { userId: string }) {
   const t = useTheme();
   const [profile, setProfile] = useState<z.infer<typeof PublicProfile> | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(false);
 
@@ -37,6 +38,15 @@ function UserProfile({ userId }: { userId: string }) {
   useEffect(() => {
     void Promise.resolve().then(load);
   }, [load]);
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function act(kind: FriendAction["kind"]) {
     if (!profile) return;
@@ -66,6 +76,15 @@ function UserProfile({ userId }: { userId: string }) {
   return (
     <Screen
       eyebrow="Profile"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void refresh()}
+          tintColor={t.colors.primary}
+          colors={[t.colors.primary]}
+          progressBackgroundColor={t.colors.surface}
+        />
+      }
       footer={
         <>
           {action ? <Button label={action.label} variant={action.variant} loading={busy} onPress={() => void act(action.kind)} /> : null}

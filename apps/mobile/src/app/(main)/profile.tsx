@@ -4,7 +4,7 @@
 import { ConfirmEmailChangeRequest, Me, PatchMeRequest, routes } from "@web/contract";
 import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { View } from "react-native";
+import { RefreshControl, View } from "react-native";
 import { z } from "zod";
 import { api } from "../../lib/api";
 import {
@@ -24,19 +24,32 @@ export default function Profile() {
   const t = useTheme();
   const [me, setMe] = useState<MeData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [formVersion, setFormVersion] = useState(0);
 
   const load = useCallback(async () => {
     setLoadError(null);
     try {
       setMe(await api(routes.me, Me));
+      return true;
     } catch (e) {
       setLoadError(profileErrorMessage(e));
+      return false;
     }
   }, []);
 
   useEffect(() => {
     void Promise.resolve().then(load);
   }, [load]);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      if (await load()) setFormVersion((version) => version + 1);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -49,6 +62,15 @@ export default function Profile() {
   return (
     <Screen
       title="My profile"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void refresh()}
+          tintColor={t.colors.primary}
+          colors={[t.colors.primary]}
+          progressBackgroundColor={t.colors.surface}
+        />
+      }
       headerRight={<Button label="← Back" variant="ghost" onPress={handleBack} />}
     >
       {loadError ? (
@@ -68,9 +90,9 @@ export default function Profile() {
               <Txt variant="small">@{me.username}</Txt>
             </View>
           </View>
-          <NameAndBio me={me} onSaved={setMe} />
-          <UsernameForm me={me} onSaved={setMe} />
-          <EmailForm me={me} onSaved={setMe} />
+          <NameAndBio key={`name-${formVersion}`} me={me} onSaved={setMe} />
+          <UsernameForm key={`username-${formVersion}`} me={me} onSaved={setMe} />
+          <EmailForm key={`email-${formVersion}`} me={me} onSaved={setMe} />
         </>
       ) : null}
     </Screen>
