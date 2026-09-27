@@ -215,6 +215,11 @@ export const EventOption = RankedVenue.extend({
   rank: z.number().int(),
   facts_line: z.string(), // deterministic: "★4.6 · $$ · max 14 min travel"
   ai_blurb: z.string().max(90).nullable(), // null = Gemini fallback
+  // #321: an option is activity + place + its own time. Absent on manual hangouts and old events,
+  // which fall back to the event's vibe_tag and starts_at/ends_at.
+  activity: z.string().trim().min(1).max(40).optional(), // "Bouldering"
+  starts_at: Instant.optional(),
+  ends_at: Instant.optional(),
 });
 export type EventOption = z.infer<typeof EventOption>;
 
@@ -234,6 +239,9 @@ export interface OptionRowLike {
   routeScore: number;
   factsLine: string;
   aiBlurb: string | null;
+  activity?: string | null;
+  startsAt?: Date | null;
+  endsAt?: Date | null;
 }
 
 export function optionFromRow(row: OptionRowLike): EventOption & { id: string } {
@@ -253,6 +261,9 @@ export function optionFromRow(row: OptionRowLike): EventOption & { id: string } 
     route_score: row.routeScore,
     facts_line: row.factsLine,
     ai_blurb: row.aiBlurb,
+    activity: row.activity ?? undefined,
+    starts_at: row.startsAt?.toISOString(),
+    ends_at: row.endsAt?.toISOString(),
   }) as EventOption & { id: string };
 }
 

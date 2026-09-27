@@ -6,7 +6,7 @@ import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
 import { emitToUsers, pushEventCreated, pushEventResolved } from "../../realtime";
 import { eventAudience, eventParticipants } from "../events/invitations";
-import { progress, resolveEvent, voteClosesAt } from "./resolution";
+import { progress, resolveEvent, voteClosesAt, winnerTime } from "./resolution";
 
 export async function openVoting(eventId: string): Promise<void> {
   const event = await prisma.event.findUniqueOrThrow({
@@ -66,6 +66,7 @@ export async function closeVoting(eventId: string): Promise<void> {
           ? {
               status: "confirmed",
               resolvedAt: now,
+              ...winnerTime(r.winner),
               venuePlaceId: r.winner.place_id,
               venueName: r.winner.name,
               venueLat: r.winner.lat,

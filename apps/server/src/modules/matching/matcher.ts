@@ -92,7 +92,7 @@ export function timezoneClosestToVenueCentroid(
     .sort((a, b) => a.distance - b.distance || a.member.id.localeCompare(b.member.id))[0]?.member.timezone ?? null;
 }
 
-function optionData(option: EventOption) {
+export function optionData(option: EventOption) {
   return {
     rank: option.rank,
     placeId: option.place_id,
@@ -108,6 +108,9 @@ function optionData(option: EventOption) {
     routeScore: option.route_score,
     factsLine: option.facts_line,
     aiBlurb: option.ai_blurb,
+    activity: option.activity,
+    startsAt: option.starts_at ? new Date(option.starts_at) : undefined,
+    endsAt: option.ends_at ? new Date(option.ends_at) : undefined,
   };
 }
 

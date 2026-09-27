@@ -194,9 +194,9 @@ describe("pass lifecycle (#210)", () => {
     { userId: direct, voteStatus: "voted" },
     { userId: squad, voteStatus: "ghost_passed" },
   ]);
-  const closing = () => {
+  const closing = (options: object[] = [option]) => {
     mocks.findUnique.mockResolvedValueOnce({
-      id: evt, status: "voting", options: [option],
+      id: evt, status: "voting", options,
       votes: [{ userId: creator, optionId: opt }, { userId: direct, optionId: opt }], backupVenues: [],
     });
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
@@ -229,6 +229,31 @@ describe("pass lifecycle (#210)", () => {
     expect(mocks.emitToUsers).toHaveBeenNthCalledWith(1, [creator, direct, squad], "event:progress", { event_id: evt, responded: 3, total: 3 });
     expect(mocks.emitToUsers).toHaveBeenNthCalledWith(2, [creator, direct, squad], "event:resolved", { event_id: evt, status: "confirmed" });
     expect(mocks.pushEventResolved).toHaveBeenCalledWith([creator, direct, squad], evt, "confirmed");
+  });
+
+  it("sets the event's time to the winning option's own time (#321)", async () => {
+    mocks.participantFindMany.mockResolvedValue(directRows);
+    const startsAt = new Date("2026-10-01T22:30:00Z");
+    const endsAt = new Date("2026-10-02T00:30:00Z");
+    const updateMany = closing([{ ...option, activity: "Bouldering", startsAt, endsAt }]);
+
+    await closeVoting(evt);
+
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "confirmed", startsAt, endsAt, venueSnapshot: expect.objectContaining({ activity: "Bouldering" }) }),
+    }));
+  });
+
+  it("keeps the event's time when the winning option has none", async () => {
+    mocks.participantFindMany.mockResolvedValue(directRows);
+    const updateMany = closing();
+
+    await closeVoting(evt);
+
+    const data = updateMany.mock.calls[0]![0].data;
+    expect(data.status).toBe("confirmed");
+    expect(data).not.toHaveProperty("startsAt");
+    expect(data).not.toHaveProperty("endsAt");
   });
 
   it("stays open while someone hasn't responded, so a ghost passer can still return", async () => {

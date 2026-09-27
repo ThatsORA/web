@@ -40,6 +40,7 @@ import type { MatchingEvent } from "./candidates";
 import {
   createUserHangout,
   openEventsByParticipant,
+  optionData,
   runPipeline,
   timezoneClosestToVenueCentroid,
   triggerMatcher,
@@ -155,6 +156,17 @@ describe("venue snapshots", () => {
       "★4.6 · $$ · max 15 min travel",
       "★4.4 · $$ · max 16 min travel",
     ]);
+  });
+});
+
+describe("optionData (#321)", () => {
+  const base = { ...rankedVenues[0]!, rank: 1, facts_line: "facts", ai_blurb: null };
+  it("stores an option's activity and its own time", () => {
+    expect(optionData({ ...base, activity: "Bouldering", starts_at: "2026-10-01T22:30:00Z", ends_at: "2026-10-02T00:30:00Z" }))
+      .toMatchObject({ activity: "Bouldering", startsAt: new Date("2026-10-01T22:30:00Z"), endsAt: new Date("2026-10-02T00:30:00Z") });
+  });
+  it("leaves them unset for options without them", () => {
+    expect(optionData(base)).toMatchObject({ activity: undefined, startsAt: undefined, endsAt: undefined });
   });
 });
 
