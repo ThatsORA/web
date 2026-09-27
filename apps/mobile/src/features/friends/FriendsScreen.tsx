@@ -1,7 +1,8 @@
 // Owner: Ojas — Friends tab screen: search, friend requests inbox, friends list, and close-friend star toggle.
 // Invariant: privacy — close-friend star status is never revealed to the other person.
+import { useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { View } from "react-native";
+import { RefreshControl, View } from "react-native";
 import { useFriendEvents } from "../event-card";
 import { displayName } from "../../lib/displayName";
 import { Button, Callout, Card, Chip, Screen, Txt, useTheme } from "../../ui";
@@ -34,6 +35,16 @@ export function FriendsScreen() {
   // Live friend:request / friend:accepted on the session socket; also refreshes the inbox.
   useFriendEvents(() => void loadData());
 
+  // Tabs stay mounted, so reload silently whenever the tab regains focus (being unfriended, name changes and
+  // anything missed while backgrounded have no socket event). The hook already loads on mount (#378).
+  const focusedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (focusedOnce.current) void loadData();
+      focusedOnce.current = true;
+    }, [loadData]),
+  );
+
   async function handleUnfriend() {
     const friend = confirmingUnfriend;
     if (!friend || removingUserId.current) return;
@@ -54,7 +65,18 @@ export function FriendsScreen() {
   }
 
   return (
-    <Screen title="Friends">
+    <Screen
+      title="Friends"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void refresh()}
+          tintColor={t.colors.primary}
+          colors={[t.colors.primary]}
+          progressBackgroundColor={t.colors.surface}
+        />
+      }
+    >
       {/* Requests Inbox */}
       <RequestsInbox requests={requests} onRefresh={() => void refresh()} />
 
@@ -66,21 +88,7 @@ export function FriendsScreen() {
 
       {/* Friends List Section */}
       <View style={{ gap: t.spacing.sm, marginTop: t.spacing.md }}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <Txt variant="section">Friends ({friends.length})</Txt>
-          <Button
-            label={refreshing ? "Refreshing…" : "Refresh"}
-            variant="ghost"
-            onPress={() => void refresh()}
-            loading={refreshing}
-          />
-        </View>
+        <Txt variant="section">Friends ({friends.length})</Txt>
 
         {actionError ? (
           <Callout tone="danger" title="Something went wrong">
