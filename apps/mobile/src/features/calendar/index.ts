@@ -6,4 +6,6 @@ export { GoogleCalendarConnect } from "./GoogleCalendarConnect";
 export { busyBlockPayload, createCalendarSync } from "./sync";
 
 export { AvailabilitySettings } from "./AvailabilitySettings";
+export { UnifiedCalendarView } from "./UnifiedCalendarView";
+
 
