@@ -49,6 +49,13 @@ unblock yourself.
 - Merge order when things depend on each other: contract, then backend,
   then frontend. If an endpoint isn't merged yet, stub it using the
   contract's types.
+- Stacked PRs (a PR whose base is another PR's branch): merge from the
+  bottom up, and check that the base says `main` before you merge. GitHub
+  only moves a stacked PR to `main` on its own when the branch below it is
+  deleted on merge. Otherwise the PR merges into a dead branch and its code
+  never reaches `main`, which happened to #243. If the base isn't `main`, use
+  **Edit** next to the PR title, or run
+  `gh pr edit <n> --base main`.
 - Dependencies go only in your own app's `package.json`. On a
   `pnpm-lock.yaml` conflict: rebase on `main`, then run `pnpm install`.
   Never hand-merge the lockfile.
