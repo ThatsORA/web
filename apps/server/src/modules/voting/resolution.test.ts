@@ -49,9 +49,9 @@ describe("resolveEvent", () => {
     expect(r).toEqual({ status: "expired" });
   });
 
-  it("chats when 2+ remain but fewer than 2 votes", () => {
+  it("expires when 2+ remain but fewer than 2 votes", () => {
     const r = resolveEvent({ participants: people("voted", "invited", "ghost_passed"), votes: [{ userId: "u0", optionId: "a" }], options, unusedVenues: unused });
-    expect(r).toEqual({ status: "chatted" });
+    expect(r).toEqual({ status: "expired" });
   });
 
   it("ignores a stale vote from someone who ghost-passed", () => {
@@ -60,7 +60,7 @@ describe("resolveEvent", () => {
       votes: [{ userId: "u0", optionId: "a" }, { userId: "u2", optionId: "a" }],
       options, unusedVenues: unused,
     });
-    expect(r.status).toBe("chatted");
+    expect(r.status).toBe("expired");
   });
 
   it("confirms the plurality winner; backups = losers by votes then route_score, then unused venues", () => {

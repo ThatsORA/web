@@ -42,7 +42,7 @@ export function resolveEvent({ participants, votes, options, unusedVenues }: Res
   if (remaining.size < 2) return { status: "expired" };
 
   const counted = votes.filter((v) => remaining.has(v.userId));
-  if (counted.length < 2) return { status: "chatted" };
+  if (counted.length < 2) return { status: "expired" };
 
   const tally = new Map<string, number>();
   for (const v of counted) tally.set(v.optionId, (tally.get(v.optionId) ?? 0) + 1);

@@ -51,9 +51,13 @@ export function assembleEventCard(event: EventWithCardData, userId: string, now 
   const creator = event.createdById ? users.get(event.createdById) : undefined;
   const invited = event.participants.map((participant) => invitedParticipant(event, participant));
 
+  const effectiveStatus = (event.status === "confirmed" || event.status === "chatted") && scope.attendeeIds.length < 2
+    ? "expired"
+    : event.status;
+
   return EventCardPayload.parse({
     id: event.id,
-    status: event.status,
+    status: effectiveStatus,
     starts_at: event.startsAt.toISOString(),
     ends_at: event.endsAt.toISOString(),
     timezone: event.timezone,
