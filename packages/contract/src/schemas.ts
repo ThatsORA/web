@@ -358,5 +358,44 @@ export const SendChatMessageRequest = z.object({
 });
 export type SendChatMessageRequest = z.infer<typeof SendChatMessageRequest>;
 
+// ---------- nominations (#218) ----------
+export const NominationStatus = z.enum(["pending", "approved", "rejected", "accepted", "declined"]);
+export type NominationStatus = z.infer<typeof NominationStatus>;
+
+export const CreateNominationRequest = z.object({
+  nominee_id: Id,
+});
+export type CreateNominationRequest = z.infer<typeof CreateNominationRequest>;
+
+export const VoteNominationRequest = z.object({
+  approve: z.boolean().default(true),
+});
+export type VoteNominationRequest = z.infer<typeof VoteNominationRequest>;
+
+export const RespondNominationRequest = z.object({
+  accept: z.boolean(),
+});
+export type RespondNominationRequest = z.infer<typeof RespondNominationRequest>;
+
+export const EventNomination = z.object({
+  id: Id,
+  event_id: Id,
+  nominee_id: Id,
+  nominee: PublicUser.optional(),
+  nominated_by_id: Id,
+  status: NominationStatus,
+  votes: z.array(Id),
+  threshold: z.number().int(),
+  eligible_count: z.number().int(),
+  created_at: Instant,
+  resolved_at: Instant.nullable().optional(),
+});
+export type EventNomination = z.infer<typeof EventNomination>;
+
+export const EventNominationsResponse = z.object({
+  nominations: z.array(EventNomination),
+});
+export type EventNominationsResponse = z.infer<typeof EventNominationsResponse>;
+
 // ---------- errors ----------
 export const ApiError = z.object({ error: z.string(), message: z.string().optional() });
