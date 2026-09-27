@@ -37,6 +37,7 @@ export const routes = {
   reportClosed: (id: string) => `/events/${id}/report-closed`,
   changeSpot: (id: string) => `/events/${id}/change-spot`,
   runMatcher: "/internal/run-matcher", // header X-Internal-Secret
+  runScheduler: "/scheduler/run", // POST → 202, runs the scheduler with force; the card arrives over the socket
   expenses: (id: string) => `/events/${id}/expenses`,
   expenseSplit: (id: string) => `/expense-splits/${id}`,
   eventMessages: (id: string) => `/events/${id}/messages`,
