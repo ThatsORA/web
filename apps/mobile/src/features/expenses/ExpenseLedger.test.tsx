@@ -145,8 +145,8 @@ describe("ExpenseLedger", () => {
       .filter((el) => el.type === Button)
       .map((el) => el.props as { label: string; onPress: () => void });
 
-    const markSettledButtons = buttons.filter((b) => b.label === "Mark settled");
-    expect(markSettledButtons.length).toBeGreaterThan(0);
+    const settleButtons = buttons.filter((b) => b.label === "Settle" || b.label === "Mark settled");
+    expect(settleButtons.length).toBeGreaterThan(0);
   });
 
   it("colors net balance green (success) when current user is owed money", () => {

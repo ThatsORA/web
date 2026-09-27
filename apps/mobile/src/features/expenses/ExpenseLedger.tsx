@@ -142,8 +142,9 @@ export function ExpenseLedgerView({
                     </Txt>
                     {isInvolved && (onPressSettleDebt || onConfirmSettleDebt || onSettleDebt || onToggleSplit) ? (
                       <Button
-                        label="Mark settled"
+                        label="Settle"
                         variant="outline"
+                        size="sm"
                         onPress={() => (onPressSettleDebt ? onPressSettleDebt(debt) : handleConfirmSettle(debt))}
                       />
                     ) : null}
