@@ -54,9 +54,13 @@ describe("resolveManualSelection", () => {
     expect(resolveManualSelection("a", [], ["a"], [], [])).toEqual({ error: "invalid_invitees" });
   });
 
-  it("rejects empty and over-capacity selections before matching", () => {
+  it("rejects a creator-only selection before matching", () => {
     expect(resolveManualSelection("a", [], [], [], [])).toEqual({ error: "invalid_selection" });
-    expect(resolveManualSelection("a", ["first"], ["e", "f", "g", "h"], squads,
-      [friend("a", "e"), friend("a", "f"), friend("a", "g"), friend("a", "h")])).toEqual({ error: "invalid_selection" });
+  });
+
+  it("has no group-size cap (#364)", () => {
+    const result = resolveManualSelection("a", ["first"], ["e", "f", "g", "h"], squads,
+      [friend("a", "e"), friend("a", "f"), friend("a", "g"), friend("a", "h")]);
+    expect(result).toMatchObject({ memberIds: ["a", "b", "c", "e", "f", "g", "h"] });
   });
 });

@@ -38,6 +38,11 @@ describe("CreateEventRequest", () => {
     });
   });
 
+  it("accepts more than five invitees (#364)", () => {
+    const invitees = Array.from({ length: 8 }, (_, i) => `11111111-1111-4111-8111-${String(i).padStart(12, "0")}`);
+    expect(CreateEventRequest.parse({ invitee_ids: invitees }).invitee_ids).toHaveLength(8);
+  });
+
   it("rejects an empty selection and malformed IDs", () => {
     expect(CreateEventRequest.safeParse({}).success).toBe(false);
     expect(CreateEventRequest.safeParse({ squad_ids: ["bad"] }).success).toBe(false);
