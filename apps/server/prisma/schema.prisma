@@ -110,6 +110,8 @@ model User {
   emailCodes               EmailCode[]
   chatMessages             ChatMessage[]
   pushTokens               PushToken[]
+  nominationsAsNominee     EventNomination[] @relation("NomineeUser")
+  nominationsAsNominator   EventNomination[] @relation("NominatedByUser")
 
   @@map("users")
 }
@@ -272,6 +274,7 @@ model Event {
   votes        Vote[]
   expenses     Expense[]
   chatMessages ChatMessage[]
+  nominations  EventNomination[]
 
   @@index([groupKey, status])
   @@index([status, voteClosesAt])
@@ -376,4 +379,23 @@ model ChatMessage {
 
   @@index([eventId, createdAt])
   @@map("chat_messages")
+}
+
+model EventNomination {
+  id            String    @id @default(uuid()) @map("_id")
+  eventId       String    @map("event_id")
+  nomineeId     String    @map("nominee_id")
+  nominatedById String    @map("nominated_by_id")
+  status        String    @default("pending")
+  votes         String[]  @default([])
+  threshold     Int
+  createdAt     DateTime  @default(now()) @map("created_at")
+  resolvedAt    DateTime? @map("resolved_at")
+
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  nominee     User  @relation("NomineeUser", fields: [nomineeId], references: [id], onDelete: Cascade)
+  nominatedBy User  @relation("NominatedByUser", fields: [nominatedById], references: [id], onDelete: Cascade)
+
+  @@index([eventId, status])
+  @@map("event_nominations")
 }
