@@ -713,11 +713,9 @@ own. The card shows the viewer's kind as `viewer.pass_kind`.
   `eventAudience()`. Voting, chat and realtime read invite source only
   through `eventParticipants()`, so moving where it's stored changes one
   place.
-- **Not yet covered:** the venue swap (§11, Riley's `venues/router.ts`)
-  still sends `event:venue_changed` and its push to every participant, and
-  its 409 returns a card without the access check. It needs
-  `eventAudience(…, false)` for recipients and `canSeeEvent()` for the
-  caller (follow-up for Riley).
+- The venue swap (§11, Riley's `venues/router.ts`) sends `event:venue_changed`
+  and its push to `eventAudience(…, false)`, and verifies `canSeeEvent()` /
+  `keepsAccess()` for the caller and its 409 card (#333).
 - Before close, progress, notifications and the card look the same for a
   Ghost Pass and a vote; others can't observe the ghost passer losing the
   event afterwards.
@@ -927,6 +925,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-26 | **Event chat for squad hangouts (#212).** Squad hangouts (any squad invitee) get the existing chat (same messages, paging, `event:message` and `ChatScreen`) from creation: while voting, after confirmation, as `chatted`, and read-only after `ends_at`; `expired` closes it. Members are the creator and the squad, squad passers included. Direct invitees are never in a squad or mixed chat, as readers or posters: a poster's name reveals them to everyone in the room, and a direct invitee may only see themselves and the creator, so any room holding direct invitees next to squad members breaks §9. Direct-only events keep the `chatted` fallback exactly as before. One rule, `chatAudience()` on `eventAudience()`, feeds the routes, the socket recipients and the card's new `viewer.chat` (`open`/`read_only`/null), so the client never infers it (#217 shows "Open chat" from it). See §9 "Event chat". |
 | 2026-09-26 | **Decision models: Laya + Jev; Gemini writes text (#196, #227).** Decisions (propose gate, vibe, venue fit) go through `askDecision`: fine-tuned Laya (self-hosted) first, then Jev `jev-1.13.0`, then deterministic code. Gemini only writes blurbs and `match_reason`, and generates Laya's training scenarios; Jev labels them. `rankWithGemini` is removed (#231). Auto-proposals come back weekly (Mon 09:00 America/New_York) plus a "Find a hangout now" demo button (#232/#233), which replaces the close-friend star as the demo trigger. |
 | 2026-09-27 | **Laya deferred; scheduler ships on Jev (#196, #274).** We hit a GPU roadblock, so decisions run on Jev with the deterministic fallback. The training data (#235) and the format alignment (#256) stay. Fine-tuning, eval and hosting move to #274 (#236 and #237 closed). |
+| 2026-09-27 | **Venue swap privacy scoping (#333).** Venue swap routes (`POST /events/:id/report-closed` and `change-spot`) scope socket `event:venue_changed` and Expo push notifications to `eventAudience(…, false)` so that ghost-passers (direct invitees who passed) do not receive swap alerts. Callers must satisfy `canSeeEvent()` / `keepsAccess()`, and the 409 stale-venue response checks `canSeeEvent()` to prevent card leakage. |
 | 2026-09-27 | **Squads only; closeness deferred (#320).** The scheduler (weekly cron, demo button, `/internal/run-matcher`) proposes only to whole squads with 3–6 active members and to Riley's Mixers (#215); friend pairs, cliques and one-drop subsets are skipped. Manual hangouts are unchanged. Ranking is `0.6 · staleness + 0.4 · soonness`; closeness is documented as deferred in §5. The demo trio forms a squad instead of starring each other. |
 | 2026-09-27 | **No fixed activity list in the automated flow (#322).** One broad Places Nearby Search finds leisure places near the squad; code keeps the ones open in the free window, ranks them by worst commute, and times each option at or after the slot start. Gemini only labels each place as an activity with a typical length. Until preference fit (#311), code picks the 3 best by commute with distinct labels (`pickActivities`). Fewer than 3 → the fixed-vibe venues. Manual New hangout keeps the fixed vibes. |
 

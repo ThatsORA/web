@@ -11,12 +11,16 @@ const mocks = vi.hoisted(() => ({
   emitToUsers: vi.fn(),
   pushVenueChanged: vi.fn().mockResolvedValue(undefined),
   assembleEventCard: vi.fn(),
+  canSeeEvent: vi.fn(),
 }));
 vi.mock("../../lib/prisma", () => ({
   prisma: { user: { findUnique: async () => ({ passwordChangedAt: null }) }, $transaction: mocks.transaction, event: { findFirst: mocks.findFirst } },
 }));
 vi.mock("../../realtime", () => ({ emitToUsers: mocks.emitToUsers, pushVenueChanged: mocks.pushVenueChanged }));
-vi.mock("../events/assembleEventCard", () => ({ assembleEventCard: mocks.assembleEventCard }));
+vi.mock("../events/assembleEventCard", () => ({
+  assembleEventCard: mocks.assembleEventCard,
+  canSeeEvent: mocks.canSeeEvent,
+}));
 
 import { signToken } from "../../lib/auth";
 import { venuesRouter } from "./router";
@@ -25,6 +29,7 @@ const alice = "6f48fb35-1518-481d-ab60-cfd2dcc28acf";
 const bob = "975bf379-268d-4b8b-91fc-300a0f96501c";
 const stranger = "83f94e85-0f85-4e96-aa82-541be9e7a878";
 const ghost = "5a1f3ce0-1d77-4d62-9269-efbb13fe8432";
+const squadPasser = "c25c6f37-1234-4b8b-91fc-300a0f96501c";
 const eventId = "2b5232d3-9424-4e7c-8e2f-0299693b54eb";
 const NOW = new Date("2026-10-01T17:30:00Z");
 const backup: EventOption = {
@@ -51,6 +56,11 @@ function event(overrides: Record<string, unknown> = {}) {
     venuePlaceId: "current",
     startsAt: new Date("2026-10-01T18:30:00Z"),
     endsAt: new Date("2026-10-01T20:30:00Z"),
+    voteClosesAt: new Date("2026-10-01T16:30:00Z"),
+    createdById: null,
+    sourceGroupId: null,
+    sourceGroupIds: [],
+    isMixer: false,
     backupVenues: [backup],
     participants: [{ userId: alice, voteStatus: "confirmed" }, { userId: bob, voteStatus: "confirmed" }],
     ...overrides,
@@ -80,6 +90,7 @@ beforeEach(() => {
     event: { findUnique: mocks.findUnique, updateMany: mocks.updateMany },
   }));
   mocks.assembleEventCard.mockReturnValue({ id: eventId, status: "confirmed" });
+  mocks.canSeeEvent.mockReturnValue(true);
 });
 
 function post(body: unknown, userId = alice, id = eventId, action = "report-closed") {
@@ -143,7 +154,7 @@ describe("POST report-closed", () => {
       error: "venue_already_changed",
       event: { id: eventId, status: "confirmed" },
     });
-    expect(mocks.assembleEventCard).toHaveBeenCalledWith(expect.objectContaining({ venuePlaceId: "already-swapped" }), alice);
+    expect(mocks.assembleEventCard).toHaveBeenCalledWith(expect.objectContaining({ venuePlaceId: "already-swapped" }), alice, expect.any(Date));
     expect(mocks.updateMany).not.toHaveBeenCalled();
     expect(mocks.pushVenueChanged).not.toHaveBeenCalled();
   });
@@ -176,6 +187,69 @@ describe("POST report-closed", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true, status: "swapped" });
     expect(mocks.pushVenueChanged).toHaveBeenCalledWith([alice, bob], eventId);
+  });
+
+  it("denies a direct ghost-passer from reporting closed with 403", async () => {
+    mocks.findUnique.mockResolvedValue(event({
+      participants: [
+        { userId: alice, voteStatus: "confirmed" },
+        { userId: ghost, voteStatus: "ghost_passed" },
+      ],
+    }));
+
+    const response = await post({ current_place_id: "current" }, ghost);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "not_a_participant" });
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+    expect(mocks.emitToUsers).not.toHaveBeenCalled();
+    expect(mocks.pushVenueChanged).not.toHaveBeenCalled();
+  });
+
+  it("allows a squad member who visibly passed to report closed", async () => {
+    mocks.findUnique.mockResolvedValue(event({
+      participants: [
+        { userId: alice, voteStatus: "confirmed" },
+        { userId: squadPasser, voteStatus: "ghost_passed", inviteSource: "squad" },
+      ],
+    }));
+
+    const response = await post({ current_place_id: "current" }, squadPasser);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, status: "swapped" });
+    expect(mocks.updateMany).toHaveBeenCalled();
+    expect(mocks.emitToUsers).toHaveBeenCalledWith([alice, squadPasser], "event:venue_changed", { event_id: eventId });
+    expect(mocks.pushVenueChanged).toHaveBeenCalledWith([alice, squadPasser], eventId);
+  });
+
+  it("scopes event:venue_changed and pushVenueChanged to eventAudience, omitting ghost-passers", async () => {
+    mocks.findUnique.mockResolvedValue(event({
+      participants: [
+        { userId: alice, voteStatus: "confirmed" },
+        { userId: bob, voteStatus: "confirmed" },
+        { userId: ghost, voteStatus: "ghost_passed" },
+        { userId: squadPasser, voteStatus: "ghost_passed", inviteSource: "squad" },
+      ],
+    }));
+
+    const response = await post({ current_place_id: "current" }, alice);
+    expect(response.status).toBe(200);
+    expect(mocks.emitToUsers).toHaveBeenCalledWith([alice, bob, squadPasser], "event:venue_changed", { event_id: eventId });
+    expect(mocks.pushVenueChanged).toHaveBeenCalledWith([alice, bob, squadPasser], eventId);
+  });
+
+  it("omits the event card on 409 if the caller cannot see the event", async () => {
+    const current = { ...event(), venuePlaceId: "already-swapped" };
+    mocks.findUnique.mockResolvedValue(current);
+    mocks.findFirst.mockResolvedValue({ ...current, participants: [], options: [], votes: [] });
+    mocks.canSeeEvent.mockReturnValueOnce(false);
+
+    const response = await post({ current_place_id: "current" }, alice);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: "venue_already_changed",
+      event: null,
+    });
+    expect(mocks.assembleEventCard).not.toHaveBeenCalled();
   });
 });
 
@@ -234,5 +308,34 @@ describe("POST change-spot", () => {
       expect(await response.json()).toEqual({ error: "not_a_participant" });
     }
     expect(mocks.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("denies a squad member who passed from changing spot (confirmed only)", async () => {
+    mocks.findUnique.mockResolvedValue(event({
+      participants: [
+        { userId: alice, voteStatus: "confirmed" },
+        { userId: squadPasser, voteStatus: "ghost_passed", inviteSource: "squad" },
+      ],
+    }));
+
+    const response = await change({ current_place_id: "current" }, squadPasser);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "not_a_participant" });
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("scopes change-spot notifications to eventAudience, omitting ghost-passers", async () => {
+    mocks.findUnique.mockResolvedValue(event({
+      participants: [
+        { userId: alice, voteStatus: "confirmed" },
+        { userId: bob, voteStatus: "confirmed" },
+        { userId: ghost, voteStatus: "ghost_passed" },
+      ],
+    }));
+
+    const response = await change({ current_place_id: "current" }, alice);
+    expect(response.status).toBe(200);
+    expect(mocks.emitToUsers).toHaveBeenCalledWith([alice, bob], "event:venue_changed", { event_id: eventId });
+    expect(mocks.pushVenueChanged).toHaveBeenCalledWith([alice, bob], eventId);
   });
 });
