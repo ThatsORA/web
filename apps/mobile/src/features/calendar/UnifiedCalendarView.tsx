@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
 import { EventsListResponse, MyAvailabilityResponse, routes } from "@web/contract";
@@ -14,6 +14,8 @@ export type UnifiedScheduleViewProps = {
   onSelectEvent?: (eventId: string) => void;
   onDeleteBusyBlock?: (blockId: string) => void;
   deletingBlockId?: string | null;
+  /** Buttons shown right-aligned under the header divider (sync, add busy time). */
+  actions?: ReactNode;
 };
 
 export function UnifiedScheduleView({
@@ -23,6 +25,7 @@ export function UnifiedScheduleView({
   onSelectEvent,
   onDeleteBusyBlock,
   deletingBlockId,
+  actions,
 }: UnifiedScheduleViewProps) {
   const theme = useTheme();
 
@@ -99,6 +102,12 @@ export function UnifiedScheduleView({
           </View>
         </View>
       </View>
+
+      {actions ? (
+        <View style={{ flexDirection: "row", justifyContent: "flex-end", flexWrap: "wrap", gap: theme.spacing.sm }}>
+          {actions}
+        </View>
+      ) : null}
 
       {!schedule || schedule.length === 0 ? (
         <Txt color="textMuted">No upcoming free windows, busy blocks or hangouts scheduled.</Txt>
@@ -227,7 +236,7 @@ export function UnifiedScheduleView({
   );
 }
 
-export function UnifiedCalendarView({ onScheduleChanged }: { onScheduleChanged?: () => void }) {
+export function UnifiedCalendarView({ onScheduleChanged, actions }: { onScheduleChanged?: () => void; actions?: ReactNode }) {
   const router = useRouter();
   const [schedule, setSchedule] = useState<ScheduleDayGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -303,6 +312,7 @@ export function UnifiedCalendarView({ onScheduleChanged }: { onScheduleChanged?:
       }}
       onDeleteBusyBlock={handleDeleteBusyBlock}
       deletingBlockId={deletingBlockId}
+      actions={actions}
     />
   );
 }

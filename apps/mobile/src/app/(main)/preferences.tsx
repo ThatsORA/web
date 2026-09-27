@@ -2,6 +2,7 @@
 // Opened from the You tab, never a bottom tab. Only the owner and the decision model ever see these fields.
 // The Budget section (#324) is private too: typical spend per person and how often, per kind of outing.
 import { Me, PatchMeRequest, SpendCategory, SpendOften, routes } from "@web/contract";
+import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 import type { z } from "zod";
@@ -38,7 +39,10 @@ export default function Preferences() {
   }, [load]);
 
   return (
-    <Screen title="Preferences">
+    <Screen
+      title="Preferences"
+      headerRight={<Button label="← Back" variant="ghost" onPress={() => router.back()} />}
+    >
       {loadError ? (
         <>
           <Callout tone="danger" title="Couldn't load your preferences">

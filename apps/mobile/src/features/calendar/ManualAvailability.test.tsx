@@ -59,7 +59,7 @@ describe("ManualAvailabilityView", () => {
   it("opens its own modal from the '+ Manually add busy time' button", () => {
     const onOpen = vi.fn();
     const rendered = elements(ManualAvailabilityView(props({ onOpen })));
-    const add = rendered.find((el) => el.type === Button && (el.props as { label: string }).label === "+ Manually add busy time");
+    const add = rendered.find((el) => el.type === Button && (el.props as { label: string }).label === "+ Add busy time");
     (add?.props as { onPress: () => void }).onPress();
     expect(onOpen).toHaveBeenCalled();
     expect((rendered.find((el) => el.type === Modal)?.props as { visible: boolean }).visible).toBe(false);

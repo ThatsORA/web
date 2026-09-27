@@ -28,7 +28,7 @@ async function connectGoogleCalendar(): Promise<boolean> {
 }
 
 /**
- * One button for the You tab: connects Google Calendar the first time (or after access was revoked),
+ * One button for the You tab's sync modal: connects Google Calendar the first time (or after access was revoked),
  * otherwise pulls its busy times now. `onSynced` runs after either, so the schedule can refresh.
  */
 export function GoogleCalendarSyncButton({ onSynced }: { onSynced?: () => void }) {
@@ -56,7 +56,6 @@ export function GoogleCalendarSyncButton({ onSynced }: { onSynced?: () => void }
     <Button
       label={loading ? "Syncing..." : "Sync with Google Calendar"}
       variant="outline"
-      size="sm"
       onPress={() => void handlePress()}
       disabled={loading}
     />
