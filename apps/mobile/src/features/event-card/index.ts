@@ -4,7 +4,7 @@ export { EmptyFeedCard, EventCard, FindingCard, type CardActions } from "./Event
 export { FIXTURES } from "./fixtures";
 export { useEvents } from "./useEvents";
 export { useEventSocket, useFriendEvents, useSessionSocket } from "./useEventSocket";
-export { filterHangoutsByTab, getRecentlyCancelledCards, hasPendingNotification, pendingNotificationCount, type HangoutTab } from "./feedTabs";
+export { filterHangoutsByTab, getPendingInviteIds, getRecentlyCancelledCards, hasPendingNotification, pendingNotificationCount, type HangoutTab } from "./feedTabs";
 export { HangoutSubTabs } from "./HangoutSubTabs";
 export { CancelledHangoutCard, getCancelledExplanation, type CancelledHangoutCardProps } from "./CancelledHangoutCard";
 export { VotingCountdown } from "./VotingCountdown";

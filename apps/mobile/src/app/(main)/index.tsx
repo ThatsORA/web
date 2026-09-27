@@ -1,6 +1,6 @@
 // Owner: Andy — event feed; renders the event card in every state.
-import { Link, router, useLocalSearchParams } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { Link, router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 import {
   CancelledHangoutCard,
@@ -9,6 +9,7 @@ import {
   FindingCard,
   HangoutSubTabs,
   filterHangoutsByTab,
+  getPendingInviteIds,
   getRecentlyCancelledCards,
   hasPendingNotification,
   useEvents,
@@ -31,6 +32,7 @@ export default function Home() {
   const { cards, swapped, busy, notice, loaded, error, refreshing, reload, actionsFor } = useEvents();
   const [activeTab, setActiveTab] = useState<HangoutTab>("pending");
   const [dismissedCancelledIds, setDismissedCancelledIds] = useState<string[]>([]);
+  const [seenPendingIds, setSeenPendingIds] = useState<string[]>([]);
   const feedState = useFeedEmptyState(cards.length);
   const findNow = useFindNow(cards.map((c) => c.id));
   const finding = feedState === "finding" || findNow.state === "finding";
@@ -38,7 +40,36 @@ export default function Home() {
   const scrollRef = useRef<ScrollView>(null);
   const cardY = useRef<Record<string, number>>({});
 
-  const hasNotification = hasPendingNotification(cards);
+  const cardsRef = useRef(cards);
+  cardsRef.current = cards;
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
+  const markPendingSeen = useCallback(() => {
+    const currentPendingIds = getPendingInviteIds(cardsRef.current);
+    if (currentPendingIds.length > 0) {
+      setSeenPendingIds((prev) => Array.from(new Set([...prev, ...currentPendingIds])));
+    }
+  }, []);
+
+  const handleSelectTab = (tab: HangoutTab) => {
+    if (activeTab === "pending" && tab !== "pending") {
+      markPendingSeen();
+    }
+    setActiveTab(tab);
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        if (activeTabRef.current === "pending") {
+          markPendingSeen();
+        }
+      };
+    }, [markPendingSeen]),
+  );
+
+  const hasNotification = hasPendingNotification(cards, seenPendingIds);
   const filteredCards = filterHangoutsByTab(cards, activeTab);
   const recentlyCancelledCards = getRecentlyCancelledCards(cards, dismissedCancelledIds);
 
@@ -68,7 +99,7 @@ export default function Home() {
 
       <HangoutSubTabs
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={handleSelectTab}
         hasNotification={hasNotification}
       />
 

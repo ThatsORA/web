@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterHangoutsByTab, getRecentlyCancelledCards, hasPendingNotification, pendingNotificationCount } from "./feedTabs";
+import { filterHangoutsByTab, getPendingInviteIds, getRecentlyCancelledCards, hasPendingNotification, pendingNotificationCount } from "./feedTabs";
 import type { EventCardPayload } from "@web/contract";
 
 const mockCard = (id: string, status: EventCardPayload["status"], my_status: EventCardPayload["my_status"]): Partial<EventCardPayload> => ({
@@ -56,6 +56,27 @@ describe("feedTabs", () => {
 
     expect(hasPendingNotification(noUnvotedCards)).toBe(false);
     expect(pendingNotificationCount(noUnvotedCards)).toBe(0);
+  });
+
+  it("dismisses notification dot for seen pending hangouts and reappears on new invites", () => {
+    expect(getPendingInviteIds(cards)).toEqual(["c1"]);
+    expect(hasPendingNotification(cards)).toBe(true);
+
+    expect(hasPendingNotification(cards, ["c1"])).toBe(false);
+    expect(pendingNotificationCount(cards, ["c1"])).toBe(0);
+
+    const withNewCard = [
+      ...cards,
+      mockCard("c-new", "voting", "invited") as EventCardPayload,
+    ];
+    expect(getPendingInviteIds(withNewCard)).toEqual(["c1", "c-new"]);
+    expect(hasPendingNotification(withNewCard, ["c1"])).toBe(true);
+    expect(pendingNotificationCount(withNewCard, ["c1"])).toBe(1);
+
+    expect(hasPendingNotification(withNewCard, ["c1", "c-new"])).toBe(false);
+    expect(pendingNotificationCount(withNewCard, ["c1", "c-new"])).toBe(0);
+
+    expect(hasPendingNotification(withNewCard, new Set(["c1", "c-new"]))).toBe(false);
   });
 
   it("includes active late invites before start time in notification count", () => {
