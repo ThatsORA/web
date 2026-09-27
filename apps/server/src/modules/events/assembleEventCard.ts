@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { EventCardPayload, EventOption, optionFromRow, type VoteStatus } from "@web/contract";
 import { publicUserSelect, toPublicUser } from "../auth/helpers";
+import { viewerScope } from "./invitations";
 
 export type EventWithCardData = Prisma.EventGetPayload<{
   include: {
@@ -8,16 +9,23 @@ export type EventWithCardData = Prisma.EventGetPayload<{
     options: true;
     votes: { select: { userId: true; optionId: true } };
   };
-}> & {
-  created_by?: { id: string; username: string; displayName?: string | null } | null;
-  creator?: { id: string; username: string; displayName?: string | null } | null;
-};
+}>;
 
-/** Only the caller's option is exposed while voting. Every field is allowlisted by the contract. */
+/** Keeps travel times only for people the viewer may see; the keys would otherwise leak the roster. */
+function scopedTravel(option: EventOption, visible: ReadonlySet<string>): EventOption {
+  return { ...option, travel_minutes: Object.fromEntries(Object.entries(option.travel_minutes).filter(([id]) => visible.has(id))) };
+}
+
+/**
+ * The card as `userId` may see it (#206): people, attendees and travel times go through viewerScope(),
+ * and only the caller's option is exposed while voting. Every field is allowlisted by the contract.
+ */
 export function assembleEventCard(event: EventWithCardData, userId: string): EventCardPayload {
+  const scope = viewerScope(event, userId);
+  const visible = new Set(scope.people.map((person) => person.userId));
+  const users = new Map(event.participants.map((participant) => [participant.userId, participant.user]));
+  const mine = event.participants.find((participant) => participant.userId === userId)!;
   const options = event.options.map(optionFromRow).sort((a, b) => a.rank - b.rank);
-  const mine = event.participants.find((participant) => participant.userId === userId);
-  if (!mine) throw new Error("Event card requested by non-participant");
   const resolved = event.status !== "voting";
   const myStatus: VoteStatus = mine.voteStatus;
   const myVote = event.votes.find((vote) => vote.userId === userId);
@@ -28,11 +36,11 @@ export function assembleEventCard(event: EventWithCardData, userId: string): Eve
   const venue = event.venueSnapshot
     ? EventOption.parse(event.venueSnapshot)
     : event.venuePlaceId ? options.find((option) => option.place_id === event.venuePlaceId) ?? null : null;
-  const tallies = resolved
+  // Tallies beside a roster the viewer can't fully see would let them count hidden passes.
+  const tallies = resolved && scope.seesEveryone
     ? Object.fromEntries(options.map((option) => [option.id!, event.votes.filter((vote) => vote.optionId === option.id).length]))
     : null;
-
-  const createdBy = event.created_by ?? event.creator;
+  const creator = event.createdById ? users.get(event.createdById) : undefined;
 
   return EventCardPayload.parse({
     id: event.id,
@@ -41,17 +49,22 @@ export function assembleEventCard(event: EventWithCardData, userId: string): Eve
     ends_at: event.endsAt.toISOString(),
     timezone: event.timezone,
     vibe_tag: event.vibeTag,
-    participants: event.participants.map((participant) => toPublicUser(participant.user)),
-    options,
+    viewer: scope.viewer,
+    participants: scope.people.map((person) => ({
+      ...toPublicUser(users.get(person.userId)!),
+      invite_source: person.inviteSource,
+      passed: person.passed,
+    })),
+    options: options.map((option) => scopedTravel(option, visible)),
     progress: { responded, total: event.participants.length },
     my_status: myStatus,
     my_option_id: mine.voteStatus === "ghost_passed" ? null : myVote?.optionId ?? null,
     vote_closes_at: event.voteClosesAt.toISOString(),
-    created_by: createdBy ? toPublicUser(createdBy) : null,
+    created_by: creator ? toPublicUser(creator) : null,
     outcome: resolved ? {
-      venue,
+      venue: venue && scopedTravel(venue, visible),
       venue_status: event.venueStatus,
-      attendees: event.participants.filter((participant) => participant.voteStatus !== "ghost_passed").map((participant) => toPublicUser(participant.user)),
+      attendees: scope.attendeeIds.map((id) => toPublicUser(users.get(id)!)),
       tallies,
     } : null,
   });

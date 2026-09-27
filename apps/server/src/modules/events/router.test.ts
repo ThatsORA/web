@@ -27,7 +27,7 @@ const instant = new Date("2026-10-01T18:30:00Z");
 const option = (id: string, rank: number) => ({
   id, eventId, rank, placeId: `place-${rank}`, name: `Venue ${rank}`,
   lat: 25.75, lng: -80.37, primaryType: "restaurant", priceLevel: 2,
-  rating: 4.6, userRatingCount: 100, travelMinutes: { [alice]: 10, [bob]: 12 },
+  rating: 4.6, userRatingCount: 100, travelMinutes: { [alice]: 10, [bob]: 12, [ghost]: 9 },
   maxTravelMin: 12, routeScore: 14.2, factsLine: "★4.6 · $$ · max 12 min travel", aiBlurb: null,
 });
 
@@ -116,11 +116,12 @@ const option = (id: string, rank: number) => ({
 const event = () => ({
   id: eventId, status: "voting", startsAt: instant, endsAt: new Date("2026-10-01T20:30:00Z"),
   timezone: "America/New_York", vibeTag: "dinner", voteClosesAt: new Date("2026-10-01T17:00:00Z"),
-  venuePlaceId: null, venueStatus: "open",
+  venuePlaceId: null, venueStatus: "open", createdById: alice,
+  // alice made it and invited bob and ghost directly (#206).
   participants: [
-    { userId: alice, voteStatus: "voted", user: { id: alice, username: "alice" } },
-    { userId: bob, voteStatus: "voted", user: { id: bob, username: "bob" } },
-    { userId: ghost, voteStatus: "ghost_passed", user: { id: ghost, username: "ghost" } },
+    { userId: alice, voteStatus: "voted", inviteSource: "creator", squadIds: [], user: { id: alice, username: "alice" } },
+    { userId: bob, voteStatus: "voted", inviteSource: "direct", squadIds: [], user: { id: bob, username: "bob" } },
+    { userId: ghost, voteStatus: "ghost_passed", inviteSource: "direct", squadIds: [], user: { id: ghost, username: "ghost" } },
   ],
   options: [option(firstOption, 1), option(secondOption, 2)],
   votes: [{ userId: alice, optionId: firstOption }, { userId: bob, optionId: secondOption }],
@@ -202,6 +203,44 @@ describe("events router", () => {
     mocks.findFirst.mockResolvedValueOnce({ ...event(), status: "confirmed", venuePlaceId: "place-4", venueSnapshot: backup });
     const body = EventCardPayload.parse(await (await get(`/events/${eventId}`)).json());
     expect(body.outcome?.venue).toMatchObject({ place_id: "place-4", facts_line: backup.facts_line, travel_minutes: backup.travel_minutes });
+  });
+
+  it("shows the creator every direct invitee and every attendee, so only they can infer a ghost pass", async () => {
+    mocks.findFirst.mockResolvedValueOnce({ ...event(), status: "confirmed", venuePlaceId: "place-1" });
+    const body = EventCardPayload.parse(await (await get(`/events/${eventId}`, alice)).json());
+    expect(body.viewer).toEqual({ invite_source: "creator", pass_kind: "visible", full_roster: true });
+    expect(body.participants.map((p) => [p.id, p.invite_source, p.passed])).toEqual([
+      [alice, "creator", false], [bob, "direct", null], [ghost, "direct", null],
+    ]);
+    expect(body.outcome?.attendees.map((person) => person.id)).toEqual([alice, bob]);
+  });
+
+  it("never gives a direct invitee the roster, the ghost passer, or tallies that count them", async () => {
+    for (const status of ["voting", "confirmed"] as const) {
+      mocks.findFirst.mockResolvedValueOnce({ ...event(), status, venuePlaceId: status === "confirmed" ? "place-1" : null });
+      const body = EventCardPayload.parse(await (await get(`/events/${eventId}`, bob)).json());
+      expect(body.viewer).toEqual({ invite_source: "direct", pass_kind: "ghost", full_roster: false });
+      expect(body.created_by?.id).toBe(alice);
+      expect(body.participants.map((p) => [p.id, p.passed])).toEqual([[alice, false], [bob, false]]);
+      expect(body.options[0]?.travel_minutes).toEqual({ [alice]: 10, [bob]: 12 });
+      expect(JSON.stringify(body)).not.toContain(ghost);
+      if (status === "confirmed") {
+        expect(body.outcome?.attendees.map((person) => person.id)).toEqual([alice, bob]);
+        expect(body.outcome?.venue?.travel_minutes).toEqual({ [alice]: 10, [bob]: 12 });
+        expect(body.outcome?.tallies).toBeNull();
+      }
+    }
+    const list = EventsListResponse.parse(await (await get("/events", bob)).json());
+    expect(JSON.stringify(list)).not.toContain(ghost);
+  });
+
+  it("gives nobody a creator view of an automated hangout", async () => {
+    mocks.findFirst.mockResolvedValueOnce({ ...event(), createdById: null, participants: event().participants.map((p) => ({ ...p, inviteSource: "direct" })) });
+    const body = EventCardPayload.parse(await (await get(`/events/${eventId}`, alice)).json());
+    expect(body.created_by).toBeNull();
+    expect(body.viewer.full_roster).toBe(false);
+    expect(body.participants.map((p) => p.id)).toEqual([alice]);
+    expect(body.progress).toEqual({ responded: 3, total: 3 });
   });
 
   it("requires authentication and hides events from nonparticipants", async () => {
