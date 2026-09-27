@@ -8,7 +8,7 @@ import { curateVenues, factsLine } from "../intelligence/curateVenues";
 import { scheduleDecisions } from "../intelligence/scheduleDecisions";
 import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
 import { openVoting } from "../voting/lifecycle";
-import { candidateGroups, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
+import { candidateGroups, groupKey, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
 import type { ResolvedManualSelection } from "./manualSelection";
 import { mixerCandidates } from "./mixerCandidates";
 import { classifySlot, earliestTimezone, feasibleSlots, formatTimeHHMM, freeWindows, getLocalParts, type ClassifiedSlot } from "./timeMath";
@@ -132,9 +132,13 @@ export async function runPipeline(now = new Date(), { force = false }: { force?:
     where: { id: { in: referencedUserIds } },
     select: { id: true, timezone: true },
   });
-  const ordinaryGroups = candidateGroups(identities, friendships, explicitGroups);
+  // Squads + Mixers (#320): whole squads (3–6 active members) and Riley's Mixers (#215). Friend pairs,
+  // cliques and one-drop subsets are skipped. Manual hangouts never come through here.
+  const squadKeys = new Set(explicitGroups.map((group) =>
+    groupKey(group.members.filter((member) => member.status === "active").map((member) => member.userId))));
+  const squads = candidateGroups(identities, [], explicitGroups).filter((group) => squadKeys.has(group.groupKey));
   const possibleMixers = mixerCandidates(identities, friendships, [], now);
-  const groupsByKey = new Map(ordinaryGroups.map((group) => [group.groupKey, group]));
+  const groupsByKey = new Map(squads.map((group) => [group.groupKey, group]));
   for (const { group } of possibleMixers) {
     // A selected Squad keeps its provenance; otherwise a 4–6 person eligible group is a Mixer.
     if (!groupsByKey.get(group.groupKey)?.sourceGroupId) groupsByKey.set(group.groupKey, group);

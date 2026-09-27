@@ -9,8 +9,7 @@ and wherever they disagree, this doc wins.
 ## Concept
 
 Web removes the coordination work from hanging out. It reads when friends
-are busy, finds free windows that overlap across mutual close-friend
-groups, suggests venues that fit the moment and are fair for everyone to
+are busy, finds free windows that overlap across each squad, suggests venues that fit the moment and are fair for everyone to
 get to, and settles the plan with an anonymous vote. What sets it apart
 from Partiful and Timeful is that nobody has to create the event: Web
 proposes hangouts on its own in the background.
@@ -29,21 +28,21 @@ using seeded accounts.
 3. **Quick-tap favorites (A).** Tap coffee, tacos, casual dining.
 4. **Friend requests (A).** Search for Riley and Ojas and tap Add friend;
    each shows "Requested". Friendship is visible, like any social app.
-5. **Accept + silent star (B, C, A).** Riley and Ojas accept the request
-   on their Friends tab and star the presenter as a close friend; A opens
-   Friends and stars them back. Nobody is told who starred whom. Once the
-   last star lands, all three form a mutual clique (Riley and Ojas are
-   already mutual in the seed data). The star no longer triggers the
-   matcher (#197).
+5. **Accept + join the squad (B, C, A).** Riley and Ojas accept the
+   request on their Friends tab. Riley opens Squads and invites the
+   presenter to the seeded squad **Thursday crew** (Riley + Ojas); A taps
+   **Join** and is active at once (#275). The scheduler proposes to
+   squads only (#320), so the squad forms the group; close-friend stars
+   no longer do.
 6. **The proposal appears (A, B, C).** The presenter taps **Find a hangout
-   now** (`POST /scheduler/run`, #232/#233). An event card arrives on all
-   three phones within a few seconds (a "Finding a time…" state covers the
+   now** (`POST /scheduler/run`, #232/#233). An event card for the squad
+   arrives on all three phones within a few seconds (a "Finding a time…" state covers the
    wait): "Thu · 6:30–8:30pm · Dinner". It shows
    three venue options. Each has an AI blurb plus a line of facts, for
    example "★4.6 · $$ · max 14 min travel".
-7. **Ghost Pass (C).** Ojas taps Ghost Pass. Every phone shows "2 of 3
-   responded". A ghost pass looks exactly like a vote while voting is
-   open.
+7. **Pass (C).** Ojas taps Pass. Every phone shows "2 of 3 responded".
+   In a squad hangout the pass is visible ("can't make it", #210); a
+   Ghost Pass only exists for direct invites.
 8. **Vote (A, B).** Both vote, voting closes early because everyone has
    responded, and the card flips to **Confirmed**. It shows the venue,
    each person's travel time, and a map pin.
@@ -51,12 +50,10 @@ using seeded accounts.
 > **Superseded by #206 (per-viewer privacy).** Steps 6–8 describe the
 > original shared participant card, where every phone listed everyone and,
 > after close, an attendee list that showed who ghost passed by their
-> absence. That no longer holds. The demo proposal is an automated
-> close-friend hangout, so each person is a direct invite with no human
-> creator view: every phone shows only its owner in "who", "your" travel
-> time, and "2 of 3 responded"; after close nobody sees an attendee list
-> or tallies that could reveal Ojas's Ghost Pass. A squad hangout (or a
-> hangout someone made) shows more; see §9 "Who sees what".
+> absence. That no longer holds. Since #320 the demo proposal is an
+> automated squad hangout with no human creator: all three are squad
+> invitees, so each phone sees the whole squad, their passes are visible,
+> and the squad gets chat (#212). See §9 "Who sees what".
 9. **Finale: "It's closed" (B).** Riley taps the button, and all phones
    swap instantly to the backup venue: "Swapped to X · max 11 min".
 
@@ -66,7 +63,7 @@ chat. That is the reason they're stretch work or cut below.
 ## Scope
 
 **Build (the demo depends on these):** sign-up and onboarding, busy-block
-sync from the device calendar, mutual close friends, the matcher (free
+sync from the device calendar, friends and squads, the matcher (free
 windows, group formation, vibe and slot, deterministic ranking, the
 decision-model propose gate), venue pipeline (Places, then route matrix,
 then the decision-model fit filter and Gemini blurbs),
@@ -96,7 +93,6 @@ anonymous voting over Socket.io, Ghost Pass, resolution, and
 - Server-side Google or Apple calendar OAuth
 - Gemini closure-risk ordering of backups
 - Fallback group chat
-- Squad management and consent UI (explicit groups are seeded only). Built after the demo in #76.
 - Custom expense splits
 - Push notifications (in-app sockets only)
 
@@ -351,6 +347,13 @@ payloads are deliberately thin: on any event, the client refetches
 
 ### 2. Candidate groups (Riley)
 
+**Automated proposals use whole squads and Mixers (#320, #215).**
+`runPipeline` keeps the explicit-group candidates whose members are
+exactly the squad's active members (3–6), plus Riley's anonymous Mixers
+(`mixerCandidates`, 4–6 mutual friends within two hops). Friend pairs,
+cliques and one-drop subsets stay in `candidateGroups()` but are filtered
+out there. Manual hangouts (`createUserHangout`) don't use this step.
+
 A candidate group has 2–6 members and comes from one of four sources:
 - **Explicit groups:** every member of each explicit group.
 - **Mutual pairs:** each mutual close-friend edge. One-sided adds never
@@ -361,8 +364,7 @@ A candidate group has 2–6 members and comes from one of four sources:
   with one member dropped.
 
 Groups are deduplicated by `group_key`. Members may span timezones; each
-candidate retains every member's IANA timezone. At equal base score, pairs
-get a 0.85 size factor so groups of 3 or more rank first.
+candidate retains every member's IANA timezone.
 
 **Cooldown:** a `group_key` isn't re-proposed within `COOLDOWN_HOURS`
 after an event for it ends as `expired` or `chatted`.
@@ -432,11 +434,22 @@ whose local wall clock is earliest at the start of the free window.
 Each (group, slot) candidate gets a score:
 
 ```
-base_score = 0.40 · closeness   (mean interaction_score over member pairs, 0..1)
-           + 0.35 · staleness   (min(days since last hangout, 14) / 14; never = 1)
-           + 0.25 · soonness    (1 − hours_until_start / 168)
-score = base_score × 0.85 for pairs; base_score for groups of 3 or more
+score = 0.6 · staleness   (min(days since last hangout, 14) / 14; never = 1)
+      + 0.4 · soonness    (1 − hours_until_start / 168)
 ```
+
+Candidates are whole squads (3+ members), so there is no pair size factor.
+
+**Closeness is deferred (#320).** The score used to be
+`0.40 · closeness + 0.35 · staleness + 0.25 · soonness`, with a 0.85
+factor for pairs. Closeness was the mean `interaction_score` over member
+pairs (a missing pair counted as 0), plus 0.05 for a group from an
+explicit group, so a squad beat an identical ad-hoc clique. It's off
+because the scheduler proposes to squads only, so the squad bonus no
+longer separates anything, and `interaction_score` history is too sparse
+to rank one squad above another. To turn it back on, restore the
+closeness term in `rankCandidates` (`matching/candidates.ts`) with those
+weights; `friendships.interaction_score` is still stored.
 
 Ties go to the earlier start, then to `group_key` in lexical order. This
 deterministic score builds a top-10 shortlist.
@@ -572,7 +585,7 @@ events. Older events still derive it from the event's `created_by_id` and
 - **`squad`**: everyone else in an event with a `source_group_id` (today,
   an automated squad proposal).
 - **`direct`**: everyone else: people picked for a user-made hangout, and
-  automated proposals outside a squad (close-friend cliques, later Mixers
+  automated proposals outside a squad (none since #320; later Mixers
   #215/#220).
 
 Mixed events store all selected squad IDs in `events.source_group_ids` and
@@ -801,6 +814,8 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 - **Seed (`scripts/seed.ts`, Riley):**
   - Riley and Ojas are mutual in `friendships` (interaction 0.8, last
     hangout 10 days ago).
+  - Riley and Ojas share the squad **Thursday crew**; the presenter joins
+    it in demo step 5 (#320).
   - Their busy blocks cover the whole horizon except one window, computed
     relative to the seed date: the first Thursday at least 24 hours away,
     18:15–21:00 local. After the 15-minute padding that leaves
@@ -865,6 +880,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-26 | **Decision models: Laya + Jev; Gemini writes text (#196, #227).** Decisions (propose gate, vibe, venue fit) go through `askDecision`: fine-tuned Laya (self-hosted) first, then Jev `jev-1.13.0`, then deterministic code. Gemini only writes blurbs and `match_reason`, and generates Laya's training scenarios; Jev labels them. `rankWithGemini` is removed (#231). Auto-proposals come back weekly (Mon 09:00 America/New_York) plus a "Find a hangout now" demo button (#232/#233), which replaces the close-friend star as the demo trigger. |
 | 2026-09-27 | **Laya deferred; scheduler ships on Jev (#196, #274).** We hit a GPU roadblock, so decisions run on Jev with the deterministic fallback. The training data (#235) and the format alignment (#256) stay. Fine-tuning, eval and hosting move to #274 (#236 and #237 closed). |
 | 2026-09-27 | **Venue swap privacy scoping (#333).** Venue swap routes (`POST /events/:id/report-closed` and `change-spot`) scope socket `event:venue_changed` and Expo push notifications to `eventAudience(…, false)` so that ghost-passers (direct invitees who passed) do not receive swap alerts. Callers must satisfy `canSeeEvent()` / `keepsAccess()`, and the 409 stale-venue response checks `canSeeEvent()` to prevent card leakage. |
+| 2026-09-27 | **Squads only; closeness deferred (#320).** The scheduler (weekly cron, demo button, `/internal/run-matcher`) proposes only to whole squads with 3–6 active members and to Riley's Mixers (#215); friend pairs, cliques and one-drop subsets are skipped. Manual hangouts are unchanged. Ranking is `0.6 · staleness + 0.4 · soonness`; closeness is documented as deferred in §5. The demo trio forms a squad instead of starring each other. |
 | 2026-09-27 | **Chat intent suggestions (#325).** After a chat message is saved, `askDecision` classifies it in the background (`chatIntentRequest`: the message text only, capped at 300 chars). At ≥ 0.75 on `cant_make_it` or `change_spot` the sender alone gets `chat:suggestion` (`{ event_id, message_id, kind }`) and a chip that runs the existing Pass or Change spot action; `running_late` gets a hint chip; `logistics` and `just_chatting` get nothing. Sender-only because a direct invitee's Pass is a Ghost Pass. Nothing is stored; a failed call does nothing. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)

@@ -86,6 +86,12 @@ const friendships = IDS.flatMap((userLowId, index) =>
     lastHangoutAt: new Date(NOW.getTime() - 10 * 24 * 60 * 60 * 1_000),
   })),
 );
+const squad = {
+  id: "squad-1",
+  name: "Thursday crew",
+  createdBy: IDS[0]!,
+  members: IDS.map((userId) => ({ userId, status: "active" })),
+};
 const rankedVenues: RankedVenue[] = [
   { place_id: "place-campus-bistro", name: "Campus Bistro", lat: 25.756, lng: -80.376, primary_type: "restaurant", price_level: 2, rating: 4.5, user_rating_count: 180, travel_minutes: { [IDS[0]!]: 8, [IDS[1]!]: 11, [IDS[2]!]: 14 }, max_travel_min: 14, route_score: 17.3 },
   { place_id: "place-sweetwater-kitchen", name: "Sweetwater Kitchen", lat: 25.763, lng: -80.373, primary_type: "restaurant", price_level: 2, rating: 4.6, user_rating_count: 240, travel_minutes: { [IDS[0]!]: 10, [IDS[1]!]: 12, [IDS[2]!]: 15 }, max_travel_min: 15, route_score: 18.7 },
@@ -97,7 +103,7 @@ const rankedVenues: RankedVenue[] = [
 function resetData() {
   mocks.userFindMany.mockResolvedValue(users);
   mocks.friendshipFindMany.mockResolvedValue(friendships);
-  mocks.explicitGroupFindMany.mockResolvedValue([]);
+  mocks.explicitGroupFindMany.mockResolvedValue([squad]);
   mocks.eventFindMany.mockResolvedValue([]);
   mocks.eventFindFirst.mockResolvedValue(null);
   mocks.eventCreate.mockResolvedValue({ id: "event-1" });
@@ -200,6 +206,7 @@ describe("matcher pipeline", () => {
       })),
     };
     mocks.userFindMany.mockResolvedValue([...users, fourth]);
+    mocks.explicitGroupFindMany.mockResolvedValue([]); // no squad, so the Mixer is the only candidate
     mocks.friendshipFindMany.mockResolvedValue([
       friendships[0]!, friendships[1]!,
       { ...friendships[0]!, userHighId: fourthId },
@@ -247,12 +254,7 @@ describe("matcher pipeline", () => {
     });
     expect(mocks.eventFindMany).toHaveBeenNthCalledWith(2, {
       where: {
-        groupKey: { in: [
-          `${IDS[0]},${IDS[1]}`,
-          IDS.join(","),
-          `${IDS[0]},${IDS[2]}`,
-          `${IDS[1]},${IDS[2]}`,
-        ] },
+        groupKey: { in: [IDS.join(",")] },
         status: { in: ["expired", "chatted"] },
         resolvedAt: { gte: new Date(NOW.getTime() - env.COOLDOWN_HOURS * 60 * 60 * 1_000) },
       },
@@ -280,7 +282,7 @@ describe("matcher pipeline", () => {
     expect(create.select).toEqual({ id: true });
     expect(create.data).toMatchObject({
       groupKey: IDS.join(","),
-      sourceGroupId: null,
+      sourceGroupId: "squad-1",
       status: "voting",
       startsAt: new Date("2026-10-01T22:30:00Z"),
       endsAt: new Date("2026-10-02T00:30:00Z"),
@@ -310,6 +312,16 @@ describe("matcher pipeline", () => {
     expect(create.data.options.create).toHaveLength(3);
     expect(mocks.openVoting).toHaveBeenCalledWith("event-1");
     expect(mocks.eventCreate.mock.invocationCallOrder[0]).toBeLessThan(mocks.openVoting.mock.invocationCallOrder[0]!);
+  });
+
+  it("proposes to whole squads only: a close-friend clique or a squad with an invited member gets nothing", async () => {
+    mocks.explicitGroupFindMany.mockResolvedValue([]);
+    await runPipeline(NOW);
+    const invited = { ...squad, members: squad.members.map((m, i) => (i === 2 ? { ...m, status: "invited" } : m)) };
+    mocks.explicitGroupFindMany.mockResolvedValue([invited]);
+    await runPipeline(NOW);
+    expect(mocks.fetchCandidates).not.toHaveBeenCalled();
+    expect(mocks.eventCreate).not.toHaveBeenCalled();
   });
 
   it("stores the curated match reason on the event", async () => {
