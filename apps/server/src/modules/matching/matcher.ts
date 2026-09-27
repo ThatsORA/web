@@ -6,6 +6,7 @@ import { env } from "../../env";
 import { prisma } from "../../lib/prisma";
 import { curateVenues, factsLine } from "../intelligence/curateVenues";
 import { fetchCandidates, type VenueMember } from "../venues/liveVenues";
+import { resolveInvites } from "../events/invitations";
 import { openVoting } from "../voting/lifecycle";
 import { candidateGroups, rankCandidates, selectRankedCandidates, type GroupSlot, type MatchingEvent } from "./candidates";
 import { rankWithGemini } from "./rankWithGemini";
@@ -224,8 +225,12 @@ export async function runPipeline(now = new Date()): Promise<void> {
           matchReason: candidate.matchReason,
           backupVenues: unusedVenueSnapshots(rankedVenues, options),
           voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
+          // Automated: no creator. A squad's proposal uses squad rules; a close-friend proposal is direct invites (#206).
           participants: {
-            create: candidate.group.memberIds.map((userId) => ({ userId, voteStatus: "invited" })),
+            create: resolveInvites(candidate.group.sourceGroupId
+              ? { creatorId: null, squads: [{ id: candidate.group.sourceGroupId, memberIds: candidate.group.memberIds }] }
+              : { creatorId: null, directIds: candidate.group.memberIds })
+              .map((invite) => ({ ...invite, voteStatus: "invited" })),
           },
           options: { create: options.map(optionData) },
         },
@@ -362,7 +367,8 @@ export async function createUserHangout(
         backupVenues: unusedVenueSnapshots(rankedVenues, options),
         voteClosesAt: new Date(now.getTime() + env.VOTE_TIMEOUT_SEC * 1_000),
         participants: {
-          create: memberIds.map((userId) => ({ userId, voteStatus: "invited" })),
+          create: resolveInvites({ creatorId: callerId, directIds: inviteeIds })
+            .map((invite) => ({ ...invite, voteStatus: "invited" })),
         },
         options: { create: options.map(optionData) },
       },

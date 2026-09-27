@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EventCardPayload, ExpoPushToken, LoginRequest, SignupRequest, optionFromRow, type OptionRowLike } from "./schemas";
+import { EventCreatedPayload, EventMessagePayload, EventProgressPayload, EventResolvedPayload, EventVenueChangedPayload } from "./socket";
 
 describe("EventCardPayload match reason", () => {
   it("accepts null or a reason up to 90 characters", () => {
@@ -75,4 +76,13 @@ describe("ExpoPushToken", () => {
       expect(ExpoPushToken.safeParse(token).success).toBe(false);
     },
   );
+});
+
+describe("event socket payloads (#206)", () => {
+  it("never name a person, so no socket event can reveal a roster or a ghost pass", () => {
+    const allowed = ["event_id", "responded", "total", "status"];
+    for (const payload of [EventCreatedPayload, EventProgressPayload, EventResolvedPayload, EventVenueChangedPayload, EventMessagePayload]) {
+      expect(Object.keys(payload.shape).filter((key) => !allowed.includes(key))).toEqual([]);
+    }
+  });
 });

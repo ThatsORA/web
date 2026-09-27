@@ -241,8 +241,9 @@ describe("matcher pipeline", () => {
       }),
     ]);
     expect(create.data.backupVenues.every((venue: { id?: string }) => venue.id === undefined)).toBe(true);
+    // A close-friend proposal has no creator: everyone is a direct invite (#206).
     expect(create.data.participants.create).toEqual(
-      IDS.map((userId) => ({ userId, voteStatus: "invited" })),
+      IDS.map((userId) => ({ userId, inviteSource: "direct", squadIds: [], voteStatus: "invited" })),
     );
     expect(create.data.options.create).toHaveLength(3);
     expect(mocks.openVoting).toHaveBeenCalledWith("event-1");
@@ -327,6 +328,10 @@ describe("createUserHangout", () => {
       createdById: callerId,
       status: "voting",
     });
+    expect(createCall.data.participants.create).toEqual([
+      { userId: callerId, inviteSource: "creator", squadIds: [], voteStatus: "invited" },
+      ...inviteeIds.map((userId) => ({ userId, inviteSource: "direct", squadIds: [], voteStatus: "invited" })),
+    ]);
     expect(mocks.openVoting).toHaveBeenCalledWith("event-1");
   });
 

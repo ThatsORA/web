@@ -57,9 +57,7 @@ eventsRouter.post(routes.events, requireAuth, express.json(), async (req, res) =
 
   if (!event) return res.status(500).json({ error: "creation_failed" });
 
-  // Event has no creator relation yet (#154); the caller is the creator, so take them from the participants.
-  const createdBy = event.participants.find((p) => p.userId === userId)?.user ?? null;
-  res.status(201).json(EventCardPayload.parse(assembleEventCard({ ...event, created_by: createdBy }, userId)));
+  res.status(201).json(EventCardPayload.parse(assembleEventCard(event, userId)));
 });
 
 

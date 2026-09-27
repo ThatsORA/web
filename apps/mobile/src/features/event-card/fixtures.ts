@@ -8,6 +8,9 @@ export const ME = { id: id(1), username: "presenter", display_name: "presenter" 
 const RILEY = { id: id(2), username: "riley", display_name: "riley" };
 const OJAS = { id: id(3), username: "ojas", display_name: "ojas" };
 const EVERYONE = [ME, RILEY, OJAS];
+// A squad hangout (#206): squad members see each other and each other's visible pass.
+const inSquad = (passed: typeof EVERYONE) =>
+  EVERYONE.map((p) => ({ ...p, invite_source: "squad" as const, passed: passed.includes(p) }));
 
 function option(n: number, name: string, facts: string, blurb: string | null, minutes: [number, number, number]): EventOption {
   return {
@@ -44,7 +47,8 @@ const voting: EventCardPayload = {
   ends_at: "2026-10-01T20:30:00-04:00",
   timezone: "America/New_York",
   vibe_tag: "dinner",
-  participants: EVERYONE,
+  viewer: { invite_source: "squad", pass_kind: "visible", full_roster: false },
+  participants: inSquad([]),
   options: OPTIONS,
   progress: { responded: 1, total: 3 },
   my_status: "invited",
@@ -59,10 +63,11 @@ const confirmed: EventCardPayload = {
   progress: { responded: 3, total: 3 },
   my_status: "confirmed",
   my_option_id: OPTIONS[0]!.id!,
+  participants: inSquad([OJAS]),
   outcome: {
     venue: OPTIONS[0]!,
     venue_status: "open",
-    attendees: [ME, RILEY], // ojas ghost passed: absent, never announced
+    attendees: [ME, RILEY], // ojas passed
     tallies: { [OPTIONS[0]!.id!]: 2, [OPTIONS[1]!.id!]: 0, [OPTIONS[2]!.id!]: 0 },
   },
 };
