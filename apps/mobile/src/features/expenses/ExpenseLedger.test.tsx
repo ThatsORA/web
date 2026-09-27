@@ -1,19 +1,29 @@
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Expense } from "@web/contract";
-import { Badge, Button, Callout, Txt } from "../../ui";
+import { Badge, Button, Callout, Modal, Txt } from "../../ui";
 import { ExpenseLedger, ExpenseLedgerView } from "./ExpenseLedger";
+
+vi.mock("react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react")>();
+  return {
+    ...actual,
+    useState: (initial: any) => [typeof initial === "function" ? initial() : initial, vi.fn()],
+  };
+});
 
 vi.mock("react-native", () => ({
   View: "View",
   ActivityIndicator: "ActivityIndicator",
   Pressable: "Pressable",
+  Modal: "RNModal",
 }));
 
 vi.mock("../../ui", () => ({
   Badge: (props: any) => ({ type: "Badge", props }),
   Button: (props: any) => ({ type: "Button", props }),
   Callout: (props: any) => ({ type: "Callout", props }),
+  Modal: (props: any) => (props.visible ? { type: "Modal", props, children: props.children } : null),
   Txt: (props: any) => ({ type: "Txt", props }),
   useTheme: () => ({
     colors: { primary: "#6A00F4", surfaceMuted: "#eee", border: "#ccc" },
@@ -65,7 +75,45 @@ describe("ExpenseLedger", () => {
     expect(onAdd).toHaveBeenCalledOnce();
   });
 
-  it("renders expenses, equal splits, who owes whom, and settled toggle", () => {
+  it("renders net balance summary and 'View all expenses' button on main view when expenses exist", () => {
+    const expense: Expense = {
+      id: "exp-1",
+      paid_by: "u-andy",
+      total_cents: 3000,
+      description: "Tacos",
+      created_at: "2026-09-26T20:00:00.000Z",
+      splits: [
+        { id: "s-1", user_id: "u-andy", amount_owed_cents: 1000, settled: true },
+        { id: "s-2", user_id: "u-riley", amount_owed_cents: 1000, settled: false },
+        { id: "s-3", user_id: "u-ojas", amount_owed_cents: 1000, settled: false },
+      ],
+    };
+
+    const rendered = elements(
+      ExpenseLedgerView({
+        expenses: [expense],
+        attendees,
+        currentUserId: "u-riley",
+      })
+    );
+
+    const texts = rendered
+      .filter((el) => el.type === Txt)
+      .map((el) => Children.toArray((el.props as { children: ReactNode }).children).join(""));
+
+    // Net balance summary ("Who owes whom")
+    expect(texts).toContain("Who owes whom");
+    expect(texts).toContain("You owe Andy $10.00");
+    expect(texts).toContain("Ojas owes Andy $10.00");
+
+    // 'View all expenses' button
+    const buttons = rendered
+      .filter((el) => el.type === Button)
+      .map((el) => el.props as { label: string; onPress: () => void });
+    expect(buttons.map((b) => b.label)).toContain("View all expenses");
+  });
+
+  it("renders itemized expenses, paid by info, totals, and per-split breakdown in modal", () => {
     const onToggle = vi.fn();
     const expense: Expense = {
       id: "exp-1",
@@ -86,6 +134,7 @@ describe("ExpenseLedger", () => {
         attendees,
         currentUserId: "u-riley",
         onToggleSplit: onToggle,
+        initialModalOpen: true,
       })
     );
 
@@ -93,14 +142,10 @@ describe("ExpenseLedger", () => {
       .filter((el) => el.type === Txt)
       .map((el) => Children.toArray((el.props as { children: ReactNode }).children).join(""));
 
-    // Descriptions & total
+    // Descriptions & total in modal
     expect(texts).toContain("Tacos");
     expect(texts).toContain("$30.00");
     expect(texts).toContain("Paid by Andy");
-
-    // Who owes whom breakdown from Riley's perspective
-    expect(texts).toContain("You owe Andy $10.00");
-    expect(texts).toContain("Ojas owes Andy $10.00");
 
     // Badges
     const badges = rendered
@@ -109,8 +154,7 @@ describe("ExpenseLedger", () => {
     expect(badges.map((b) => b.label)).toContain("Payer");
     expect(badges.map((b) => b.label)).toContain("Owes");
 
-    // Settled toggles: Riley is debtor on s-2, so Riley can toggle s-2 ("Mark settled"),
-    // but Riley cannot toggle s-3 (Ojas's split with Andy).
+    // Settled toggle inside modal
     const buttons = rendered
       .filter((el) => el.type === Button)
       .map((el) => el.props as { label: string; onPress: () => void });
@@ -141,6 +185,7 @@ describe("ExpenseLedger", () => {
         attendees,
         currentUserId: "u-riley",
         onToggleSplit: onToggle,
+        initialModalOpen: true,
       })
     );
 

@@ -6,6 +6,7 @@ export { Button } from "./Button";
 export { Callout } from "./Callout";
 export { Card } from "./Card";
 export { Chip } from "./Chip";
+export { Modal } from "./Modal";
 export { Screen } from "./Screen";
 export { StepPlaceholder } from "./StepPlaceholder";
 export { TextField } from "./TextField";
