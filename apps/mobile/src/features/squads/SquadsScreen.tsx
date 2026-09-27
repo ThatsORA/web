@@ -1,9 +1,9 @@
-// Owner: Ojas — Squads tab (#76): invites to answer, my squads, and making a new one.
+// Owner: Ojas — Squads tab (#76): making a new squad (top), invites to answer, and my squads,
+// each with New hangout, invite, and a confirmed Leave. Layout by Andy (#360).
 // Andy's (main)/squads route mounts it. Refetches whenever the tab gains focus (no socket needed).
 import {
   CreateSquadRequest,
   FriendsResponse,
-  InviteToSquadRequest,
   RespondToSquadRequest,
   SquadsResponse,
   routes,
@@ -16,8 +16,9 @@ import { api, ApiError, getToken } from "../../lib/api";
 import { displayName } from "../../lib/displayName";
 import { NEW_HANGOUT_HREF } from "../../lib/routes";
 import { userIdFromToken } from "../../lib/session";
-import { Badge, Button, Callout, Card, Chip, Screen, TextField, Txt, useTheme } from "../../ui";
+import { Badge, Button, Callout, Card, Chip, Modal, Screen, TextField, Txt, useTheme } from "../../ui";
 import { PersonLink } from "../friends";
+import { SquadInviteButton } from "./SquadInvite";
 import { invitable, isWaiting, memberBadge, splitSquads, squadErrorMessage, type FriendT, type SquadT } from "./squads";
 
 const NoContent = z.unknown();
@@ -28,9 +29,10 @@ export function SquadsScreen() {
   const [squads, setSquads] = useState<SquadT[]>([]);
   const [friends, setFriends] = useState<FriendT[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [picker, setPicker] = useState<string | null>(null); // squad id being invited to, or "new"
+  const [picker, setPicker] = useState<"new" | null>(null); // "new" while the create form is open
   const [picked, setPicked] = useState<string[]>([]);
   const [name, setName] = useState("");
+  const [leaving, setLeaving] = useState<SquadT | null>(null); // squad awaiting Leave confirmation
 
   const load = useCallback(async () => {
     try {
@@ -60,8 +62,8 @@ export function SquadsScreen() {
     await load();
   }
   const post = (path: string, body?: unknown) => api(path, NoContent, { method: "POST", body });
-  const openPicker = (id: string) => {
-    setPicker(picker === id ? null : id);
+  const toggleNew = () => {
+    setPicker(picker === "new" ? null : "new");
     setPicked([]);
   };
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
@@ -79,7 +81,26 @@ export function SquadsScreen() {
   const others = (s: SquadT) => s.members.filter((m) => m.status === "active").map(displayName).join(", ");
 
   return (
-    <Screen title="Squads" subtitle="Named groups, like your roommates. Joining always needs a yes.">
+    <Screen title="Squads">
+      {!friends.length ? (
+        <Txt variant="small">Squads are made of friends. Add some on the Friends tab first.</Txt>
+      ) : picker === "new" ? (
+        <Card tint>
+          <Txt variant="section">New squad</Txt>
+          <TextField label="Name" placeholder="Roommates" value={name} onChangeText={setName} maxLength={40} />
+          <Txt variant="small">Invite friends (they'll each need to say yes)</Txt>
+          {chips(invitable(friends))}
+          <Button
+            label="Create squad"
+            disabled={!name.trim() || !picked.length}
+            onPress={() => void run(() => post(routes.squads, CreateSquadRequest.parse({ name, invitee_ids: picked })))}
+          />
+          <Button label="Cancel" variant="ghost" onPress={toggleNew} />
+        </Card>
+      ) : (
+        <Button label="New squad" variant="outline" onPress={toggleNew} />
+      )}
+
       {error ? (
         <Callout tone="danger" title="Something went wrong">
           {error}
@@ -96,7 +117,6 @@ export function SquadsScreen() {
           </View>
         </Card>
       ))}
-
 
       {mine.map((s) => (
         <Card key={s.id}>
@@ -115,45 +135,26 @@ export function SquadsScreen() {
               </View>
             );
           })}
-          {picker === s.id ? (
-            <>
-              {chips(invitable(friends, s))}
-              <Button
-                label="Send invites"
-                disabled={!picked.length}
-                onPress={() => void run(() => post(routes.squadInvite(s.id), InviteToSquadRequest.parse({ invitee_ids: picked })))}
-              />
-            </>
-          ) : null}
-          <View style={{ flexDirection: "row", gap: t.spacing.sm, flexWrap: "wrap" }}>
-            <Button
-              label="New hangout"
-              onPress={() => router.push({ pathname: NEW_HANGOUT_HREF, params: { squadId: s.id } })}
-            />
-            <Button label={picker === s.id ? "Cancel" : "Invite friends"} variant="outline" onPress={() => openPicker(s.id)} />
-            <Button label="Leave" variant="ghost" onPress={() => void run(() => post(routes.squadLeave(s.id)))} />
+          <Button label="New hangout" onPress={() => router.push({ pathname: NEW_HANGOUT_HREF, params: { squadId: s.id } })} />
+          <View style={{ width: "100%", flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <SquadInviteButton squad={s} onInvited={() => void load()} />
+            <Button label="Leave" variant="ghost" onPress={() => setLeaving(s)} />
           </View>
         </Card>
       ))}
 
-      {!friends.length ? (
-        <Txt variant="small">Squads are made of friends. Add some on the Friends tab first.</Txt>
-      ) : picker === "new" ? (
-        <Card tint>
-          <Txt variant="section">New squad</Txt>
-          <TextField label="Name" placeholder="Roommates" value={name} onChangeText={setName} maxLength={40} />
-          <Txt variant="small">Invite friends (they'll each need to say yes)</Txt>
-          {chips(invitable(friends))}
-          <Button
-            label="Create squad"
-            disabled={!name.trim() || !picked.length}
-            onPress={() => void run(() => post(routes.squads, CreateSquadRequest.parse({ name, invitee_ids: picked })))}
-          />
-          <Button label="Cancel" variant="ghost" onPress={() => openPicker("new")} />
-        </Card>
-      ) : (
-        <Button label="New squad" variant="outline" onPress={() => openPicker("new")} />
-      )}
+      <Modal visible={!!leaving} onClose={() => setLeaving(null)} title={leaving ? `Leave ${leaving.name}?` : undefined}>
+        <Txt variant="small">You'll stop getting this squad's hangouts. Someone will have to invite you again to rejoin.</Txt>
+        <Button
+          label="Leave squad"
+          onPress={() => {
+            const s = leaving;
+            setLeaving(null);
+            if (s) void run(() => post(routes.squadLeave(s.id)));
+          }}
+        />
+        <Button label="Cancel" variant="ghost" onPress={() => setLeaving(null)} />
+      </Modal>
     </Screen>
   );
 }
