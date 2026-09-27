@@ -152,17 +152,18 @@ describe("helpers", () => {
   });
 });
 
-describe("late invites (#345)", () => {
+describe("late invites (#345, #384)", () => {
   const confirmed = get("Confirmed");
   const before = Date.parse(confirmed.starts_at) - 60_000;
   const after = Date.parse(confirmed.starts_at) + 60_000;
 
-  it("offers Invite friends on voting and confirmed cards until the start, not after a pass or on a Mixer", () => {
-    expect(canInvite(get("Voting"), before)).toBe(true);
+  it("offers Invite friends only once confirmed with a venue until the start, not during voting, after a pass, or on a Mixer", () => {
+    expect(canInvite(get("Voting"), before)).toBe(false);
     expect(canInvite(confirmed, before)).toBe(true);
+    expect(canInvite({ ...confirmed, outcome: null }, before)).toBe(false);
     expect(canInvite(confirmed, after)).toBe(false);
     expect(canInvite(get("Waiting (ghost passed)"), before)).toBe(false);
-    expect(canInvite({ ...get("Voting"), is_mixer: true }, before)).toBe(false);
+    expect(canInvite({ ...confirmed, is_mixer: true }, before)).toBe(false);
     expect(canInvite(get("Chatted"), before)).toBe(false);
   });
 

@@ -106,9 +106,9 @@ export const canDeclineInvite = (card: EventCardPayload, now = Date.now()) =>
   card.status === "confirmed" && card.my_status === "invited" && card.viewer.invite_source === "direct" &&
   Date.parse(card.starts_at) > now;
 
-/** Whether "Invite friends" shows (#345): voting or confirmed, not a Mixer, not passed, and not started. The server re-checks. */
+/** Whether "Invite friends" shows (#345, #384): confirmed with decided venue, not a Mixer, not passed, and not started. The server re-checks. */
 export const canInvite = (card: EventCardPayload, now = Date.now()) =>
-  (card.status === "voting" || card.status === "confirmed") && !card.is_mixer &&
+  card.status === "confirmed" && !card.is_mixer && !!card.outcome?.venue &&
   card.my_status !== "ghost_passed" && Date.parse(card.starts_at) > now;
 
 /**

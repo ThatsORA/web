@@ -15,7 +15,7 @@ import { canChangeSpot, canDeclineInvite, canInvite, canOpenChat, cardKind, free
 import { changeSpotPrompt } from "./changeSpot";
 import { directionsUrl, googleDirectionsUrl } from "./directions";
 import { optionLabel, placeTitle, progressLabel, swapLabel, timeLabel, vibeLabel } from "./format";
-import { eventInvite, InviteFriendsButton, InviteFriendsModal } from "./InviteFriends";
+import { eventInvite, InviteFriendsModal } from "./InviteFriends";
 import { VotingCountdown } from "./VotingCountdown";
 
 
@@ -153,7 +153,6 @@ function OpenCard({ card, actions, busy, notice }: Props) {
           {kind === "voting" ? (
             <Button label={passButtonLabel(card.viewer)} variant="ghost" onPress={actions.ghostPass} disabled={busy} />
           ) : null}
-          {canInvite(card) ? <InviteFriendsButton card={card} /> : null}
         </>
       ) : null}
 
