@@ -17,7 +17,7 @@ Andy's lane, so open an issue if it isn't yours) instead of styling inline.
    (`<Card brand>`). Everything you read or act on sits on
    `surface`/`background` with 1px borders.
 2. **Lime means "look here".** Only for new or urgent signals: the NEW tag
-   on a fresh proposal, "swapped" after "It's closed", a focus ring on
+   on a fresh proposal, "Swapped" after "Change spot", a focus ring on
    violet. Text on lime is always `onLime` (dark in both modes). Never use
    lime as text on a light surface.
 3. **Serif speaks, mono works.** Playfair Display for screen headlines and
@@ -72,7 +72,9 @@ Every text/background pair is at least 4.5:1 (WCAG AA) in light and dark.
   Never show who responded.
 - **Confirmed:** `Card brand` header (white Playfair venue name on violet),
   then per-person travel times (`Txt numeric`) and the map pin.
-  "It's closed" = `Button outline`.
+  "Change spot" = `Button ghost` with the venue actions, never the main
+  action. It names the next backup in a `Callout` and asks before changing
+  it for everyone.
 - **Swapped:** `Badge new` "Swapped". Use lime, because it's the "look
   here" moment.
 
