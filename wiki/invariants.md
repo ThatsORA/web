@@ -43,15 +43,25 @@ touches before you write code.
 - Travel mode supports `DRIVE`, `TRANSIT`, `WALK`, and `BICYCLE`, with `routingPreference: TRAFFIC_AWARE` sent only for `DRIVE`.
 
 **AI boundary**
-- Gemini is called in two places:
-  `apps/server/src/modules/matching/rankWithGemini` re-ranks the
-  deterministic top-10 shortlist from aggregate facts, and
-  `apps/server/src/modules/intelligence/curateVenues` curates venues.
-- Free windows, groups, vibe/slot, shortlist scoring, venue filtering,
-  route scoring and backups stay deterministic TypeScript.
-- Both Gemini calls use a JSON `responseSchema`, validate output IDs,
-  have an 8-second timeout, and fall back to deterministic results.
-- Match ranking sends no names, emails or calendar data.
+- Decisions (the propose gate, the vibe, venue fit) go through one client,
+  `askDecision` in `apps/server/src/modules/intelligence/`: fine-tuned
+  Laya (self-hosted) first, then Jev `jev-1.13.0`, then the caller's
+  deterministic fallback (#196, #228).
+- Gemini only writes text: the vote blurbs and `match_reason`, from
+  `curateVenues`. `rankWithGemini` is being removed (#231).
+- Free windows, groups, which vibes are feasible for a slot, shortlist
+  scoring, venue filtering, route scoring and backups stay deterministic
+  TypeScript. The model only chooses among options code already computed
+  (the vibe among the feasible ones, which venues fit).
+- Every AI call has a timeout, a deterministic fallback, and goes through
+  `withFixture`. Gemini output uses a JSON `responseSchema` with
+  validated IDs.
+- Decision input is plain words: no names, emails, calendar data or raw
+  timestamps.
+- Yes/no questions are 2-option Choices with neutral keys `A`/`B`, never
+  a Noul, because Laya's English Noul has label bias.
+- Thresholds use the answer's probability, not `confidence`; Laya and
+  Jev define `confidence` differently.
 
 **Keys and data**
 - API keys come only from env vars. Never commit `.env`.
@@ -59,7 +69,7 @@ touches before you write code.
   in plain text, and every check burns one of 5 attempts.
 - A new env var goes in `.env.example` in the same PR.
 - `DEMO_MODE=true` replays `apps/server/fixtures/` instead of calling
-  Google or Gemini. Any new external call needs a fixture path too.
+  Google, Gemini, Laya or Jev. Any new external call needs a fixture path too.
 
 ## Pinned versions (don't upgrade mid-hackathon)
 
@@ -71,6 +81,10 @@ touches before you write code.
   `schema.prisma`). Prisma 7 changed the config format and has limited
   MongoDB support, so don't write Prisma 7 code.
 - **Express 5, zod 3, Socket.io 4, Vitest 5, Node 22, pnpm 10.**
+- **Jev `jev-1.13.0`** (TypeSafe AI, [docs](https://docs.typesafe.ai))
+  and **`laya==0.3.20`**
+  ([repo](https://github.com/NandhaKishorM/laya)). Both speak
+  `POST /v1/systemone`; call it with plain `fetch`, no SDK.
 - Server code runs through `tsx` (ESM, bundler resolution), so relative
   imports need no `.js` extension.
 
@@ -96,5 +110,6 @@ touches before you write code.
 - **Expo Go is the target.** Import calendar access from
   `expo-calendar/legacy`; SDK 57's class-based calendar API requires a
   development build.
-- **Demo config:** `VOTE_TIMEOUT_SEC=90`, `COOLDOWN_HOURS=0`,
-  `REPORT_CLOSED_WINDOW_HOURS=168`.
+- **Demo config:** `VOTE_TIMEOUT_SEC=43200`,
+  `REPORT_CLOSED_WINDOW_HOURS=168`. `COOLDOWN_HOURS` goes back to its
+  default of 48 (#232).

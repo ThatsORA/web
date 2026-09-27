@@ -33,9 +33,11 @@ using seeded accounts.
    on their Friends tab and star the presenter as a close friend; A opens
    Friends and stars them back. Nobody is told who starred whom. Once the
    last star lands, all three form a mutual clique (Riley and Ojas are
-   already mutual in the seed data), which triggers the matcher.
-6. **The proposal appears (A, B, C).** An event card arrives on all three
-   phones within a few seconds (a "Finding a time…" state covers the
+   already mutual in the seed data). The star no longer triggers the
+   matcher (#197).
+6. **The proposal appears (A, B, C).** The presenter taps **Find a hangout
+   now** (`POST /scheduler/run`, #232/#233). An event card arrives on all
+   three phones within a few seconds (a "Finding a time…" state covers the
    wait): "Thu · 6:30–8:30pm · Dinner". It shows
    three venue options. Each has an AI blurb plus a line of facts, for
    example "★4.6 · $$ · max 14 min travel".
@@ -65,8 +67,9 @@ chat. That is the reason they're stretch work or cut below.
 
 **Build (the demo depends on these):** sign-up and onboarding, busy-block
 sync from the device calendar, mutual close friends, the matcher (free
-windows, group formation, vibe and slot, deterministic ranking), venue
-pipeline (Places, then route matrix, then Gemini curation and blurbs),
+windows, group formation, vibe and slot, deterministic ranking, the
+decision-model propose gate), venue pipeline (Places, then route matrix,
+then the decision-model fit filter and Gemini blurbs),
 anonymous voting over Socket.io, Ghost Pass, resolution, and
 "It's closed".
 
@@ -397,6 +400,10 @@ whose local wall clock is earliest at the start of the free window.
   - **Fri/Sat:** night_out > dinner > casual_hangout > quick_coffee
   - **Sun–Thu:** dinner > night_out > casual_hangout > quick_coffee
 - The slot is `[s, s + len]`. If nothing is feasible, discard W.
+- `feasibleSlots` lists every feasible template; `classifySlot` is that
+  plus the priority pick (#229). The scheduler lets the decision model
+  choose among the feasible vibes, and the priority pick is its fallback
+  (§5).
 - The weekday is taken from the member timezone whose local wall clock is
   earliest at W.start.
 - Every template's latest start + minimum duration ends by 24:00, so no
@@ -417,7 +424,7 @@ whose local wall clock is earliest at the start of the free window.
 | Tue 22:10–23:59 | discarded (after every latest start) |
 | Tue 17:10–19:00 | dinner 17:30–19:00 |
 
-### 5. Ranking (Riley, deterministic shortlist + Gemini re-rank)
+### 5. Ranking (Riley, deterministic shortlist + decision-model gate)
 
 Each (group, slot) candidate gets a score:
 
@@ -431,15 +438,24 @@ score = base_score × 0.85 for pairs; base_score for groups of 3 or more
 Ties go to the earlier start, then to `group_key` in lexical order. This
 deterministic score builds a top-10 shortlist.
 
-Gemini Flash re-ranks that shortlist using only aggregate facts: member
-count, mean closeness, days since the last hangout, vibe, local day/time,
-and favorite-category overlap. It returns a non-empty subset of candidate
-IDs in best-first order plus a reason of at most 90 characters. IDs must
-be unique and come from the shortlist. Invalid output, timeout, a missing
-key, or a missing demo fixture preserves deterministic order and stores a
-null reason. Results are cached by a hash of the candidate facts.
+The hard limits apply first: one open proposal per group, and the
+`COOLDOWN_HOURS` (48) cooldown.
 
-Candidates are processed greedily after the optional re-rank. A candidate
+**Decision gate + vibe (#231).** One `askDecision` call (Laya, then Jev)
+covers the shortlist. Each candidate gets two questions in plain words
+(size, "Fri 7:00pm", "last hangout: over 2 weeks ago", shared favorites;
+no names, no raw timestamps):
+- `propose_<i>`: a 2-option Choice, `A` = suggest a hangout now, `B` = not
+  now. Keep the candidate when P(`A`) ≥ 0.6.
+- `vibe_<i>`: a Choice over that window's feasible vibes only; use the
+  chosen vibe's slot.
+
+A forced run (the demo button) skips the gate but still lets the model
+pick the vibe. If the decision call fails, only the top-ranked candidate
+is proposed, with the priority vibe. `rankWithGemini` is removed;
+`match_reason` now comes from §8.
+
+Candidates are processed greedily after the gate. A candidate
 is skipped if its group already has an open event, or if any member already
 belongs to an open event whose slot overlaps.
 
@@ -486,7 +502,7 @@ belongs to an open event whose slot overlaps.
 - Pitch line: "We optimize for the worst commute, not the average one.
   Nobody gets stuck with the 50-minute trip."
 
-### 8. Venue Intelligence (Ojas; venue Gemini call)
+### 8. Venue Intelligence (Ojas; decision-model fit filter + Gemini text)
 
 **Called as** `curateVenues(RankedVenue[], context) → EventOption[3]`.
 
@@ -498,19 +514,23 @@ belongs to an open event whose slot overlaps.
 - Context: the vibe tag, the slot's local time, and counts of the group's
   favorite categories.
 
-**Model call:** use a Flash-tier Gemini model with a JSON `responseSchema`:
-`{ options: [{ place_id, blurb }] }`, with exactly 3 options and blurbs of
-90 characters or fewer. The prompt tells the model to (1) drop venues whose
-reviews contradict the vibe, for example a steakhouse tagged casual; (2)
-pick 3; and (3) write each blurb using only facts from the input.
+**Fit filter (#230):** one `askDecision` call with a `venueFitQuestion`
+per venue, a 2-option Choice (`A` fits the vibe / `B` doesn't) that sees
+only the name, primary type and review snippets. It catches reviews that
+contradict the vibe, for example a steakhouse tagged casual. Code keeps
+the venues where P(`A`) ≥ 0.5, takes the top 3 by `route_score`, and tops
+up from the rest if fewer than 3 fit.
 
-**Validation:** the result must contain 3 distinct place IDs, all taken
-from the input, and every blurb must be within the length limit.
+**Text:** one Flash-tier Gemini call with a JSON `responseSchema` writes
+the 3 blurbs and the card's `match_reason` (90 characters or fewer each),
+using only facts from the input. The place IDs must match the 3 chosen
+venues.
 
-**Fallback:** if validation fails, or no response arrives within
-`GEMINI_TIMEOUT_MS` (8 seconds), use the top 3 by `route_score` with
-`ai_blurb = null`. The card always shows the deterministic `facts_line`,
-so it never looks broken.
+**Fallback:** if the decision call fails, use the top 3 by `route_score`.
+If Gemini fails or misses `GEMINI_TIMEOUT_MS` (8 seconds), `ai_blurb` and
+`match_reason` are null. The card always shows the deterministic
+`facts_line`, so it never looks broken. Both callers (the matcher and
+manual New hangout) always get exactly 3 options.
 
 **Cache:** results are cached by vibe plus the sorted place IDs.
 
@@ -628,14 +648,16 @@ manual.
 
 ### Matcher triggers
 
-- node-cron every 5 minutes
-- whenever a close-friend handshake becomes mutual (for the groups
-  containing that pair)
-- after a `PUT /busy-blocks`
+- node-cron weekly, Monday 09:00 America/New_York (#232)
+- `POST /scheduler/run`, logged in, behind the **Find a hangout now** demo
+  button (#232/#233). It replies `202` and runs a forced
+  `triggerMatcher({ force: true })` in the background.
 - `POST /internal/run-matcher`
 
-All four go through one in-process mutex, so a cron tick and a handshake
-trigger can't race. The partial unique index on `events.group_key` is the
+The old 5-minute cron and the event triggers (mutual handshake,
+`PUT /busy-blocks`, Google sync) were removed in #197 and stay off. Every
+trigger goes through one in-process mutex, so a cron tick and a button tap
+can't race. The partial unique index on `events.group_key` is the
 backstop if they ever do.
 
 ## Where AI Is and Isn't Used
@@ -644,11 +666,22 @@ backstop if they ever do.
 shortlist scoring, Places filtering, route-matrix scoring, and backup
 ordering. These form the complete fallback path.
 
-**Gemini, two calls:** Smart Match Ranking reorders the deterministic
-top-10 shortlist from aggregate matching facts and writes the card's match
-reason. Venue Intelligence reads unstructured review text to catch vibe
-mismatches and writes vote blurbs. Both validate IDs against their inputs
-and fall back to deterministic results.
+**Decision model (`askDecision`, #228):** fine-tuned Laya (self-hosted on
+a DigitalOcean GPU droplet, #237) first, then Jev `jev-1.13.0`, then the
+deterministic fallback. It makes three decisions: whether to propose to a
+group now, which feasible vibe to use (§5), and which venues fit the vibe
+(§8). Code computes every option it chooses from.
+
+**Gemini, text only:** the vote blurbs and the card's `match_reason` (§8).
+It also writes the synthetic training scenarios (#235). It never makes a
+decision.
+
+**Pitch note: teacher and student.** Gemini generates scheduling
+scenarios, Jev labels them with calibrated probabilities (the teacher),
+and Laya is fine-tuned on those labels (the student) and serves the
+decisions at runtime, with Jev as its fallback. The eval table (accuracy
+and p50 latency on a held-out gold set, for the deterministic fallback,
+Laya base, Laya fine-tuned and Jev) comes from #236.
 
 **Future work (pitch only):** learned ranking once real hangout history
 exists, natural-language expense entry, and summaries of the fallback chat.
@@ -657,12 +690,13 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 
 | Var | Default | Demo |
 | --- | --- | --- |
-| VOTE_TIMEOUT_SEC | 43200 | 90 |
-| COOLDOWN_HOURS | 48 | 0 |
+| VOTE_TIMEOUT_SEC | 43200 | 43200 |
+| COOLDOWN_HOURS | 48 | 48 |
 | MATCH_HORIZON_DAYS | 7 | 7 |
 | MIN_LEAD_HOURS | 2 | 2 |
 | BUSY_PADDING_MIN | 15 | 15 |
 | GEMINI_TIMEOUT_MS | 8000 | 8000 |
+| DECISION_TIMEOUT_MS | 8000 | 8000 |
 | REPORT_CLOSED_WINDOW_HOURS | 24 | 168 |
 | DEMO_MODE | false | true only if the network fails (replays `fixtures/`) |
 | INTERNAL_SECRET | — | set |
@@ -712,8 +746,8 @@ exists, natural-language expense entry, and summaries of the fallback chat.
   - Deploy the backend by hour 6, and point the phones at the deployed
     URL.
   - Keep a phone hotspot ready.
-  - At hour 20, record real Places, Routes and Gemini responses for the
-    demo location into `fixtures/`, so `DEMO_MODE` can replay them.
+  - At hour 20, record real Places, Routes, Gemini and decision
+    responses for the demo location into `fixtures/`, so `DEMO_MODE` can replay them.
     Fixtures are keyed by API + vibe; in `DEMO_MODE` a missing key falls
     back to the most recent fixture for that API.
 - **Last resort:** a screen recording of the full script, made at hour 28.
@@ -759,6 +793,7 @@ exists, natural-language expense entry, and summaries of the fallback chat.
 | 2026-09-26 | **Display labels (#211).** Andy owns how a person is labeled across the mobile app: `displayName()` in `apps/mobile/src/lib/displayName.ts` (the display name, else the username). Lists and profiles keep `@username` under the name where people need to tell accounts apart or search. Onboarding asks for the name right after sign-up (skippable, never on login). Label-only edits to Ojas's feature screens get Ojas's review; `features/friends/PersonLink.tsx` is co-owned. |
 | 2026-09-26 | **Demo location: around FIU's Modesto A. Maidique Campus (Miami).** It's the hackathon venue, so the presenter's live device location is on campus. |
 | 2026-09-26 | **Invite source and per-viewer privacy (#206).** Each participant's `invite_source` (creator/direct/squad) is derived from the event's `created_by_id` and `source_group_id`, with no new columns (the schema stays with its steward). Only the human creator sees the whole roster and can infer a Ghost Pass; squad members see their squad and its visible passes; direct invitees see themselves and the creator. Automated close-friend proposals are direct invites with no creator view; automated squad proposals use squad rules. The creator's own pass is visible to everyone (they're the host). This supersedes the shared participant card and attendee list (§9 "Who sees what"). Stored per-participant provenance for mixed events (#207) is a `schema` issue for Ojas. |
+| 2026-09-26 | **Decision models: Laya + Jev; Gemini writes text (#196, #227).** Decisions (propose gate, vibe, venue fit) go through `askDecision`: fine-tuned Laya (self-hosted) first, then Jev `jev-1.13.0`, then deterministic code. Gemini only writes blurbs and `match_reason`, and generates Laya's training scenarios; Jev labels them. `rankWithGemini` is removed (#231). Auto-proposals come back weekly (Mon 09:00 America/New_York) plus a "Find a hangout now" demo button (#232/#233), which replaces the close-friend star as the demo trigger. |
 
 ### Demo geography (seed values, stored rounded to 3 decimals)
 
