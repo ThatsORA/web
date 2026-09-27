@@ -32,9 +32,6 @@ services:
       - key: BUSY_PADDING_MIN
         value: "15"
         scope: RUN_TIME
-      - key: JEV_API_KEY # value set in the DO dashboard, never committed
-        type: SECRET
-        scope: RUN_TIME
       - key: GEMINI_TIMEOUT_MS
         value: "8000"
         scope: RUN_TIME
